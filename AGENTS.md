@@ -14,17 +14,11 @@
 
 #### Avoid filler or emotional language
 
-- Do not use emojis
+- Do not use emojies
 
 ## Git instructions:
 
 - Do not push
-
-- Do not create co-authors in commits
-
-- Do not create pr
-
-- Commit only when asked
 
 - Worktree only when asked
 
