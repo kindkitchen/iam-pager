@@ -1,58 +1,118 @@
-# iam-pager
+# About
 
-`iam-pager` is a content-publishing service built around addressable pages. A
-page gives creator-managed content a stable locator and can be delivered either
-directly or through the management and discovery site.
+Site for content sharing through URLs. Any meaning of such content or any
+relation between several pages with some content is at the user's (author's)
+initiative and responsibility.
 
-The project is currently in product-definition and technical-prototype stage.
-The generated Fresh application is only a starting point; it does not yet
-implement the product behavior described below.
+## Project Vision (draft MVP)
 
-## Product direction
+Site where a user will be able to at least explore some pages created by other
+users. After authentication a user may become a creator of their own pages. The
+page is first of all a deterministic endpoint with the user's nickname as
+workspace and optionally a name of the page. Navigation to these pages should
+be direct, avoiding the site's content, so the content will be displayed as it
+is (any mismatch should simply fall back to the main site). Because pages can
+have different formats, purposes, sizes... the user should be able to add their
+own storage provider. With all of the above, the 2 main directions of the
+functionality are introduced. First — share or explore content. Second — manage
+it. The first direction is mostly API-focused, except for some ways of
+displaying the content. The second one is a rich user-profile-oriented site.
 
-The project has two connected surfaces:
+## User story
 
-1. **Content delivery and discovery** — resolve a page locator, return its
-   content with appropriate HTTP semantics, and allow eligible public pages to
-   be found through the site.
-2. **Content management** — let authenticated creators own namespaces and
-   create, update, classify, publish, and remove pages.
+The common scenarios of the user's interaction with the service.
 
-Guest publishing and external storage providers remain candidate capabilities,
-not committed MVP scope. Both introduce unresolved ownership, security, abuse,
-and lifecycle requirements.
+#### Unauthenticated user
 
-## Specification
+1. Anyone can explore some page via URL if it references some "public" content.
+   This redirect should be without the site at all. Raw content.
+2. Any visitor of the site may explore available "public" pages. And so this
+   search should include such functionality:
+   - search by name (both in the page's name or the author's username, or
+     specifically)
+   - search by content match (if the content is possible to represent as text)
+   - search by tags
+3. Explore some public page through the site:
+   - view content (some thin site wrapper still exists)
+   - redirect to the raw content view (so the same as opening the page by its
+     original URL)
+   - redirect to the author's default page
+   - redirect to the list of the author's other pages
+4. Although a user may be a simple unknown guest — he should be able to create
+   content. Obviously some limitations exist:
+   - we will have a maximum capacity for such guest content (after it is
+     reached — each new one removes the latest)
+   - "maximum capacity" is a general term which will include several
+     parameters:
+     - the amount
+     - the total size of guest content
+     - the content-adding frequency from the guest
+   - max size of particular content
+   - limitations related to the absence of the user's profile, etc.
+   - limitations related to the link construction
+   - no guarantees related to link uniqueness (overrides without any check)
 
-The project specification is the source of truth for product and technical
-scope:
+#### Authenticated user
 
-- [Specification guide](docs/specification/README.md)
-- [Product definition](docs/specification/01-product-definition.md)
-- [Experiences and scope](docs/specification/02-experiences-and-scope.md)
-- [Domain and addressing](docs/specification/03-domain-and-addressing.md)
-- [Capabilities](docs/specification/04-capabilities.md)
-- [Quality and technical requirements](docs/specification/05-quality-and-technical-requirements.md)
-- [Open questions and risks](docs/specification/06-open-questions-and-risks.md)
-- [Delivery slices](docs/specification/07-delivery-slices.md)
+A user should associate themselves with some unique username. This username
+will be used as their own namespace. It means that the content created by the
+user will not disappear until the user's explicit actions. The user will be
+able to create and manage his content.
 
-Open decisions in the specification must not be treated as implied requirements.
-Work should be shaped from the delivery slices only after its blocking decisions
-are resolved.
+The abilities available for an authenticated user:
 
-## Current technical baseline
+- reserve for himself a unique username
+- generate content under the username-and-content-name URLs
+- generate content under the username only (probably the "aka default"
+  functionality)
+- mark the URL as "public" (otherwise the page should be available only for his
+  session)
+- flexible search across his content pages:
+  - by name (ignorecased)
+  - by created/updated dates
+  - by views count
+  - by tags
+- bulk operations over selected pages, such as delete, mark "public"
+- rename page (with validation to not conflict within its workspace)
+- duplicate page (the name for the duplicate should be autogenerated)
+- operations over a single page:
+  - create
+  - change name
+  - change content
+  - toggle public flag
+- be able to add some extra namespaces (the same functionality as "username")
+  which will be associated with him... so this extends the above functionality
+  a little bit
+- be able to add some external storage provider (such as Google Drive or a
+  GitHub repository)
 
-- TypeScript with strict type checking
-- Deno runtime
-- Fresh 2 with Preact and Vite
+#### Authenticated user with added external storage provider
 
-The persistence, identity, content-storage, search, deployment, and external
-provider designs are intentionally undecided.
+> TODO
 
-## Development
+## What is a "page"?
 
-```sh
-deno task dev
-deno task check
-deno task build
-```
+First of all, this is some endpoint which is strictly associated with some
+content. That's all. As mentioned above, the user is the one who does this. So
+speaking about pages we may split them into 2 independent aspects — URLs and
+content.
+
+#### Page's URL
+
+The guest pages will have the same creation and access capabilities as any
+other page, except that they may simply be overridden by another user. The
+namespace and name are the primary identifier of the page; this is the locator
+of the page. Also, by the namespace standalone it will probably be possible to
+add/find some content.
+
+#### Page's content
+
+Content may be different. Obviously it may be an HTML page, but also a PDF one
+or an image. So this section is more actual in the context of content creation.
+But yes, a URL may be a simple downloadable one, not only an HTML page.
+
+## Technical stack
+
+- TypeScript (maximum strict, etc.)
+- Deno as JS runtime
+- Deno's Fresh framework
