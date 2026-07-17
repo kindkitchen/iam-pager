@@ -36,7 +36,8 @@ has a suitable download or fallback view.
 
 Exploration begins with page names, namespaces, and tags. Text-content search
 can join this slice or follow it when supported extraction is ready. Private
-pages never enter results.
+pages never enter results, and neither do guest pages, which remain reachable
+only by direct URL.
 
 ## DS-MANAGE — Expand authenticated management
 

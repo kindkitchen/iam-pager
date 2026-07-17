@@ -5,8 +5,9 @@
 .env.production.local
 .env.local
 
-# Fresh build directory
+# Fresh/Vite build output
 _fresh/
+vite.config.ts.timestamp-*.mjs
 # npm + other dependencies
 node_modules/
 vendor/

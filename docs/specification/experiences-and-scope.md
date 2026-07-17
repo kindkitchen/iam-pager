@@ -38,6 +38,9 @@ to cover:
 
 Search must not expose private pages.
 
+Guest pages are not searchable or browsable from the site. They can be reached
+only by their direct URL for raw preview.
+
 ## EX-PUBLISH — Publisher creates a page
 
 A publishing flow accepts a namespace, an optional page name, supported content,
@@ -48,7 +51,8 @@ through the site and a programmatic API.
 Even a guest may publish, but with stricter amount, size, frequency, retention,
 and namespace limitations. A guest does not reserve the namespace, so content
 there may be replaced by another guest or by an authenticated creator using the
-same namespace.
+same namespace. Guest pages do not enter site search or browsing; sharing the
+direct URL is the only way to reach them.
 
 ## EX-MANAGE — Authenticated creator manages pages
 

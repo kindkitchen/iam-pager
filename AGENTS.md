@@ -40,6 +40,19 @@ Update them together with the change itself so they never go stale
 
 ## Code conventions:
 
+- Whenever possible - use "Interface" definitions which should be satisfied by
+  implementation (not UI, not typescript, but code pattern), rather then direct
+  implementation
+- The web representation should not be the source of the logic. The logic should
+  live in raw code and so web will be default but one of the many possible
+  variant to represent this logic.
+
+#### Technical stack:
+
+- Deno
+  - use import's map
+  - prefer std packages and default solutions rather then libraries
+
 #### Naming:
 
 - Snake_case for variables and properties
