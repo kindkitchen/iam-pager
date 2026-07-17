@@ -33,8 +33,8 @@ const layout_options: readonly { id: EditorLayout; label: string }[] = [
 ];
 
 export function PageEditor(props: PageEditorProps) {
-  const [workspace, set_workspace] = useState(
-    workspace_controller.initial_state(),
+  const [workspace, set_workspace] = useState(() =>
+    workspace_controller.initial_state()
   );
   const [preset_id, set_preset_id] = useState(default_page_style_preset.id);
   const [preview_document, set_preview_document] = useState("");

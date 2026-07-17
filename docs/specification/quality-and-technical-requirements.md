@@ -79,16 +79,20 @@ unterminated fenced code blocks are grouped as one multi-line section.
 
 Collapsed sections are content-only previews rendered in isolated frames with
 the current page CSS; activating one toggles its focused controls and closes the
-previously active section, with unsaved changes guarded. Focused forms support
-value-preserving safe type changes and field-level Paste, Copy, and Clear
-actions. Code block sections expose optional language and multiline code fields,
-generate a non-conflicting fence when changed, and cannot convert to a one-line
-type while multiline content remains. Text, Heading, Link, Code block, and raw
-Markdown are content types. For focused one-line content, an `Is list item`
-checkbox enables an adjacent `Numbered` checkbox on the same line; unchecked
-Numbered means bulleted. Empty Text represents a blank physical line. Fenced
-code blocks remain standalone because list-owned fences require coordinated
-indentation across the whole block.
+previously active section, with unsaved changes guarded. Each card measures and
+shows its whole rendered content by default, while a per-card Compact/Whole
+preference follows source updates, focus changes, reordering, and removal. The
+measurement frame permits same-origin inspection but still prohibits scripts;
+the full-page preview retains its stricter opaque sandbox. Focused forms support
+value-preserving safe type changes and integrate field-level Paste, Copy, and
+Clear actions into quiet input headers. Code block sections expose optional
+language and multiline code fields, generate a non-conflicting fence when
+changed, and cannot convert to a one-line type while multiline content remains.
+Text, Heading, Link, Code block, and raw Markdown are content types. For focused
+one-line content, an `Is list item` checkbox enables an adjacent `Numbered`
+checkbox on the same line; unchecked Numbered means bulleted. Empty Text
+represents a blank physical line. Fenced code blocks remain standalone because
+list-owned fences require coordinated indentation across the whole block.
 
 New sections append at the end. A prefixed drag grip and visible insertion/final
 drop indicators replace directional and contextual insertion buttons. Dropping

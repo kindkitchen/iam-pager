@@ -253,13 +253,15 @@ h2 {
   line-height: 1.2;
 }
 
-.contextual-input input {
+.contextual-input input,
+.contextual-input textarea {
   border: 0;
   border-radius: 0;
   padding: 0.35rem 0.75rem 0.7rem;
 }
 
-.contextual-input input:focus {
+.contextual-input input:focus,
+.contextual-input textarea:focus {
   outline: 0;
 }
 
@@ -462,10 +464,14 @@ h2 {
 .markdown-section-summary iframe {
   grid-column: 2;
   width: 100%;
-  height: 5rem;
+  min-height: 5rem;
   border: 0;
   background: #fff;
   pointer-events: none;
+}
+
+.markdown-section-summary iframe[data-density="compact"] {
+  height: 5rem;
 }
 
 .markdown-drag-handle {
@@ -498,6 +504,14 @@ h2 {
   height: 1.5rem;
   margin: auto;
   fill: currentcolor;
+}
+
+.markdown-density-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 0.45rem;
+  right: 0.45rem;
+  box-shadow: 0 1px 4px rgb(23 33 27 / 16%);
 }
 
 .markdown-section-toggle {
@@ -584,9 +598,13 @@ h2 {
 }
 
 .markdown-value-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  display: flex;
+  flex: none;
+  gap: 0.1rem;
+}
+
+.markdown-value-actions .embedded-input-action {
+  min-height: auto;
 }
 
 .markdown-save-actions {
@@ -596,8 +614,7 @@ h2 {
 .markdown-save-actions button,
 .markdown-section-actions button,
 .markdown-type-picker button,
-.markdown-insertion-heading button,
-.markdown-value-actions button {
+.markdown-insertion-heading button {
   min-height: 2.75rem;
 }
 

@@ -1,6 +1,10 @@
 import type { JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { PagePreviewer } from "../lib/ui/page-preview.ts";
+import {
+  DeterministicMarkdownSectionDensity,
+  type MarkdownSectionDensity,
+} from "../lib/ui/markdown-section-density.ts";
 import {
   DeterministicMarkdownSectionEditor,
   markdown_heading_levels,
@@ -43,6 +47,7 @@ interface DraggingState {
 }
 
 const section_editor = new DeterministicMarkdownSectionEditor();
+const density_controller = new DeterministicMarkdownSectionDensity();
 const structured_physical_line_limit = 500;
 
 const section_type_labels: Readonly<Record<MarkdownSectionType, string>> = {
@@ -88,10 +93,23 @@ interface MarkdownSectionPreviewProps {
   section: MarkdownSection;
   section_number: number;
   css: string;
+  density: MarkdownSectionDensity;
   previewer: PagePreviewer;
 }
 
+function estimated_preview_height(section: MarkdownSection): number {
+  const visual_lines = section.raw.split("\n").reduce(
+    (count, line) => count + Math.max(1, Math.ceil(line.length / 52)),
+    0,
+  );
+  return Math.max(80, 56 + visual_lines * 24);
+}
+
 function MarkdownSectionPreview(props: MarkdownSectionPreviewProps) {
+  const frame_ref = useRef<HTMLIFrameElement>(null);
+  const [whole_height, set_whole_height] = useState(
+    estimated_preview_height(props.section),
+  );
   const preview_document = useMemo(
     () =>
       props.previewer.render({
@@ -100,17 +118,61 @@ function MarkdownSectionPreview(props: MarkdownSectionPreviewProps) {
       }),
     [props.section.raw, props.css, props.previewer],
   );
-  const line_count = props.section.raw.split("\n").length;
-  const preview_height = Math.min(18, 5 + (line_count - 1) * 1.5);
+
+  useEffect(() => {
+    const frame = frame_ref.current;
+    if (!frame || props.density === "compact") return;
+    const preview_frame = frame;
+
+    function measure() {
+      try {
+        const document = preview_frame.contentDocument;
+        const root = document?.documentElement;
+        const body = document?.body;
+        if (!root || !body) return;
+        preview_frame.style.height = "1px";
+        const measured_height = Math.max(
+          80,
+          Math.ceil(root.scrollHeight),
+          Math.ceil(body.scrollHeight),
+        );
+        preview_frame.style.height = `${measured_height}px`;
+        set_whole_height(measured_height);
+      } catch {
+        // A draft that navigates its frame cross-origin keeps its safe estimate.
+      }
+    }
+
+    let measured_width = preview_frame.clientWidth;
+    const width_observer = new ResizeObserver(([entry]) => {
+      const width = Math.round(entry.contentRect.width);
+      if (width === 0 || width === measured_width) return;
+      measured_width = width;
+      measure();
+    });
+
+    preview_frame.addEventListener("load", measure);
+    width_observer.observe(preview_frame);
+    measure();
+    return () => {
+      preview_frame.removeEventListener("load", measure);
+      width_observer.disconnect();
+    };
+  }, [preview_document, props.density]);
 
   return (
     <iframe
+      ref={frame_ref}
       title={`Section ${props.section_number} styled preview`}
-      sandbox=""
+      sandbox="allow-same-origin"
       loading="lazy"
       srcdoc={preview_document}
       tabIndex={-1}
-      style={{ height: `${preview_height}rem` }}
+      scrolling="no"
+      data-density={props.density}
+      style={props.density === "whole"
+        ? { height: `${whole_height}px` }
+        : undefined}
     />
   );
 }
@@ -185,8 +247,37 @@ function MarkdownValueField(props: MarkdownValueFieldProps) {
 
   return (
     <div class="markdown-value-field">
-      <label for={props.id}>
-        {props.label}
+      <div class="contextual-input markdown-contextual-input">
+        <div class="contextual-input-heading">
+          <label for={props.id}>{props.label}</label>
+          <div
+            class="markdown-value-actions"
+            role="group"
+            aria-label={`${props.label} actions`}
+          >
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={paste}
+            >
+              Paste
+            </button>
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={copy}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={() => change("")}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         <input
           id={props.id}
           type="text"
@@ -195,21 +286,6 @@ function MarkdownValueField(props: MarkdownValueFieldProps) {
           placeholder={props.placeholder}
           onInput={(event) => change(event.currentTarget.value)}
         />
-      </label>
-      <div
-        class="markdown-value-actions"
-        role="group"
-        aria-label={`${props.label} actions`}
-      >
-        <button type="button" class="compact-button" onClick={paste}>
-          Paste
-        </button>
-        <button type="button" class="compact-button" onClick={copy}>
-          Copy
-        </button>
-        <button type="button" class="compact-button" onClick={() => change("")}>
-          Clear
-        </button>
       </div>
       {clipboard_message && <small role="status">{clipboard_message}</small>}
     </div>
@@ -265,8 +341,37 @@ function MarkdownMultilineValueField(
 
   return (
     <div class="markdown-value-field markdown-code-value-field">
-      <label for={props.id}>
-        {props.label}
+      <div class="contextual-input markdown-contextual-input">
+        <div class="contextual-input-heading">
+          <label for={props.id}>{props.label}</label>
+          <div
+            class="markdown-value-actions"
+            role="group"
+            aria-label={`${props.label} actions`}
+          >
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={paste}
+            >
+              Paste
+            </button>
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={copy}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              class="embedded-input-action"
+              onClick={() => change("")}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         <textarea
           ref={input_ref}
           id={props.id}
@@ -275,21 +380,6 @@ function MarkdownMultilineValueField(
           spellcheck={false}
           onInput={(event) => change(event.currentTarget.value)}
         />
-      </label>
-      <div
-        class="markdown-value-actions"
-        role="group"
-        aria-label={`${props.label} actions`}
-      >
-        <button type="button" class="compact-button" onClick={paste}>
-          Paste
-        </button>
-        <button type="button" class="compact-button" onClick={copy}>
-          Copy
-        </button>
-        <button type="button" class="compact-button" onClick={() => change("")}>
-          Clear
-        </button>
       </div>
       {clipboard_message && <small role="status">{clipboard_message}</small>}
     </div>
@@ -581,9 +671,24 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     () => section_editor.parse(props.markdown),
     [props.markdown],
   );
+  const [section_densities, set_section_densities] = useState(() =>
+    density_controller.reconcile([], sections.length)
+  );
   const physical_line_count = props.markdown.split("\n").length;
   const section_limit_exceeded =
     physical_line_count > structured_physical_line_limit;
+
+  useEffect(() => {
+    set_section_densities((current) => {
+      const reconciled = density_controller.reconcile(
+        current,
+        sections.length,
+      );
+      return reconciled.every((density, index) => density === current[index])
+        ? current
+        : reconciled;
+    });
+  }, [sections.length]);
 
   function has_unsaved_changes(): boolean {
     return editing?.dirty === true || insertion?.dirty === true;
@@ -678,6 +783,9 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       return;
     }
     emit(section_editor.remove(sections, index));
+    set_section_densities((current) =>
+      density_controller.remove(current, index)
+    );
     set_editing(null);
     set_delete_armed_index(null);
     set_drag_message(`Deleted section ${index + 1}.`);
@@ -689,6 +797,9 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       return;
     }
     emit(section_editor.move(sections, from_index, to_index));
+    set_section_densities((current) =>
+      density_controller.move(current, from_index, to_index)
+    );
     set_editing((current) =>
       current === null ? null : {
         ...current,
@@ -717,6 +828,9 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     }
 
     emit(section_editor.merge(sections, from_index, into_index));
+    set_section_densities((current) =>
+      density_controller.remove(current, from_index)
+    );
     set_editing((current) => {
       if (
         current === null || current.index === from_index ||
@@ -922,6 +1036,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
           <ol class="markdown-sections" aria-label="Markdown sections">
             {sections.map((section, index) => {
               const is_editing = editing?.index === index;
+              const density = section_densities[index] ?? "whole";
               return (
                 <li
                   key={`${index}:${section.raw}`}
@@ -955,8 +1070,23 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                       section={section}
                       section_number={index + 1}
                       css={props.css}
+                      density={density}
                       previewer={props.previewer}
                     />
+                    <button
+                      type="button"
+                      class="markdown-density-toggle context-button"
+                      aria-label={density === "compact"
+                        ? `Show whole section ${index + 1}`
+                        : `Compact section ${index + 1}`}
+                      aria-pressed={density === "compact"}
+                      onClick={() =>
+                        set_section_densities((current) =>
+                          density_controller.toggle(current, index)
+                        )}
+                    >
+                      {density === "compact" ? "Whole" : "Compact"}
+                    </button>
                     <button
                       type="button"
                       class="markdown-section-toggle"
@@ -1068,7 +1198,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       <small>
         {mode === "raw"
           ? "Up to 64 KiB. Switch to Steps for guided section editing."
-          : "Tap a preview to edit it. Drag the grip between sections to reorder, or over a section to append its value there. Focused grips also use arrow keys. The plus button adds at the end."}
+          : "Tap a preview to edit it. Whole previews follow their rendered content; Compact keeps an individual card short. Drag the grip between sections to reorder, or over a section to append its value there. Focused grips also use arrow keys. The plus button adds at the end."}
       </small>
       <span class="visually-hidden" role="status" aria-live="polite">
         {drag_message}
