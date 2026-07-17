@@ -1,4 +1,5 @@
-import type { ContentRecord, DeliveryPayload } from "./model.ts";
+import type { Locator } from "../locator/model.ts";
+import type { DeliveryPayload, PageRecord } from "./model.ts";
 
 export type ContentResult<T> =
   | { ok: true; value: T }
@@ -23,14 +24,16 @@ export interface ContentTypeHandler<Input, Data> {
 }
 
 /**
- * Storage for content records keyed by the case-insensitive locator key.
+ * Storage for pages, identified by the case-insensitive locator key, which
+ * implementations derive internally via `locator_key` so callers cannot
+ * produce a key/locator mismatch.
  *
  * `put` is create-or-replace: the guest flow always places content at a
  * location and has no separate update. Namespace protection rules
  * (DA-LIFECYCLE) are enforced above this interface, not inside it.
  */
 export interface ContentRepository {
-  get(locator_key: string): Promise<ContentRecord | null>;
-  put(locator_key: string, record: ContentRecord): Promise<void>;
-  delete(locator_key: string): Promise<boolean>;
+  get(locator: Locator): Promise<PageRecord | null>;
+  put(page: PageRecord): Promise<void>;
+  delete(locator: Locator): Promise<boolean>;
 }

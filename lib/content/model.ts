@@ -1,3 +1,5 @@
+import type { Locator } from "../locator/model.ts";
+
 /** Delivery metadata for stored content (DA-CONTENT). */
 export interface ContentMeta {
   media_type: string;
@@ -14,6 +16,16 @@ export interface ContentRecord<Data = unknown> {
   meta: ContentMeta;
   created_at: Date;
   updated_at: Date;
+}
+
+/**
+ * A stored page: the publisher-cased locator next to its current content.
+ * Identity is the case-insensitive `locator_key`; the `locator` field keeps
+ * the original spelling for display (DA-LOCATOR).
+ */
+export interface PageRecord<Data = unknown> {
+  locator: Locator;
+  content: ContentRecord<Data>;
 }
 
 /** Raw payload handed to HTTP delivery, independent of routing. */
