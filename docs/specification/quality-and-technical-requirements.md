@@ -91,6 +91,8 @@ this specification.
 ## QT-SEARCH — Search and privacy
 
 - Private pages and their content must not appear in public search.
+- Guest pages must not appear in public search or browsing; they are reachable
+  only by their direct URL for raw preview.
 - A change from public to private must remove the page from exploration within a
   stated practical delay.
 - Content indexing applies only to supported textual representations.
@@ -107,4 +109,4 @@ Tests should cover the behavior that defines the product:
 - publishing limits and capacity behavior;
 - route conflicts and missing-page responses;
 - page updates without mixed content and metadata;
-- exclusion of private pages from exploration.
+- exclusion of private and guest pages from exploration.

@@ -81,7 +81,9 @@ The app can browse or search public pages by:
 - textual content when the format can be represented and indexed as text.
 
 Results can lead to the site-mediated page, direct content, the creator's
-default page, and other public pages. Private content is excluded.
+default page, and other public pages. Private content is excluded. Guest pages
+are also excluded from exploration; they are locatable only by their direct URL
+for raw preview.
 
 Names and tags are enough for an initial search implementation; content search
 can be added without changing page URLs.

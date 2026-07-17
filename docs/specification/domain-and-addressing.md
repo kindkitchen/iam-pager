@@ -62,6 +62,9 @@ The original access model is intentionally simple:
 - public content can be opened by visitors and can appear in exploration;
 - private content can be opened only through its creator's authorized session.
 
+Guest pages are publicly deliverable but never appear in exploration; a visitor
+must know the direct URL to open one for raw preview.
+
 Public does not imply that the platform created or endorses the content.
 
 ## DA-LIFECYCLE — Replacement, rename, and deletion

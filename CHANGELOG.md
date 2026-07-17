@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-17
+
+- Specified that guest pages are excluded from site search and browsing and
+  are reachable only by direct URL for raw preview (updated `EX-EXPLORE`,
+  `EX-PUBLISH`, `CP-EXPLORE`, `DS-EXPLORE`, `QT-SEARCH`, `QT-VERIFY`,
+  `DA-ACCESS`).
+- Created task `content-publishing` covering the strategy-based locator
+  engine, `/site` SPA alias, interface-first content CRUD, the `MdPage`
+  content type, and the guest publish-and-open flow.
+
 ## 2026-07-15
 
 - Added stable semantic section markers, defined case-insensitive locator
