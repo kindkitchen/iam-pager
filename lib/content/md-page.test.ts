@@ -78,6 +78,7 @@ Deno.test("render wraps derived html in a standalone text/html document", () => 
   assertEquals(payload.media_type, "text/html; charset=utf-8");
   const body = payload.body as string;
   assert(body.startsWith("<!DOCTYPE html>"));
+  assert(body.includes('<link rel="icon" href="data:,">'));
   assert(body.includes(data.html));
   assertFalse(body.includes("<style>"));
 });

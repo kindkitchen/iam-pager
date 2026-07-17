@@ -1,2 +1,2 @@
-// Import CSS files here for hot module reloading to work.
-import "./assets/styles.css";
+// Site CSS is linked only from routes/_app.tsx so Vite does not inject it into
+// direct content responses during development.

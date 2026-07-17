@@ -111,6 +111,13 @@ capacity, publishing frequency, expiry, namespace reservation, and durable
 storage are not implemented; this endpoint is not ready for untrusted public
 traffic.
 
+## Local development
+
+Run `deno task dev`, open `http://localhost:5173`, publish a Markdown page, and
+use the resulting link to open its direct URL. Keep the development server
+running because guest pages are stored only in that process. Site styling is
+loaded by the site shell only; it is not injected into direct page responses.
+
 ## Technical stack
 
 - TypeScript with strict checks

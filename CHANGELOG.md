@@ -2,6 +2,11 @@
 
 ## 2026-07-18
 
+- Fixed blank guest pages under `deno task dev` by scoping the site stylesheet
+  to the Fresh app shell instead of Vite's global HTML injection, which had
+  invalidated raw delivery `Content-Length`; standalone Markdown pages now also
+  declare a data favicon to avoid the sandboxed CSP blocking `/favicon.ico`.
+
 - Added the first guest creation flow: bounded `POST /api/pages` JSON publishing
   over `PublishingService`, direct-path/URL responses with explicit API errors,
   a Fresh guest `MdPage` form at `/` and `/site/*`, and clear replaceable,
