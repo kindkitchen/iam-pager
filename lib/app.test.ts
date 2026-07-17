@@ -23,9 +23,9 @@ Deno.test("composition root publishes and delivers an md page end to end", async
   assertEquals(body.includes("Hi there"), true);
 });
 
-Deno.test("composition root forbids the site and api namespaces", async () => {
+Deno.test("composition root forbids platform route namespaces", async () => {
   const { publishing } = create_app_services();
-  for (const namespace of ["site", "API"]) {
+  for (const namespace of ["site", "API", "Auth"]) {
     const result = await publishing.publish({
       locator: { namespace },
       content_type: "md-page",

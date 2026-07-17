@@ -2,6 +2,13 @@
 
 ## 2026-07-17
 
+- Activated user authentication and implemented its transport-independent
+  session lifecycle: interface-backed process-local storage, discriminated
+  guest/authenticated state, hashed 256-bit bearer lookup, bounded renewal,
+  revocation, and atomic logical-session upgrade with credential rotation.
+  Reserved `auth`, documented the storage and HTTP boundaries, and added 10
+  lifecycle/concurrency tests (112 total).
+
 - Added an implementation-ready user-authentication task covering request IDs,
   guest/authenticated sessions, opaque cookie transport, multi-strategy auth,
   Google OAuth through `jsr:@kindkitchen/gauth@0.4.1`, its mocked local consent

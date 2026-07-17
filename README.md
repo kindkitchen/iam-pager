@@ -94,7 +94,11 @@ content or download it.
 The first publishing slice currently provides:
 
 - a path locator where the first segment is the namespace and the remaining
-  segments are the optional page name;
+  segments are the optional page name; `site`, `api`, and `auth` are reserved;
+- an interface-first, process-local session core with guest/authenticated state,
+  hashed bearer lookup, bounded renewal, atomic credential rotation, and
+  revocation; cookie transport and Fresh request middleware are not wired yet,
+  so the web app does not issue session cookies;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,

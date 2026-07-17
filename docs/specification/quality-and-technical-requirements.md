@@ -141,6 +141,18 @@ still unimplemented.
 - Session behavior must protect state-changing operations from unrelated sites
   and creator-supplied page content.
 
+The session foundation keeps transport and storage separate. A browser bearer
+credential is opaque; only its hash is stored. Every application request will
+resolve to a guest or authenticated server-side session, never a caller-selected
+identity or a nullable state. Authentication preserves the logical session but
+atomically rotates its credential. The current in-memory repository is
+process-local and invalidates sessions on restart; cookie transport and request
+middleware remain the next implementation boundary. See
+[session-and-authentication.md](session-and-authentication.md).
+
+The `auth` namespace is reserved alongside `site` and `api`, so authentication
+routes cannot collide with direct page locators.
+
 ## QT-API — API behavior
 
 - Direct content delivery and publishing use documented HTTP behavior.

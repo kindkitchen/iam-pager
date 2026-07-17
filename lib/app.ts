@@ -11,12 +11,12 @@ import {
 } from "./publishing/mod.ts";
 
 /**
- * Namespaces reserved for the site and platform routes (QT-ROUTING): `site`
- * is the SPA alias, `api` is the management/API surface. Route precedence
+ * Namespaces reserved for site and platform routes (QT-ROUTING): `site` is
+ * the SPA alias, while `api` and `auth` are platform surfaces. Route precedence
  * already keeps those paths off the catch-all; forbidding them here also
  * stops anyone from publishing pages that could never be delivered.
  */
-export const forbidden_namespaces: readonly string[] = ["site", "api"];
+export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 
 /** Everything the web layer needs; routes stay thin adapters over this. */
 export interface AppServices {
