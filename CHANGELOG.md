@@ -2,6 +2,11 @@
 
 ## 2026-07-17
 
+- Added an implementation-ready user-authentication task covering request IDs,
+  guest/authenticated sessions, opaque cookie transport, multi-strategy auth,
+  Google OAuth through `jsr:@kindkitchen/gauth@0.4.1`, its mocked local consent
+  flow, security tests, and gated authenticated header/navigation follow-ups.
+
 - Clarified exclusive content replacement controls as attached tabs:
   Markdown/CSS now meets the source panel edge and Raw/Steps meets its nested
   content panel. Selected tabs expose their controlled panel and support
