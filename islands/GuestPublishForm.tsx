@@ -1,6 +1,7 @@
 import type { JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
+import { HttpPagePreviewer } from "../lib/ui/page-preview.ts";
 import { default_page_style_preset } from "../lib/ui/page-style-presets.ts";
 import {
   FourWordRandomNameGenerator,
@@ -35,6 +36,7 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
     () => new FourWordRandomNameGenerator(),
     [],
   );
+  const page_previewer = useMemo(() => new HttpPagePreviewer(), []);
   const [namespace, set_namespace] = useState(props.initial_namespace);
   const [page_name, set_page_name] = useState("");
   const [markdown, set_markdown] = useState("");
@@ -161,6 +163,7 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
           css={css}
           on_markdown_input={(value) => update_draft(() => set_markdown(value))}
           on_css_input={(value) => update_draft(() => set_css(value))}
+          previewer={page_previewer}
         />
 
         <button type="submit" disabled={is_publishing}>

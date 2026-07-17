@@ -1,5 +1,5 @@
-import { useMemo, useState } from "preact/hooks";
-import { MdPageHandler } from "../lib/content/md-page.ts";
+import { useEffect, useState } from "preact/hooks";
+import type { PagePreviewer } from "../lib/ui/page-preview.ts";
 import {
   default_page_style_preset,
   page_style_presets,
@@ -10,6 +10,7 @@ export interface PageEditorProps {
   css: string;
   on_markdown_input: (value: string) => void;
   on_css_input: (value: string) => void;
+  previewer: PagePreviewer;
 }
 
 type EditorView = "all" | "preview" | "css";
@@ -20,18 +21,51 @@ const views: readonly { id: EditorView; label: string }[] = [
   { id: "css", label: "CSS" },
 ];
 
-const md_page_handler = new MdPageHandler();
-
 export function PageEditor(props: PageEditorProps) {
   const [view, set_view] = useState<EditorView>("all");
   const [preset_id, set_preset_id] = useState(default_page_style_preset.id);
-  const preview_document = useMemo(() => {
-    const payload = md_page_handler.render(md_page_handler.derive({
-      md: props.markdown,
-      ...(props.css === "" ? {} : { css: props.css }),
-    }));
-    return payload.body as string;
-  }, [props.markdown, props.css]);
+  const [preview_document, set_preview_document] = useState("");
+  const [preview_message, set_preview_message] = useState(
+    "Add Markdown to start the live preview.",
+  );
+  const show_markdown = view === "all";
+  const show_css = view === "all" || view === "css";
+  const show_preview = view === "all" || view === "preview";
+
+  useEffect(() => {
+    if (!show_preview || props.markdown.trim() === "") {
+      set_preview_document("");
+      set_preview_message("Add Markdown to start the live preview.");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      set_preview_message("Updating preview…");
+      try {
+        const document = await props.previewer.render(
+          {
+            md: props.markdown,
+            ...(props.css === "" ? {} : { css: props.css }),
+          },
+          controller.signal,
+        );
+        set_preview_document(document);
+        set_preview_message("Preview is up to date.");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        set_preview_document("");
+        set_preview_message(
+          error instanceof Error ? error.message : "Preview failed",
+        );
+      }
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [props.markdown, props.css, props.previewer, show_preview]);
 
   function apply_preset(id: string) {
     set_preset_id(id);
@@ -43,10 +77,6 @@ export function PageEditor(props: PageEditorProps) {
     set_preset_id("");
     props.on_css_input(value);
   }
-
-  const show_markdown = view === "all";
-  const show_css = view === "all" || view === "css";
-  const show_preview = view === "all" || view === "preview";
 
   return (
     <section class="page-editor" aria-labelledby="page-editor-heading">
@@ -124,7 +154,7 @@ export function PageEditor(props: PageEditorProps) {
               sandbox=""
               srcdoc={preview_document}
             />
-            <small>Updates live and uses the published page renderer.</small>
+            <small aria-live="polite">{preview_message}</small>
           </section>
         )}
       </div>

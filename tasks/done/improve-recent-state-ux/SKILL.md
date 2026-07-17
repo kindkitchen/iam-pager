@@ -1,6 +1,6 @@
 ---
 name: improve-recent-state-ux
-description: Improve the current guest publishing UX without changing publishing, locator, or storage behavior. Load when reviewing the mobile-first page editor, random locator helpers, CSS presets, or live preview.
+description: Improve the current guest publishing UX without changing publishing, locator, or storage behavior. Load when reviewing the mobile-first page editor, random locator helpers, CSS presets, or server-owned live preview.
 created: 2026-07-17
 updated: 2026-07-17
 tags: [frontend, ux, not-important]
@@ -12,8 +12,9 @@ publishing logic unchanged.
 
 Delivered four-word random locator helpers, the mobile-first Page editor with
 All/Preview/CSS views, editable replace-all CSS presets, and a sandboxed live
-preview backed by `MdPageHandler`.
+preview. The browser uses a Fetch-based `PagePreviewer`; `MdPageHandler` and its
+Deno/server dependency graph stay behind the bounded internal preview endpoint.
 
-Review passed all checks. Known gaps: collision fallback is local because guest
-publishing has no availability query, and exact browser preview adds a large
-client chunk. See [[005.summary]] and [[004.review]].
+Regression review passed 80 tests, production build, client graph inspection,
+and Firefox. Remote locator availability remains unsupported by the
+overwriteable guest flow. See [[010.summary]] and [[009.review]].

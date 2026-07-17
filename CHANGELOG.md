@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Fixed Firefox live-preview failures caused by the client island importing the
+  server-oriented `@deno/gfm` dependency graph, whose npm sanitizer transitively
+  requested `node:url` and `node:path`. `MdPageHandler` now stays behind a
+  bounded internal preview endpoint; the browser uses a debounced Fetch adapter,
+  reducing the island from roughly 1 MB to a browser-native module graph. Added
+  5 preview adapter tests (80 total).
+
 - Improved the guest publishing UX without changing publishing logic: the
   mobile-first form now prefills a four-word random namespace, offers random
   helpers for both locator fields with local numeric collision fallback, and
