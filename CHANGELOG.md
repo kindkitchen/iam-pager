@@ -2,15 +2,16 @@
 
 ## 2026-07-17
 
-- Softened the guest form hierarchy: Random is now a quiet action inside each
-  locator field, labels and optional controls are less prominent, and the
-  collapsible Page workspace switches between Markdown/CSS without mounting both
-  source panes visibly. Added `Split with preview` and `Full width` layouts with
-  preserved state and browser fullscreen preview. Guided cards now measure and
-  show whole styled content by default; per-card Compact/Whole choices survive
-  saves, focus changes, moves, and removal. Steps field actions now belong to
-  quiet input headers. Added six tests for the interface-backed workspace and
-  section-density controllers.
+- Completed the softer guest editor hierarchy: Random is now a quiet action
+  inside each locator field, labels and optional controls are less prominent,
+  and the collapsible Page workspace switches between Markdown/CSS without
+  mounting both source panes visibly. Added `Split with preview` and
+  `Full width` layouts with preserved state and browser fullscreen preview.
+  Guided cards now measure and show whole styled content by default; per-card
+  Compact/Whole choices survive saves, focus changes, moves, and removal. Steps
+  field actions now belong to quiet input headers. Added six tests for the
+  interface-backed workspace and section-density controllers (102 total);
+  responsive and interaction smoke checks pass.
 
 - Added drag-to-merge for Steps sections: card centers now propose an absorbing
   drop target, the destination combines the source's primary value while the

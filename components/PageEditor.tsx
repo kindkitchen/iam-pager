@@ -42,6 +42,7 @@ export function PageEditor(props: PageEditorProps) {
     "Add Markdown to start the live preview.",
   );
   const [preview_fullscreen, set_preview_fullscreen] = useState(false);
+  const [fullscreen_message, set_fullscreen_message] = useState("");
   const preview_area_ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -73,8 +74,13 @@ export function PageEditor(props: PageEditorProps) {
 
   useEffect(() => {
     function update_fullscreen_state() {
-      set_preview_fullscreen(
-        globalThis.document.fullscreenElement === preview_area_ref.current,
+      const active = globalThis.document.fullscreenElement ===
+        preview_area_ref.current;
+      set_preview_fullscreen(active);
+      set_fullscreen_message(
+        active
+          ? "Preview entered full screen. Press Escape to exit."
+          : "Preview exited full screen.",
       );
     }
 
@@ -111,7 +117,7 @@ export function PageEditor(props: PageEditorProps) {
         await preview_area.requestFullscreen();
       }
     } catch (error) {
-      set_preview_message(
+      set_fullscreen_message(
         error instanceof Error
           ? `Fullscreen unavailable: ${error.message}`
           : "Fullscreen is unavailable.",
@@ -248,6 +254,9 @@ export function PageEditor(props: PageEditorProps) {
               srcdoc={preview_document}
             />
             <small aria-live="polite">{preview_message}</small>
+            <span class="visually-hidden" role="status" aria-live="polite">
+              {fullscreen_message}
+            </span>
           </section>
         </div>
       </div>
