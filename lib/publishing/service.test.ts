@@ -83,6 +83,19 @@ Deno.test("publish rejects a forbidden namespace and stores nothing", async () =
   );
 });
 
+Deno.test("publish rejects an undeliverable locator and stores nothing", async () => {
+  const { service, repository } = make_service();
+  const locator = { namespace: "alice", page_name: "" };
+  const result = await service.publish({
+    locator,
+    content_type: "md-page",
+    input: { md: "# Hi" },
+  });
+  assertFalse(result.ok);
+  assertEquals(result.reason, "invalid_locator");
+  assertEquals(await repository.get(locator), null);
+});
+
 Deno.test("publish rejects an unknown content type", async () => {
   const { service } = make_service();
   const result = await service.publish({

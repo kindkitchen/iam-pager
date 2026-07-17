@@ -49,6 +49,24 @@ export class LocatorEngine {
     return resolution;
   }
 
+  /**
+   * Verify that a locator survives the selected public mapping unchanged.
+   * This keeps malformed or ambiguous locators out of storage rather than
+   * producing pages that no request path can retrieve.
+   */
+  validate(locator: Locator, strategy_name?: string): LocatorResolution {
+    const strategy = this.#strategy(strategy_name);
+    const resolution = strategy.resolve(strategy.format(locator));
+    if (!resolution.ok) return resolution;
+    if (!same_locator(resolution.locator, locator)) {
+      return { ok: false, reason: "invalid_segment" };
+    }
+    if (this.is_forbidden(locator.namespace)) {
+      return { ok: false, reason: "forbidden_namespace" };
+    }
+    return resolution;
+  }
+
   /** Build the public pathname for a locator. Throws on forbidden namespace. */
   format(locator: Locator, strategy_name?: string): string {
     if (this.is_forbidden(locator.namespace)) {
@@ -69,4 +87,9 @@ export class LocatorEngine {
     }
     return strategy;
   }
+}
+
+function same_locator(left: Locator, right: Locator): boolean {
+  return left.namespace === right.namespace &&
+    left.page_name === right.page_name;
 }

@@ -71,8 +71,11 @@ Publishing needs configurable content-size, stored-size, page-count, and
 frequency limits. Guest publishing uses stricter values and may have shorter
 retention. The app must explain when a limit rejects or removes content.
 
-The exact values should be chosen from prototype use rather than embedded in
-this specification.
+The current prototype bounds a guest publishing request at 96 KiB and accepts up
+to 64 KiB of Markdown plus 16 KiB of optional CSS, measured as UTF-8 bytes.
+These are initial operational values, not a promise for every future content
+format. Total stored-page capacity, publishing frequency, and guest expiry are
+still unimplemented.
 
 ## QT-AUTHORITY — Authenticated boundaries
 
@@ -93,6 +96,13 @@ this specification.
 - Errors should be useful to both a browser and a programmatic client.
 - The selected HTTP mapping must keep API endpoints and direct page locators
   unambiguous.
+
+The current guest API is `POST /api/pages` with an `application/json` body:
+`namespace` and `md` are required strings; `page_name` and `css` are optional
+strings. Success returns `201`, a relative `Location` header, and JSON
+containing `path` and absolute `url`. Malformed requests return `400`, oversized
+request bodies `413`, unsupported media types `415`, reserved namespaces `403`,
+and locator or content validation failures `422`. Responses use `no-store`.
 
 ## QT-SEARCH — Search and privacy
 

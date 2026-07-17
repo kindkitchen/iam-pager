@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertFalse } from "@std/assert";
+import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import { MdPageHandler } from "./md-page.ts";
 
 const handler = new MdPageHandler();
@@ -20,6 +20,31 @@ Deno.test("validate requires a non-empty md string", () => {
 
 Deno.test("validate rejects non-string css", () => {
   assertEquals(handler.validate({ md: "# Hi", css: 3 }).ok, false);
+});
+
+Deno.test("validate enforces configured UTF-8 byte limits", () => {
+  const limited = new MdPageHandler({
+    max_md_bytes: 4,
+    max_css_bytes: 3,
+  });
+  assertEquals(limited.validate({ md: "four" }).ok, true);
+  assertEquals(limited.validate({ md: "éé" }).ok, true);
+  assertEquals(limited.validate({ md: "ééx" }), {
+    ok: false,
+    reason: "md exceeds 4 bytes",
+  });
+  assertEquals(limited.validate({ md: "ok", css: "four" }), {
+    ok: false,
+    reason: "css exceeds 3 bytes",
+  });
+});
+
+Deno.test("constructor rejects invalid limits", () => {
+  assertThrows(
+    () => new MdPageHandler({ max_md_bytes: 0, max_css_bytes: 1 }),
+    Error,
+    "positive safe integers",
+  );
 });
 
 Deno.test("validate narrows to the declared input shape", () => {

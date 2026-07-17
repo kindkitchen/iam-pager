@@ -17,6 +17,7 @@ export interface PublishRequest {
 export type PublishResult =
   | { ok: true; page: PageRecord; path: string }
   | { ok: false; reason: "forbidden_namespace" }
+  | { ok: false; reason: "invalid_locator" }
   | { ok: false; reason: "unknown_content_type" }
   | { ok: false; reason: "invalid_input"; detail: string };
 

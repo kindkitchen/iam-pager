@@ -17,6 +17,19 @@ export interface MdPageData {
   css?: string;
 }
 
+export interface MdPageLimits {
+  max_md_bytes: number;
+  max_css_bytes: number;
+}
+
+/** Current prototype limits; callers may inject a different policy later. */
+export const default_md_page_limits: Readonly<MdPageLimits> = {
+  max_md_bytes: 64 * 1024,
+  max_css_bytes: 16 * 1024,
+};
+
+const text_encoder = new TextEncoder();
+
 /**
  * Neutralize `</style>` breakout: `\3c ` is the CSS escape for `<`, so the
  * stylesheet cannot close its `<style>` tag and inject markup.
@@ -32,6 +45,19 @@ function escape_css(css: string): string {
 export class MdPageHandler
   implements ContentTypeHandler<MdPageInput, MdPageData> {
   readonly content_type = "md-page";
+  #limits: MdPageLimits;
+
+  constructor(limits: MdPageLimits = default_md_page_limits) {
+    if (
+      !Number.isSafeInteger(limits.max_md_bytes) ||
+      limits.max_md_bytes < 1 ||
+      !Number.isSafeInteger(limits.max_css_bytes) ||
+      limits.max_css_bytes < 1
+    ) {
+      throw new Error("MdPage limits must be positive safe integers");
+    }
+    this.#limits = limits;
+  }
 
   validate(input: unknown): ContentResult<MdPageInput> {
     if (typeof input !== "object" || input === null) {
@@ -43,6 +69,21 @@ export class MdPageHandler
     }
     if (css !== undefined && typeof css !== "string") {
       return { ok: false, reason: "css must be a string when present" };
+    }
+    if (text_encoder.encode(md).byteLength > this.#limits.max_md_bytes) {
+      return {
+        ok: false,
+        reason: `md exceeds ${this.#limits.max_md_bytes} bytes`,
+      };
+    }
+    if (
+      css !== undefined &&
+      text_encoder.encode(css).byteLength > this.#limits.max_css_bytes
+    ) {
+      return {
+        ok: false,
+        reason: `css exceeds ${this.#limits.max_css_bytes} bytes`,
+      };
     }
     return { ok: true, value: css === undefined ? { md } : { md, css } };
   }

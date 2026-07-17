@@ -1,20 +1,28 @@
-/**
- * The site shell served at "/" and under the "/site" alias (001.draft).
- * Raw content delivery never renders this wrapper. The guest publish flow
- * mounts here in the next slice.
- */
+import GuestPublishForm from "../islands/GuestPublishForm.tsx";
+
+/** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
 export function SiteApp() {
   return (
     <main class="site-app">
-      <h1>iam-pager</h1>
-      <p>
-        Associate content with a URL of your choosing and share the direct link.
-        Pages open raw, without this site around them.
-      </p>
-      <p>
-        Guest publishing lands here next: pick a namespace, submit markdown, get
-        a direct URL.
-      </p>
+      <header class="hero">
+        <p class="eyebrow">Content at a URL</p>
+        <h1>iam-pager</h1>
+        <p class="hero-copy">
+          Associate Markdown with a path of your choosing, then share the direct
+          page without this site's wrapper.
+        </p>
+      </header>
+
+      <GuestPublishForm />
+
+      <aside class="guest-notice">
+        <h2>Guest pages are temporary and unprotected</h2>
+        <p>
+          Publishing at an existing guest path replaces it. The namespace is not
+          reserved, pages are kept only in this running process, and they do not
+          appear in search or browsing.
+        </p>
+      </aside>
     </main>
   );
 }

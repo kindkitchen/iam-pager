@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+- Added the first guest creation flow: bounded `POST /api/pages` JSON publishing
+  over `PublishingService`, direct-path/URL responses with explicit API errors,
+  a Fresh guest `MdPage` form at `/` and `/site/*`, and clear replaceable,
+  process-local ownership warnings. Publishing now rejects locators that do not
+  round-trip through the active URL strategy; `MdPage` enforces 64 KiB Markdown
+  and 16 KiB CSS limits, while the API bounds request bodies at 96 KiB. 15 new
+  tests (72 total).
+
 - Wired the domain layer to HTTP: composition root (`lib/app.ts`, `site` and
   `api` namespaces forbidden), routing-agnostic delivery response mapping
   (`lib/publishing/http.ts` — intentional status, content type, length,

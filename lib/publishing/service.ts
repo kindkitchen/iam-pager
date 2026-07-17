@@ -55,8 +55,14 @@ export class PublishingService implements PagePublisher, PageDeliverer {
   }
 
   async publish(request: PublishRequest): Promise<PublishResult> {
-    if (this.#engine.is_forbidden(request.locator.namespace)) {
-      return { ok: false, reason: "forbidden_namespace" };
+    const locator_validation = this.#engine.validate(request.locator);
+    if (!locator_validation.ok) {
+      return {
+        ok: false,
+        reason: locator_validation.reason === "forbidden_namespace"
+          ? "forbidden_namespace"
+          : "invalid_locator",
+      };
     }
     const handler = this.#handlers.get(request.content_type);
     if (!handler) return { ok: false, reason: "unknown_content_type" };

@@ -97,13 +97,19 @@ The first publishing slice currently provides:
   segments are the optional page name;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
-- the site shell at `/` and `/site/*`, with `site` and `api` reserved as
-  namespaces;
+- the site shell and guest publishing form at `/` and `/site/*`, with `site` and
+  `api` reserved as namespaces;
+- `POST /api/pages` for JSON guest publishing, returning the direct path and
+  URL;
 - raw delivery at every other valid locator, with explicit status, media type,
-  length, cache, disposition, and active-content isolation headers.
+  length, cache, disposition, and active-content isolation headers;
+- prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
+  KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-The guest publishing API and site form are the next slice; content cannot yet be
-created through the browser.
+Guest pages are currently process-local and replaceable by anyone. Total page
+capacity, publishing frequency, expiry, namespace reservation, and durable
+storage are not implemented; this endpoint is not ready for untrusted public
+traffic.
 
 ## Technical stack
 

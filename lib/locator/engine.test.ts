@@ -33,6 +33,38 @@ Deno.test("strategy errors pass through the engine unchanged", () => {
   });
 });
 
+Deno.test("validate accepts locators that roundtrip through the mapping", () => {
+  assertEquals(
+    make_engine().validate({ namespace: "My Ns", page_name: "notes/today" }),
+    {
+      ok: true,
+      locator: { namespace: "My Ns", page_name: "notes/today" },
+    },
+  );
+});
+
+Deno.test("validate rejects ambiguous or undeliverable locators", () => {
+  const engine = make_engine();
+  for (
+    const locator of [
+      { namespace: "" },
+      { namespace: "bad/name" },
+      { namespace: "ns", page_name: "" },
+      { namespace: "ns", page_name: "a//b" },
+      { namespace: "ns", page_name: "../other" },
+    ]
+  ) {
+    assertEquals(engine.validate(locator).ok, false);
+  }
+});
+
+Deno.test("validate applies forbidden namespace policy", () => {
+  assertEquals(make_engine().validate({ namespace: "SITE" }), {
+    ok: false,
+    reason: "forbidden_namespace",
+  });
+});
+
 Deno.test("format refuses forbidden namespaces", () => {
   assertThrows(
     () => make_engine().format({ namespace: "Site" }),
