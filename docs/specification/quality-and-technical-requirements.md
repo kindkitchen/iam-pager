@@ -66,10 +66,11 @@ restrictive content security policy in addition to content sanitization.
 
 The first supported set can be small, but the design should not assume that all
 future pages are short text. The current `MdPage` form previews Markdown and CSS
-through the same content handler used for publishing, inside a sandboxed iframe.
-The handler remains server-side behind a bounded internal site endpoint so its
-Deno/server dependencies cannot enter the browser module graph. CSS presets
-contain element-oriented starting styles and replace the editable CSS draft when
+locally inside a sandboxed iframe, without a preview HTTP request. This draft
+representation is intentionally simple; authoritative validation and
+sanitization remain in the server-side content handler at publish time, keeping
+Deno/server dependencies out of the browser module graph. CSS presets contain
+element-oriented starting styles and replace the editable CSS draft when
 selected.
 
 ## QT-LIMITS — Publishing limits

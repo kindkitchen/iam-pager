@@ -119,11 +119,11 @@ Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
 the live preview, publish the page, and use the resulting link to open its
 direct URL. Choosing a CSS preset replaces the current CSS, which remains
 editable. Random locator suggestions are browser-only conveniences and do not
-check server availability. Live preview requests the same server-owned
-`MdPageHandler` through a bounded internal site endpoint, keeping server/Deno
-dependency graphs out of the browser island. Keep the development server running
-because guest pages are stored only in that process. Site styling is loaded by
-the site shell only; it is not injected into direct page responses.
+check server availability. Draft preview renders locally in the browser inside a
+sandbox; authoritative validation and sanitization run through `MdPageHandler`
+only when publishing. Keep the development server running because guest pages
+are stored only in that process. Site styling is loaded by the site shell only;
+it is not injected into direct page responses.
 
 ## Technical stack
 

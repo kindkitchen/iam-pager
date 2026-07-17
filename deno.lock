@@ -1419,6 +1419,7 @@
       "jsr:@std/assert@^1.0.16",
       "npm:@preact/signals@^2.9.0",
       "npm:@types/babel__core@^7.20.5",
+      "npm:marked@^17.0.6",
       "npm:preact@^10.29.1",
       "npm:vite@^7.1.3"
     ]

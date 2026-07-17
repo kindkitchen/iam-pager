@@ -1,7 +1,7 @@
 import type { JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
-import { HttpPagePreviewer } from "../lib/ui/page-preview.ts";
+import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
 import { default_page_style_preset } from "../lib/ui/page-style-presets.ts";
 import {
   FourWordRandomNameGenerator,
@@ -26,6 +26,10 @@ type PublishState =
   | { status: "success"; result: PublishSuccess }
   | { status: "error"; message: string };
 
+const initial_markdown = `# Your page
+
+Write. Style. Preview. Publish.`;
+
 export interface GuestPublishFormProps {
   /** Generated once on the server so hydration keeps the visible suggestion. */
   initial_namespace: string;
@@ -36,10 +40,10 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
     () => new FourWordRandomNameGenerator(),
     [],
   );
-  const page_previewer = useMemo(() => new HttpPagePreviewer(), []);
+  const page_previewer = useMemo(() => new ClientPagePreviewer(), []);
   const [namespace, set_namespace] = useState(props.initial_namespace);
   const [page_name, set_page_name] = useState("");
-  const [markdown, set_markdown] = useState("");
+  const [markdown, set_markdown] = useState(initial_markdown);
   const [css, set_css] = useState(default_page_style_preset.css);
   const [state, set_state] = useState<PublishState>({ status: "idle" });
   const generated_names = useRef(new Set([namespace]));
@@ -175,9 +179,7 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
         {state.status === "success" && (
           <>
             <strong>Page published.</strong>
-            <a href={state.result.path} target="_blank" rel="noopener">
-              Open {state.result.path}
-            </a>
+            <a href={state.result.path}>Open {state.result.path}</a>
           </>
         )}
         {state.status === "error" && (

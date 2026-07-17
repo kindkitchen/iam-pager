@@ -1,40 +1,34 @@
+import { marked } from "marked";
+
 export interface PagePreviewInput {
   md: string;
   css?: string;
 }
 
 export interface PagePreviewer {
-  render(input: PagePreviewInput, signal?: AbortSignal): Promise<string>;
+  render(input: PagePreviewInput): string;
 }
 
-export type PreviewFetch = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
-
-/** Browser adapter for the server-owned Markdown representation. */
-export class HttpPagePreviewer implements PagePreviewer {
-  #endpoint: string;
-  #fetch: PreviewFetch;
-
-  constructor(
-    endpoint = "/site/api/preview",
-    preview_fetch: PreviewFetch = fetch,
-  ) {
-    this.#endpoint = endpoint;
-    this.#fetch = preview_fetch;
-  }
-
-  async render(input: PagePreviewInput, signal?: AbortSignal): Promise<string> {
-    const response = await this.#fetch(this.#endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(`Preview failed (${response.status})`);
-    }
-    return await response.text();
+/**
+ * Draft-only browser representation. Publishing remains responsible for
+ * authoritative validation, sanitization, and derivation through MdPageHandler.
+ */
+export class ClientPagePreviewer implements PagePreviewer {
+  render(input: PagePreviewInput): string {
+    const html = marked.parse(input.md, { async: false });
+    const style = input.css === undefined ? "" : `<style>${input.css}</style>`;
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+${style}
+</head>
+<body>
+${html}
+</body>
+</html>
+`;
   }
 }

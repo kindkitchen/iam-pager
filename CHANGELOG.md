@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Made live preview fully client-side with browser-compatible `marked`; draft
+  preview remains isolated in the sandbox while authoritative sanitization stays
+  at publish time, and the temporary preview POST endpoint was removed.
+  Published links now open in the current tab so Back returns to the editor, and
+  Markdown starts with a short usable draft instead of a placeholder. Preview
+  coverage is now 3 client tests (78 total).
+
 - Fixed Firefox live-preview failures caused by the client island importing the
   server-oriented `@deno/gfm` dependency graph, whose npm sanitizer transitively
   requested `node:url` and `node:path`. `MdPageHandler` now stays behind a

@@ -39,21 +39,16 @@ export function PageEditor(props: PageEditorProps) {
       return;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       set_preview_message("Updating preview…");
       try {
-        const document = await props.previewer.render(
-          {
-            md: props.markdown,
-            ...(props.css === "" ? {} : { css: props.css }),
-          },
-          controller.signal,
-        );
+        const document = props.previewer.render({
+          md: props.markdown,
+          ...(props.css === "" ? {} : { css: props.css }),
+        });
         set_preview_document(document);
         set_preview_message("Preview is up to date.");
       } catch (error) {
-        if (controller.signal.aborted) return;
         set_preview_document("");
         set_preview_message(
           error instanceof Error ? error.message : "Preview failed",
@@ -61,10 +56,7 @@ export function PageEditor(props: PageEditorProps) {
       }
     }, 150);
 
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
+    return () => clearTimeout(timer);
   }, [props.markdown, props.css, props.previewer, show_preview]);
 
   function apply_preset(id: string) {
@@ -111,7 +103,6 @@ export function PageEditor(props: PageEditorProps) {
               value={props.markdown}
               onInput={(event) =>
                 props.on_markdown_input(event.currentTarget.value)}
-              placeholder="# Hello world"
             />
             <small>Up to 64 KiB.</small>
           </label>
