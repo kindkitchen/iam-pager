@@ -44,6 +44,12 @@ those choices should not require rewriting the corresponding product rules.
 - Content updates must not expose a new payload with stale metadata or the
   reverse.
 
+The current prototype maps `/` and `/site/*` to the site, reserves `site` and
+`api` as namespaces, and maps every other unclaimed path through the path-slug
+locator strategy. Replaceable guest content uses `no-store` until validators
+exist. Active HTML and SVG delivery must receive an origin-less sandbox and a
+restrictive content security policy in addition to content sanitization.
+
 ## QT-CONTENT — Content handling
 
 - The accepted formats and size limits must be explicit.

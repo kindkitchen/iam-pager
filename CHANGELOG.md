@@ -2,6 +2,15 @@
 
 ## 2026-07-18
 
+- Wired the domain layer to HTTP: composition root (`lib/app.ts`, `site` and
+  `api` namespaces forbidden), routing-agnostic delivery response mapping
+  (`lib/publishing/http.ts` — intentional status, content type, length,
+  `no-store` cache policy, inline/attachment disposition, active-content CSP
+  sandbox and `nosniff`), catch-all raw delivery route (`routes/[...path].ts`),
+  and the site shell served at `/` and the `/site` alias
+  (`components/SiteApp.tsx`, `routes/site/`). Removed the remaining Fresh
+  scaffold counter, API, and middleware demos. 9 new tests (57 total).
+
 - Added the publish/deliver use-case layer (`lib/publishing/`): `PagePublisher`
   / `PageDeliverer` interfaces and the `PublishingService` implementation that
   owns the `validate -> derive` invariant (publish is the only producer of

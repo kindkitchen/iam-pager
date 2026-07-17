@@ -89,6 +89,22 @@ Content can have different formats. It may be HTML, text, a PDF, an image, or
 another supported type. Depending on the format, a direct URL may display the
 content or download it.
 
+## Current implementation
+
+The first publishing slice currently provides:
+
+- a path locator where the first segment is the namespace and the remaining
+  segments are the optional page name;
+- `MdPage` content, derived from sanitized Markdown with optional CSS;
+- in-memory create-or-replace storage (content is lost when the process stops);
+- the site shell at `/` and `/site/*`, with `site` and `api` reserved as
+  namespaces;
+- raw delivery at every other valid locator, with explicit status, media type,
+  length, cache, disposition, and active-content isolation headers.
+
+The guest publishing API and site form are the next slice; content cannot yet be
+created through the browser.
+
 ## Technical stack
 
 - TypeScript with strict checks

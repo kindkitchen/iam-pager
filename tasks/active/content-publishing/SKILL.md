@@ -9,22 +9,27 @@ relates: []
 
 Active. Requirements in [[001.draft]]; locator design in [[003.analysis]] /
 [[004.review]]; content design in [[005.analysis]] / [[006.review]]; publish
-invariants settled in [[007.decision]].
+invariants settled in [[007.decision]]; HTTP wiring in [[008.log]].
 
 Done: routing-agnostic domain layer under `lib/` — locator model with
 case-insensitive `locator_key`, `LocatorEngine` (strategy registry +
-forbidden-namespace policy, `site` forbidden), `PathSlugStrategy`;
-interface-first content contracts plus first implementations: `MdPageHandler`
-(`@deno/gfm`, sanitized html derived at publish time, css breakout neutralized)
-and `MemoryContentRepository` (`PageRecord` keeps original locator casing);
-publish/deliver use-case layer (`lib/publishing/`): `PublishingService`
-implements `PagePublisher` / `PageDeliverer`, owns `validate -> derive` as the
-only path into storage, computes `ContentMeta` from deterministic `render`
-output at publish time. 48 tests pass; `deno task check` clean.
+forbidden-namespace policy), `PathSlugStrategy`; content contracts plus
+`MdPageHandler` (sanitized html derived at publish time) and
+`MemoryContentRepository`; `PublishingService` (`PagePublisher` /
+`PageDeliverer`, `validate -> derive` as the only path into storage, meta from
+deterministic `render`). HTTP wiring: composition root `lib/app.ts` (forbidden
+namespaces `site`, `api`), delivery response mapping `lib/publishing/http.ts`
+(intentional statuses/headers, `no-store`, inline/attachment disposition,
+active-content CSP sandbox), catch-all route `routes/[...path].ts`, site shell
+at `/` and `/site/*` (`components/SiteApp.tsx`). 57 tests pass;
+`deno task check` clean.
 
-Next: HTTP wiring — `/site` alias, root SPA, catch-all raw delivery route on
-top of `PublishingService` — then the guest creation flow on the site.
+Next: guest creation flow — publish API endpoint over
+`PublishingService.publish`, site form island that submits an `MdPage`
+(namespace + optional page name + md + optional css) and links to the returned
+path. Guest placement is create-or-replace; no update flow (001.draft).
 
 Carry-over: forbid `/` in namespaces when charset validation lands
-([[004.review]] item 2); repository returns live references ([[006.review]]
-item 3, fine for the in-memory slice).
+([[004.review]] item 2); repository returns live references ([[006.review]] item
+3, fine for the in-memory slice); no cache validators yet — delivery is
+`no-store` ([[008.log]]).
