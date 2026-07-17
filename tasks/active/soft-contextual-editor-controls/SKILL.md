@@ -7,6 +7,6 @@ tags: [frontend, ux, markdown]
 relates: []
 ---
 
-Active implementation. Replace prominent standalone form labels and helpers with quiet controls attached to their parent fields. Rework Page editing so Markdown and CSS are mutually exclusive source panes, the editor can collapse without losing state, layout switches between side-by-side preview and full-width source with preview below, and preview can enter fullscreen.
+Active implementation. Deterministic workspace and Markdown section-density controllers now preserve source/layout choices across collapse and carry whole/compact preferences through section reconciliation, movement, and removal; six focused tests pass.
 
-Markdown section previews must show their content-sized whole view by default and offer a persistent per-section compact toggle. Density state must survive source edits and focus changes. Finish with responsive/accessibility review, documentation, and full validation before moving to review-ready `done`.
+Next: wire the controllers into softer contextual locator and Page controls, add fullscreen preview, then measure whole section previews and expose persistent compact toggles. Finish with responsive/accessibility review, documentation, and full validation before moving to review-ready `done`.

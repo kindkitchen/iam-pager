@@ -2,6 +2,8 @@
 
 ## 2026-07-17
 
+- Started `soft-contextual-editor-controls` and added tested, interface-backed state controllers that preserve source/layout choices across editor collapse and carry whole/compact preferences through Markdown section reconciliation, movement, and removal.
+
 - Added drag-to-merge for Steps sections: card centers now propose an absorbing
   drop target, the destination combines the source's primary value while the
   source card disappears, and edge/final targets retain reordering. One-line
