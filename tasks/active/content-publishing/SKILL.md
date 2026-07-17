@@ -7,19 +7,22 @@ tags: [backend, frontend, publishing]
 relates: []
 ---
 
-Active. Requirements in [[001.draft]]; design decisions in [[003.analysis]];
-code review in [[004.review]].
+Active. Requirements in [[001.draft]]; locator design in [[003.analysis]] /
+[[004.review]]; content design in [[005.analysis]] / [[006.review]].
 
 Done: routing-agnostic domain layer under `lib/` — locator model with
-case-insensitive `locator_key`, `LocatorStrategy` interface, `LocatorEngine`
-(strategy registry + forbidden-namespace policy, `site` forbidden),
-`PathSlugStrategy` (first slug = namespace, rest = page name), and
-interface-first content contracts (`ContentTypeHandler`, `ContentRepository`,
-`ContentRecord`). 23 tests pass; `deno task check` clean.
+case-insensitive `locator_key`, `LocatorEngine` (strategy registry +
+forbidden-namespace policy, `site` forbidden), `PathSlugStrategy`;
+interface-first content contracts plus first implementations: `MdPageHandler`
+(`@deno/gfm`, sanitized html derived at publish time, css breakout neutralized)
+and `MemoryContentRepository` (`PageRecord` keeps original locator casing). 37
+tests pass; `deno task check` clean.
 
-Next: `MdPage` handler (needs markdown dependency + sanitization decision),
-in-memory `ContentRepository`, publish/deliver use-cases; then HTTP wiring
-(`/site` alias, root SPA, catch-all raw delivery) and the guest creation flow.
+Next: publish/deliver use-case functions — must own the `validate -> derive`
+invariant and decide meta reconciliation (compute `ContentMeta` from `render`
+output at publish time). Then HTTP wiring (`/site` alias, root SPA, catch-all
+raw delivery) and the guest creation flow.
 
-Carry-over from review: forbid `/` in namespaces when charset validation lands;
-store original-cased `Locator` alongside content (likely `PageRecord`).
+Carry-over from reviews: forbid `/` in namespaces when charset validation lands
+([[004.review]] item 2); publish flow is the only producer of stored data
+([[006.review]] item 1); meta/payload reconciliation ([[006.review]] item 2).

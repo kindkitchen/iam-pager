@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Implemented the first content type `MdPage` (`lib/content/md-page.ts`,
+  `@deno/gfm` with sanitized publish-time html derivation, optional css with
+  style-tag breakout neutralized) and the in-memory `ContentRepository`
+  (`lib/content/memory-repository.ts`); reworked the repository interface around
+  `PageRecord` so stored pages keep publisher-supplied locator casing. 14 new
+  tests (37 total).
+
 - Implemented the routing-agnostic locator layer under `lib/locator/` (locator
   model with case-insensitive identity key, strategy interface, engine with
   forbidden-namespace policy, first `path-slug` strategy) and the
