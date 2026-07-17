@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Added the publish/deliver use-case layer (`lib/publishing/`): `PagePublisher`
+  / `PageDeliverer` interfaces and the `PublishingService` implementation that
+  owns the `validate -> derive` invariant (publish is the only producer of
+  stored records) and settles meta reconciliation — `ContentMeta` is computed
+  from the deterministic `render` output at publish time. 11 new tests (48
+  total).
+
 - Implemented the first content type `MdPage` (`lib/content/md-page.ts`,
   `@deno/gfm` with sanitized publish-time html derivation, optional css with
   style-tag breakout neutralized) and the in-memory `ContentRepository`

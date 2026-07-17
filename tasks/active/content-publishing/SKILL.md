@@ -8,21 +8,23 @@ relates: []
 ---
 
 Active. Requirements in [[001.draft]]; locator design in [[003.analysis]] /
-[[004.review]]; content design in [[005.analysis]] / [[006.review]].
+[[004.review]]; content design in [[005.analysis]] / [[006.review]]; publish
+invariants settled in [[007.decision]].
 
 Done: routing-agnostic domain layer under `lib/` — locator model with
 case-insensitive `locator_key`, `LocatorEngine` (strategy registry +
 forbidden-namespace policy, `site` forbidden), `PathSlugStrategy`;
 interface-first content contracts plus first implementations: `MdPageHandler`
 (`@deno/gfm`, sanitized html derived at publish time, css breakout neutralized)
-and `MemoryContentRepository` (`PageRecord` keeps original locator casing). 37
-tests pass; `deno task check` clean.
+and `MemoryContentRepository` (`PageRecord` keeps original locator casing);
+publish/deliver use-case layer (`lib/publishing/`): `PublishingService`
+implements `PagePublisher` / `PageDeliverer`, owns `validate -> derive` as the
+only path into storage, computes `ContentMeta` from deterministic `render`
+output at publish time. 48 tests pass; `deno task check` clean.
 
-Next: publish/deliver use-case functions — must own the `validate -> derive`
-invariant and decide meta reconciliation (compute `ContentMeta` from `render`
-output at publish time). Then HTTP wiring (`/site` alias, root SPA, catch-all
-raw delivery) and the guest creation flow.
+Next: HTTP wiring — `/site` alias, root SPA, catch-all raw delivery route on
+top of `PublishingService` — then the guest creation flow on the site.
 
-Carry-over from reviews: forbid `/` in namespaces when charset validation lands
-([[004.review]] item 2); publish flow is the only producer of stored data
-([[006.review]] item 1); meta/payload reconciliation ([[006.review]] item 2).
+Carry-over: forbid `/` in namespaces when charset validation lands
+([[004.review]] item 2); repository returns live references ([[006.review]]
+item 3, fine for the in-memory slice).
