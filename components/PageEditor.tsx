@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { PagePreviewer } from "../lib/ui/page-preview.ts";
+import { MarkdownContentEditor } from "./MarkdownContentEditor.tsx";
 import {
   default_page_style_preset,
   page_style_presets,
@@ -92,21 +93,11 @@ export function PageEditor(props: PageEditorProps) {
       </div>
 
       <div class={`page-editor-areas page-editor-${view}`}>
-        {show_markdown && (
-          <label class="editor-area markdown-area">
-            <span>Markdown</span>
-            <textarea
-              name="md"
-              required
-              rows={15}
-              maxLength={64 * 1024}
-              value={props.markdown}
-              onInput={(event) =>
-                props.on_markdown_input(event.currentTarget.value)}
-            />
-            <small>Up to 64 KiB.</small>
-          </label>
-        )}
+        <MarkdownContentEditor
+          markdown={props.markdown}
+          active={show_markdown}
+          on_markdown_input={props.on_markdown_input}
+        />
 
         {show_css && (
           <div class="editor-area css-area">

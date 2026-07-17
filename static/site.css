@@ -13,6 +13,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -168,7 +172,10 @@ h2 {
 
 .field-heading,
 .page-editor-heading,
-.css-heading {
+.css-heading,
+.markdown-editor-heading,
+.markdown-insertion-heading,
+.markdown-save-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -176,7 +183,8 @@ h2 {
 }
 
 .helper-button,
-.view-button {
+.view-button,
+.compact-button {
   border: 1px solid #8fa096;
   padding: 0.3rem 0.55rem;
   color: #1c5333;
@@ -186,7 +194,9 @@ h2 {
 
 .helper-button:hover:not(:disabled),
 .view-button:hover:not(:disabled),
-.view-button[aria-pressed="true"] {
+.compact-button:hover:not(:disabled),
+.view-button[aria-pressed="true"],
+.compact-button[aria-pressed="true"] {
   color: #fff;
   background: #1c5333;
 }
@@ -243,6 +253,7 @@ h2 {
   align-content: start;
   min-width: 0;
   gap: 0.4rem;
+  margin: 0;
   border: 1px solid #c4c6bf;
   border-radius: 0.4rem;
   padding: 0.75rem;
@@ -251,6 +262,235 @@ h2 {
 
 .editor-area textarea {
   min-height: 19rem;
+}
+
+.markdown-editor-heading {
+  min-height: 2.75rem;
+}
+
+.markdown-mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(12rem, 58%);
+}
+
+.markdown-mode-switcher .compact-button {
+  min-height: 2.75rem;
+  border-radius: 0;
+}
+
+.markdown-mode-switcher .compact-button:first-child {
+  border-radius: 0.35rem 0 0 0.35rem;
+}
+
+.markdown-mode-switcher .compact-button:last-child {
+  border-left: 0;
+  border-radius: 0 0.35rem 0.35rem 0;
+}
+
+.markdown-step-editor {
+  display: grid;
+  min-width: 0;
+  gap: 0.55rem;
+}
+
+.markdown-lines {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.markdown-line,
+.markdown-insertion,
+.markdown-limit-message {
+  border: 1px solid #b8beb9;
+  border-radius: 0.4rem;
+  background: #fffefa;
+}
+
+.markdown-line {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.markdown-line-summary {
+  display: block;
+  width: 100%;
+  min-height: 3.25rem;
+  overflow: hidden;
+  border-radius: 0;
+  padding: 0.65rem 0.8rem;
+  color: #17211b;
+  background: transparent;
+  font-weight: 400;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-line-summary:hover:not(:disabled),
+.markdown-line-summary[aria-expanded="true"] {
+  color: #17211b;
+  background: #edf3eb;
+}
+
+.markdown-preview-heading {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.markdown-preview-heading[data-level="1"] {
+  font-size: 1.45rem;
+}
+
+.markdown-preview-heading[data-level="2"] {
+  font-size: 1.3rem;
+}
+
+.markdown-preview-heading[data-level="3"] {
+  font-size: 1.15rem;
+}
+
+.markdown-preview-heading[data-level="4"],
+.markdown-preview-heading[data-level="5"],
+.markdown-preview-heading[data-level="6"] {
+  font-size: 1rem;
+}
+
+.markdown-preview-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+.markdown-preview-marker {
+  font-weight: 700;
+}
+
+.markdown-preview-link {
+  color: #145d31;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.markdown-preview-raw {
+  font-size: 0.82rem;
+}
+
+.markdown-line-details,
+.markdown-line-form,
+.markdown-insertion,
+.markdown-limit-message {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.markdown-line-details {
+  border-top: 1px solid #d4d8d3;
+  padding: 0.75rem;
+}
+
+.markdown-line-form {
+  border-bottom: 1px solid #d4d8d3;
+  padding-bottom: 0.75rem;
+}
+
+.markdown-heading-fields,
+.markdown-link-fields,
+.markdown-value-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.markdown-heading-fields label:first-child {
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+}
+
+.markdown-value-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.markdown-save-actions {
+  justify-content: flex-start;
+}
+
+.markdown-save-actions button,
+.markdown-line-actions button,
+.markdown-type-picker button,
+.markdown-insertion-heading button,
+.markdown-value-actions button {
+  min-height: 2.75rem;
+}
+
+.markdown-line-actions,
+.markdown-type-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.markdown-line-actions .danger-button {
+  grid-column: 1 / -1;
+  border-color: #bb776f;
+  color: #8a251c;
+}
+
+.markdown-line-actions .danger-button:hover:not(:disabled) {
+  color: #fff;
+  background: #8a251c;
+}
+
+.markdown-line-actions button:disabled {
+  cursor: not-allowed;
+}
+
+.markdown-insertion {
+  border-style: dashed;
+  padding: 0.75rem;
+}
+
+.markdown-add-line-button {
+  width: 100%;
+  min-height: 3.25rem;
+  border: 1px dashed #8fa096;
+  color: #1c5333;
+  background: transparent;
+  font-size: 1.4rem;
+}
+
+.markdown-add-line-button:hover:not(:disabled) {
+  color: #fff;
+  background: #1c5333;
+}
+
+.markdown-add-line-button:disabled {
+  cursor: not-allowed;
+}
+
+.markdown-insertion-heading {
+  min-height: 2.75rem;
+}
+
+.markdown-blank-note {
+  margin: 0;
+  color: #626a64;
+}
+
+.markdown-limit-message {
+  align-items: center;
+  justify-items: start;
+  padding: 1rem;
+}
+
+.markdown-limit-message span {
+  color: #626a64;
 }
 
 .css-heading label {

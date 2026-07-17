@@ -70,6 +70,26 @@
 
 ## 2026-07-17
 
+- Made Steps Paste usable when Clipboard API reads are blocked: it now opens an
+  explicit manual-paste fallback and preserves physical-line normalization.
+
+- Added Copy to every Steps content field alongside Paste and Clear, with
+  clipboard success and denied-access feedback.
+
+- Refined Steps after review: collapsed lines are now content-only previews and
+  toggle their controls, existing lines can change type while preserving their
+  primary value, every content input has Paste and Clear actions, and a final
+  plus button always exposes end insertion. Added a type-conversion engine test
+  (86 total).
+
+- Added a switchable, mobile-first Steps mode to the `MdPage` Markdown editor. A
+  lossless physical-line engine keeps raw Markdown authoritative while compact
+  line previews support focused updates, guarded deletion, movement, and
+  insertion above or below. The add flow covers text, six heading levels,
+  bulleted and numbered lists, two-field links, and blank lines; oversized
+  line-heavy drafts fall back safely to Raw mode. Added 7 deterministic engine
+  tests (85 total).
+
 - Specified that guest pages are excluded from site search and browsing and are
   reachable only by direct URL for raw preview (updated `EX-EXPLORE`,
   `EX-PUBLISH`, `CP-EXPLORE`, `DS-EXPLORE`, `QT-SEARCH`, `QT-VERIFY`,

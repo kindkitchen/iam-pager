@@ -66,7 +66,17 @@ restrictive content security policy in addition to content sanitization.
 
 The first supported set can be small, but the design should not assume that all
 future pages are short text. The current `MdPage` form previews Markdown and CSS
-locally inside a sandboxed iframe, without a preview HTTP request. This draft
+locally inside a sandboxed iframe, without a preview HTTP request. Markdown has
+switchable raw and guided physical-line editors backed by the same source
+string. The guided editor must losslessly derive lines from untouched source; it
+may recognize safe common forms but must retain unfamiliar Markdown as raw
+editable lines instead of approximating a full Markdown parser. Collapsed lines
+are content-only previews; activating one toggles its focused controls and
+closes the previously active line, with unsaved changes guarded. Focused forms
+support value-preserving type changes and field-level Paste, Copy, and Clear
+actions. Paste must fall back to explicit manual entry when browser clipboard
+reads are unavailable or denied. Structured editing is presentation logic only
+and does not replace the publish input or server content handler. This draft
 representation is intentionally simple; authoritative validation and
 sanitization remain in the server-side content handler at publish time, keeping
 Deno/server dependencies out of the browser module graph. CSS presets contain

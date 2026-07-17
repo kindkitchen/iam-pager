@@ -98,9 +98,9 @@ The first publishing slice currently provides:
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
-  with four-word random locator helpers, editable element-based CSS presets, and
-  a sandboxed live Markdown/CSS preview; `site` and `api` remain reserved as
-  namespaces;
+  with four-word random locator helpers, raw and guided line-by-line Markdown
+  editing, editable element-based CSS presets, and a sandboxed live Markdown/CSS
+  preview; `site` and `api` remain reserved as namespaces;
 - `POST /api/pages` for JSON guest publishing, returning the direct path and
   URL;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -117,13 +117,22 @@ traffic.
 
 Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
 the live preview, publish the page, and use the resulting link to open its
-direct URL. Choosing a CSS preset replaces the current CSS, which remains
-editable. Random locator suggestions are browser-only conveniences and do not
-check server availability. Draft preview renders locally in the browser inside a
-sandbox; authoritative validation and sanitization run through `MdPageHandler`
-only when publishing. Keep the development server running because guest pages
-are stored only in that process. Site styling is loaded by the site shell only;
-it is not injected into direct page responses.
+direct URL. Markdown can be edited as raw source or as guided physical-line
+steps; both modes update the same draft, and the guided mode keeps unfamiliar
+Markdown as an editable source line. Collapsed steps show only a compact content
+preview and toggle their controls when tapped. Existing lines can change type
+while retaining their primary value. Every content field has Paste, Copy, and
+Clear actions; Paste opens a manual entry fallback when browser clipboard reads
+are blocked. Lines can be added around a step or with the final plus button. The
+add flow provides text, headings, bulleted and numbered lists, links with
+separate label and URL fields, and blank lines. Choosing a CSS preset replaces
+the current CSS, which remains editable. Random locator suggestions are
+browser-only conveniences and do not check server availability. Draft preview
+renders locally in the browser inside a sandbox; authoritative validation and
+sanitization run through `MdPageHandler` only when publishing. Keep the
+development server running because guest pages are stored only in that process.
+Site styling is loaded by the site shell only; it is not injected into direct
+page responses.
 
 ## Technical stack
 
