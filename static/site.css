@@ -379,7 +379,7 @@ h2 {
   background: #e0e9df;
 }
 
-.exclusive-content-button[aria-pressed="true"] {
+.exclusive-content-button[aria-selected="true"] {
   position: relative;
   z-index: 1;
   border-color: #9faa9f;

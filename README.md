@@ -143,12 +143,13 @@ newline. Mouse, touch, and pen support both drop modes, while focused-grip arrow
 keys reorder. Choosing a CSS preset replaces the current CSS, which remains
 editable in a Prism-highlighted textarea. Markdown/CSS and Raw/Steps are
 interchangeable-content controls rendered as tabs attached to the panel edge
-they replace; the detached split/full-width control remains a layout choice.
-Markdown and CSS occupy the same source position rather than appearing together.
-The Page workspace can collapse without losing its selected source or layout;
-`Split with preview` places source and preview beside each other where space
-permits, while `Full width` places the preview below. Preview can also enter
-browser fullscreen. Random locator actions sit inside their subdued field
+they replace; selected tabs expose their controlled panel and support arrow,
+Home, and End navigation. The detached split/full-width control remains a layout
+choice. Markdown and CSS occupy the same source position rather than appearing
+together. The Page workspace can collapse without losing its selected source or
+layout; `Split with preview` places source and preview beside each other where
+space permits, while `Full width` places the preview below. Preview can also
+enter browser fullscreen. Random locator actions sit inside their subdued field
 headers; suggestions are browser-only conveniences and do not check server
 availability. Draft preview renders locally in the browser inside a sandbox;
 authoritative validation and sanitization run through `MdPageHandler` only when

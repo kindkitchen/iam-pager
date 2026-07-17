@@ -218,6 +218,7 @@ export function PageEditor(props: PageEditorProps) {
             <fieldset
               id="source-css-panel"
               class="editor-area css-area exclusive-content-panel"
+              role="tabpanel"
               aria-labelledby="source-css-button"
               disabled={!workspace.expanded || workspace.source !== "css"}
               hidden={workspace.source !== "css"}

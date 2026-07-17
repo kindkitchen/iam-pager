@@ -725,12 +725,14 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     props.on_markdown_input(section_editor.serialize(next_sections));
   }
 
-  function change_mode(next_mode: MarkdownEditorMode) {
-    if (next_mode === mode || !allow_discard()) return;
+  function change_mode(next_mode: MarkdownEditorMode): boolean {
+    if (next_mode === mode) return true;
+    if (!allow_discard()) return false;
     set_editing(null);
     set_insertion(null);
     set_delete_armed_index(null);
     set_mode(next_mode);
+    return true;
   }
 
   function toggle_edit(index: number) {
@@ -999,6 +1001,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     <fieldset
       id={props.panel_id}
       class="editor-area markdown-area exclusive-content-panel"
+      role="tabpanel"
       aria-labelledby={props.label_id}
       disabled={!props.active}
       hidden={!props.active}
@@ -1014,7 +1017,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
         <div
           id="markdown-mode-panel"
           class="markdown-mode-panel"
-          role="region"
+          role="tabpanel"
           aria-labelledby={mode === "raw"
             ? "markdown-mode-raw-button"
             : "markdown-mode-steps-button"}

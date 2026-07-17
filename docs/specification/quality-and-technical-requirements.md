@@ -70,15 +70,17 @@ locally inside a sandboxed iframe, without a preview HTTP request. Its Page
 workspace is collapsible without resetting the selected source or layout;
 Markdown and CSS are mutually exclusive source panes. Markdown/CSS and Raw/Steps
 use attached tabs because they replace interchangeable content immediately below
-them. Split/full-width remains a detached segmented control because it
-rearranges the same content rather than replacing it. `Split with preview`
-places source and preview side by side where space permits, while `Full width`
-places the preview below, and the preview can enter browser fullscreen. Markdown
-has switchable raw and guided section editors backed by the same source string.
-The guided adapter must losslessly derive sections from untouched source without
-approximating a full Markdown parser: safe focused forms may stay one physical
-line, unfamiliar Markdown remains a raw one-line section, and complete or
-unterminated fenced code blocks are grouped as one multi-line section.
+them. Tabs expose selected/control/panel semantics with roving focus and arrow,
+Home, and End navigation. Split/full-width remains a detached segmented control
+because it rearranges the same content rather than replacing it.
+`Split with preview` places source and preview side by side where space permits,
+while `Full width` places the preview below, and the preview can enter browser
+fullscreen. Markdown has switchable raw and guided section editors backed by the
+same source string. The guided adapter must losslessly derive sections from
+untouched source without approximating a full Markdown parser: safe focused
+forms may stay one physical line, unfamiliar Markdown remains a raw one-line
+section, and complete or unterminated fenced code blocks are grouped as one
+multi-line section.
 
 Collapsed sections are content-only previews rendered in isolated frames with
 the current page CSS; activating one toggles its focused controls and closes the
