@@ -98,9 +98,11 @@ The first publishing slice currently provides:
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
-  with four-word random locator helpers, raw and guided line-by-line Markdown
-  editing, editable element-based CSS presets, and a sandboxed live Markdown/CSS
-  preview; `site` and `api` remain reserved as namespaces;
+  with four-word random locator helpers, raw and guided Markdown section
+  editing, fenced code-block sections, grip-driven section ordering,
+  CSS-reactive sandboxed section previews, editable element-based CSS presets,
+  CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
+  `site` and `api` remain reserved as namespaces;
 - `POST /api/pages` for JSON guest publishing, returning the direct path and
   URL;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -117,16 +119,20 @@ traffic.
 
 Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
 the live preview, publish the page, and use the resulting link to open its
-direct URL. Markdown can be edited as raw source or as guided physical-line
-steps; both modes update the same draft, and the guided mode keeps unfamiliar
-Markdown as an editable source line. Collapsed steps show only a compact content
-preview and toggle their controls when tapped. Existing lines can change type
-while retaining their primary value. Every content field has Paste, Copy, and
-Clear actions; Paste opens a manual entry fallback when browser clipboard reads
-are blocked. Lines can be added around a step or with the final plus button. The
-add flow provides text, headings, bulleted and numbered lists, links with
-separate label and URL fields, and blank lines. Choosing a CSS preset replaces
-the current CSS, which remains editable. Random locator suggestions are
+direct URL. Markdown can be edited as raw source or as guided sections; both
+modes update the same draft. The deterministic section adapter groups a fenced
+code block into one editable unit while retaining unfamiliar Markdown as safe
+one-line raw sections instead of approximating a full Markdown AST. Collapsed
+sections render in isolated frames with the current page CSS and toggle their
+controls when tapped. Text, Heading, Link, Code block, and raw Markdown have
+focused forms; Code block exposes optional language and multiline code fields.
+For Text, Heading, and Link, `Is list item` enables a nested `Numbered`
+checkbox: unselected means bulleted. Empty Text represents a blank physical
+line. Every content field has Paste, Copy, and Clear actions; blocked code
+clipboard reads focus the multiline field for direct paste. The plus button
+appends a section; move it with the grip using mouse, touch, pen, or
+focused-grip arrow keys. Choosing a CSS preset replaces the current CSS, which
+remains editable in a Prism-highlighted textarea. Random locator suggestions are
 browser-only conveniences and do not check server availability. Draft preview
 renders locally in the browser inside a sandbox; authoritative validation and
 sanitization run through `MdPageHandler` only when publishing. Keep the
@@ -139,3 +145,4 @@ page responses.
 - TypeScript with strict checks
 - Deno as the JavaScript runtime
 - Deno Fresh as the web framework
+- Prism 1.29 from jsDelivr for CSS editor highlighting

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { PagePreviewer } from "../lib/ui/page-preview.ts";
+import { CssSourceEditor } from "./CssSourceEditor.tsx";
 import { MarkdownContentEditor } from "./MarkdownContentEditor.tsx";
 import {
   default_page_style_preset,
@@ -95,8 +96,10 @@ export function PageEditor(props: PageEditorProps) {
       <div class={`page-editor-areas page-editor-${view}`}>
         <MarkdownContentEditor
           markdown={props.markdown}
+          css={props.css}
           active={show_markdown}
           on_markdown_input={props.on_markdown_input}
+          previewer={props.previewer}
         />
 
         {show_css && (
@@ -115,14 +118,10 @@ export function PageEditor(props: PageEditorProps) {
                 ))}
               </select>
             </div>
-            <textarea
-              name="css"
-              aria-label="CSS"
-              rows={15}
-              maxLength={16 * 1024}
+            <CssSourceEditor
               value={props.css}
-              onInput={(event) => update_css(event.currentTarget.value)}
-              placeholder="body { max-width: 48rem; margin: 3rem auto; }"
+              max_length={16 * 1024}
+              on_input={update_css}
             />
             <small>Up to 16 KiB. Choosing a preset replaces all CSS.</small>
           </div>

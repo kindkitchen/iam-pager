@@ -67,21 +67,37 @@ restrictive content security policy in addition to content sanitization.
 The first supported set can be small, but the design should not assume that all
 future pages are short text. The current `MdPage` form previews Markdown and CSS
 locally inside a sandboxed iframe, without a preview HTTP request. Markdown has
-switchable raw and guided physical-line editors backed by the same source
-string. The guided editor must losslessly derive lines from untouched source; it
-may recognize safe common forms but must retain unfamiliar Markdown as raw
-editable lines instead of approximating a full Markdown parser. Collapsed lines
-are content-only previews; activating one toggles its focused controls and
-closes the previously active line, with unsaved changes guarded. Focused forms
-support value-preserving type changes and field-level Paste, Copy, and Clear
-actions. Paste must fall back to explicit manual entry when browser clipboard
-reads are unavailable or denied. Structured editing is presentation logic only
-and does not replace the publish input or server content handler. This draft
-representation is intentionally simple; authoritative validation and
-sanitization remain in the server-side content handler at publish time, keeping
-Deno/server dependencies out of the browser module graph. CSS presets contain
-element-oriented starting styles and replace the editable CSS draft when
-selected.
+switchable raw and guided section editors backed by the same source string. The
+guided adapter must losslessly derive sections from untouched source without
+approximating a full Markdown parser: safe focused forms may stay one physical
+line, unfamiliar Markdown remains a raw one-line section, and complete or
+unterminated fenced code blocks are grouped as one multi-line section.
+
+Collapsed sections are content-only previews rendered in isolated frames with
+the current page CSS; activating one toggles its focused controls and closes the
+previously active section, with unsaved changes guarded. Focused forms support
+value-preserving safe type changes and field-level Paste, Copy, and Clear
+actions. Code block sections expose optional language and multiline code fields,
+generate a non-conflicting fence when changed, and cannot convert to a one-line
+type while multiline content remains. Text, Heading, Link, Code block, and raw
+Markdown are content types. For focused one-line content, an `Is list item`
+checkbox enables an indented `Numbered` checkbox; unchecked Numbered means
+bulleted. Empty Text represents a blank physical line. Fenced code blocks remain
+standalone because list-owned fences require coordinated indentation across the
+whole block.
+
+New sections append at the end. A prefixed drag grip and visible insertion/final
+drop indicators replace directional and contextual insertion buttons; Pointer
+Events support mouse, touch, and pen, while focused grips support keyboard
+arrow, Home, and End ordering with live announcements. Paste must fall back to
+explicit manual entry when browser clipboard reads are unavailable or denied.
+Structured editing is presentation logic only and does not replace the publish
+input or server content handler. This draft representation is intentionally
+simple; authoritative validation and sanitization remain in the server-side
+content handler at publish time, keeping Deno/server dependencies out of the
+browser module graph. CSS presets contain element-oriented starting styles and
+replace the editable CSS draft when selected. The CSS textarea remains the
+source while pinned CDN-hosted Prism provides optional syntax highlighting.
 
 ## QT-LIMITS — Publishing limits
 

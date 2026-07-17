@@ -2,6 +2,15 @@
 
 ## 2026-07-18
 
+- Evolved Steps from line controls to lossless Markdown sections. Fenced code
+  blocks are grouped and edited as one section with language and multiline code
+  fields; Text/Heading/Link list membership uses `Is list item` plus a nested
+  `Numbered` checkbox, while empty Text remains the blank-line representation.
+  Append-only creation and grip-driven mouse/touch/keyboard ordering replace
+  Up/Down/Above/Below buttons and expose a final drop target. Section previews
+  remain CSS-reactive sandboxes, and the CSS source retains pinned CDN-backed
+  Prism highlighting. Added 6 section-engine tests (92 total).
+
 - Made live preview fully client-side with browser-compatible `marked`; draft
   preview remains isolated in the sandbox while authoritative sanitization stays
   at publish time, and the temporary preview POST endpoint was removed.
