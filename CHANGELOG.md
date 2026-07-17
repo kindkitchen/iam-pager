@@ -2,7 +2,12 @@
 
 ## 2026-07-17
 
-- Started `soft-contextual-editor-controls` and added tested, interface-backed state controllers that preserve source/layout choices across editor collapse and carry whole/compact preferences through Markdown section reconciliation, movement, and removal.
+- Softened the guest form hierarchy: Random is now a quiet action inside each
+  locator field, labels and optional controls are less prominent, and the
+  collapsible Page workspace switches between Markdown/CSS without mounting both
+  source panes visibly. Added `Split with preview` and `Full width` layouts with
+  preserved state, browser fullscreen preview, and tested interface-backed
+  workspace/section-density controllers.
 
 - Added drag-to-merge for Steps sections: card centers now propose an absorbing
   drop target, the destination combines the source's primary value while the

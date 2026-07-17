@@ -7,6 +7,14 @@ tags: [frontend, ux, markdown]
 relates: []
 ---
 
-Active implementation. Deterministic workspace and Markdown section-density controllers now preserve source/layout choices across collapse and carry whole/compact preferences through section reconciliation, movement, and removal; six focused tests pass.
+Active implementation. Locator labels and Random actions now form quiet
+integrated fields. The Page workspace collapses with state intact, shows one
+Markdown/CSS source pane, switches between responsive split and
+full-width/preview-below layouts, and supports browser fullscreen preview.
+Deterministic workspace and section-density controllers have six focused tests;
+type checks and production build pass.
 
-Next: wire the controllers into softer contextual locator and Page controls, add fullscreen preview, then measure whole section previews and expose persistent compact toggles. Finish with responsive/accessibility review, documentation, and full validation before moving to review-ready `done`.
+Next: measure whole Markdown section previews, expose persistent compact
+toggles, and contextualize their field-level optional actions. Finish with
+responsive/accessibility review, full validation, and review before moving to
+`done`.

@@ -116,18 +116,20 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
 
       <form class="publish-form" onSubmit={publish}>
         <div class="locator-fields">
-          <label>
-            <span class="field-heading">
-              <span>Namespace</span>
+          <div class="contextual-input locator-field">
+            <div class="contextual-input-heading">
+              <label for="namespace">Namespace</label>
               <button
                 type="button"
-                class="helper-button"
+                class="embedded-input-action"
+                aria-label="Use a random namespace"
                 onClick={() => randomize(namespace, set_namespace)}
               >
                 Random
               </button>
-            </span>
+            </div>
             <input
+              id="namespace"
               name="namespace"
               required
               value={namespace}
@@ -136,22 +138,24 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
               placeholder="your-name"
               autocomplete="off"
             />
-          </label>
+          </div>
           <span class="path-separator" aria-hidden="true">/</span>
-          <label>
-            <span class="field-heading">
-              <span>
+          <div class="contextual-input locator-field">
+            <div class="contextual-input-heading">
+              <label for="page-name">
                 Page name <small>optional</small>
-              </span>
+              </label>
               <button
                 type="button"
-                class="helper-button"
+                class="embedded-input-action"
+                aria-label="Use a random page name"
                 onClick={() => randomize(page_name, set_page_name)}
               >
                 Random
               </button>
-            </span>
+            </div>
             <input
+              id="page-name"
               name="page_name"
               value={page_name}
               onInput={(event) =>
@@ -159,7 +163,7 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
               placeholder="notes/today"
               autocomplete="off"
             />
-          </label>
+          </div>
         </div>
 
         <PageEditor

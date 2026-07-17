@@ -66,9 +66,13 @@ restrictive content security policy in addition to content sanitization.
 
 The first supported set can be small, but the design should not assume that all
 future pages are short text. The current `MdPage` form previews Markdown and CSS
-locally inside a sandboxed iframe, without a preview HTTP request. Markdown has
-switchable raw and guided section editors backed by the same source string. The
-guided adapter must losslessly derive sections from untouched source without
+locally inside a sandboxed iframe, without a preview HTTP request. Its Page
+workspace is collapsible without resetting the selected source or layout;
+Markdown and CSS are mutually exclusive source panes. `Split with preview`
+places source and preview side by side where space permits, while `Full width`
+places the preview below, and the preview can enter browser fullscreen. Markdown
+has switchable raw and guided section editors backed by the same source string.
+The guided adapter must losslessly derive sections from untouched source without
 approximating a full Markdown parser: safe focused forms may stay one physical
 line, unfamiliar Markdown remains a raw one-line section, and complete or
 unterminated fenced code blocks are grouped as one multi-line section.
@@ -138,9 +142,11 @@ still unimplemented.
   unambiguous.
 
 Random namespace and page-name suggestions are presentation-only and do not
-change locator rules or query server availability. The current overwriteable
-guest flow has no locator availability endpoint, so numeric fallback only avoids
-a combination already generated in the local UI.
+change locator rules or query server availability. Their quiet actions belong to
+the input header rather than competing with the locator fields as standalone
+buttons. The current overwriteable guest flow has no locator availability
+endpoint, so numeric fallback only avoids a combination already generated in the
+local UI.
 
 The current guest API is `POST /api/pages` with an `application/json` body:
 `namespace` and `md` are required strings; `page_name` and `css` are optional

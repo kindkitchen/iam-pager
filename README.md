@@ -98,11 +98,13 @@ The first publishing slice currently provides:
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
-  with four-word random locator helpers, raw and guided Markdown section
-  editing, fenced code-block sections, grip-driven section ordering and value
-  merging, CSS-reactive sandboxed section previews, editable element-based CSS
-  presets, CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS
-  preview; `site` and `api` remain reserved as namespaces;
+  with soft in-field four-word random locator helpers, a collapsible Page
+  workspace with exclusive Markdown/CSS source panes, split or full-width
+  preview layouts, fullscreen preview, raw and guided Markdown section editing,
+  fenced code-block sections, grip-driven section ordering and value merging,
+  CSS-reactive sandboxed section previews, editable element-based CSS presets,
+  CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
+  `site` and `api` remain reserved as namespaces;
 - `POST /api/pages` for JSON guest publishing, returning the direct path and
   URL;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -136,7 +138,12 @@ with it and remove the original card. The destination keeps its type: focused
 one-line values join with a space, while Code block values join with a newline.
 Mouse, touch, and pen support both drop modes, while focused-grip arrow keys
 reorder. Choosing a CSS preset replaces the current CSS, which remains editable
-in a Prism-highlighted textarea. Random locator suggestions are browser-only
+in a Prism-highlighted textarea. Markdown and CSS occupy the same switchable
+source position rather than appearing together. The Page workspace can collapse
+without losing its selected source or layout; `Split with preview` places source
+and preview beside each other where space permits, while `Full width` places the
+preview below. Preview can also enter browser fullscreen. Random locator actions
+sit inside their subdued field headers; suggestions are browser-only
 conveniences and do not check server availability. Draft preview renders locally
 in the browser inside a sandbox; authoritative validation and sanitization run
 through `MdPageHandler` only when publishing. Keep the development server
