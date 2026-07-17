@@ -5,6 +5,8 @@
 - Product code uses strict TypeScript.
 - The runtime is Deno.
 - The web app uses Fresh with Preact and Vite.
+- Site UI is designed mobile-first, with wider layouts added as progressive
+  enhancements.
 - `deno task check` is the minimum repository validation command.
 
 The stack does not by itself decide storage, authentication, search, or safe
@@ -63,7 +65,10 @@ restrictive content security policy in addition to content sanitization.
   in the site view.
 
 The first supported set can be small, but the design should not assume that all
-future pages are short text.
+future pages are short text. The current `MdPage` form previews Markdown and CSS
+through the same content handler used for publishing, inside a sandboxed iframe;
+CSS presets contain element-oriented starting styles and replace the editable
+CSS draft when selected.
 
 ## QT-LIMITS — Publishing limits
 
@@ -96,6 +101,11 @@ still unimplemented.
 - Errors should be useful to both a browser and a programmatic client.
 - The selected HTTP mapping must keep API endpoints and direct page locators
   unambiguous.
+
+Random namespace and page-name suggestions are presentation-only and do not
+change locator rules or query server availability. The current overwriteable
+guest flow has no locator availability endpoint, so numeric fallback only avoids
+a combination already generated in the local UI.
 
 The current guest API is `POST /api/pages` with an `application/json` body:
 `namespace` and `md` are required strings; `page_name` and `css` are optional

@@ -97,8 +97,10 @@ The first publishing slice currently provides:
   segments are the optional page name;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
-- the site shell and guest publishing form at `/` and `/site/*`, with `site` and
-  `api` reserved as namespaces;
+- the site shell and mobile-first guest publishing form at `/` and `/site/*`,
+  with four-word random locator helpers, editable element-based CSS presets, and
+  a sandboxed live Markdown/CSS preview; `site` and `api` remain reserved as
+  namespaces;
 - `POST /api/pages` for JSON guest publishing, returning the direct path and
   URL;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -113,10 +115,13 @@ traffic.
 
 ## Local development
 
-Run `deno task dev`, open `http://localhost:5173`, publish a Markdown page, and
-use the resulting link to open its direct URL. Keep the development server
-running because guest pages are stored only in that process. Site styling is
-loaded by the site shell only; it is not injected into direct page responses.
+Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
+the live preview, publish the page, and use the resulting link to open its
+direct URL. Choosing a CSS preset replaces the current CSS, which remains
+editable. Random locator suggestions are browser-only conveniences and do not
+check server availability. Keep the development server running because guest
+pages are stored only in that process. Site styling is loaded by the site shell
+only; it is not injected into direct page responses.
 
 ## Technical stack
 

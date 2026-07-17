@@ -1,7 +1,9 @@
 import GuestPublishForm from "../islands/GuestPublishForm.tsx";
+import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
 export function SiteApp() {
+  const initial_namespace = new FourWordRandomNameGenerator().generate();
   return (
     <main class="site-app">
       <header class="hero">
@@ -13,7 +15,7 @@ export function SiteApp() {
         </p>
       </header>
 
-      <GuestPublishForm />
+      <GuestPublishForm initial_namespace={initial_namespace} />
 
       <aside class="guest-notice">
         <h2>Guest pages are temporary and unprotected</h2>

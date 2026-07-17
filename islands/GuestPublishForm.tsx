@@ -1,5 +1,11 @@
 import type { JSX } from "preact";
-import { useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
+import { PageEditor } from "../components/PageEditor.tsx";
+import { default_page_style_preset } from "../lib/ui/page-style-presets.ts";
+import {
+  FourWordRandomNameGenerator,
+  type RandomNameGenerator,
+} from "../lib/ui/random-name.ts";
 
 interface PublishSuccess {
   ok: true;
@@ -19,21 +25,50 @@ type PublishState =
   | { status: "success"; result: PublishSuccess }
   | { status: "error"; message: string };
 
-export default function GuestPublishForm() {
+export interface GuestPublishFormProps {
+  /** Generated once on the server so hydration keeps the visible suggestion. */
+  initial_namespace: string;
+}
+
+export default function GuestPublishForm(props: GuestPublishFormProps) {
+  const random_name_generator: RandomNameGenerator = useMemo(
+    () => new FourWordRandomNameGenerator(),
+    [],
+  );
+  const [namespace, set_namespace] = useState(props.initial_namespace);
+  const [page_name, set_page_name] = useState("");
+  const [markdown, set_markdown] = useState("");
+  const [css, set_css] = useState(default_page_style_preset.css);
   const [state, set_state] = useState<PublishState>({ status: "idle" });
+  const generated_names = useRef(new Set([namespace]));
+
+  function update_draft(update: () => void) {
+    update();
+    if (state.status === "success" || state.status === "error") {
+      set_state({ status: "idle" });
+    }
+  }
+
+  function randomize(
+    current_value: string,
+    set_value: (value: string) => void,
+  ) {
+    if (current_value !== "") generated_names.current.add(current_value);
+    const generated = random_name_generator.generate(generated_names.current);
+    generated_names.current.add(generated);
+    update_draft(() => set_value(generated));
+  }
 
   async function publish(
     event: JSX.TargetedSubmitEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const form_data = new FormData(form);
-    const page_name = String(form_data.get("page_name") ?? "").trim();
-    const css = String(form_data.get("css") ?? "");
+    const trimmed_namespace = namespace.trim();
+    const trimmed_page_name = page_name.trim();
     const body = {
-      namespace: String(form_data.get("namespace") ?? "").trim(),
-      ...(page_name === "" ? {} : { page_name }),
-      md: String(form_data.get("md") ?? ""),
+      namespace: trimmed_namespace,
+      ...(trimmed_page_name === "" ? {} : { page_name: trimmed_page_name }),
+      md: markdown,
       ...(css === "" ? {} : { css }),
     };
 
@@ -66,7 +101,7 @@ export default function GuestPublishForm() {
     <section class="publish-panel" aria-labelledby="publish-heading">
       <div class="section-heading">
         <p class="eyebrow">Guest publishing</p>
-        <h2 id="publish-heading">Create a Markdown page</h2>
+        <h2 id="publish-heading">Create a page</h2>
         <p>
           Choose its direct path. A page name is optional; omit it to publish
           the namespace's default page.
@@ -76,52 +111,57 @@ export default function GuestPublishForm() {
       <form class="publish-form" onSubmit={publish}>
         <div class="locator-fields">
           <label>
-            <span>Namespace</span>
+            <span class="field-heading">
+              <span>Namespace</span>
+              <button
+                type="button"
+                class="helper-button"
+                onClick={() => randomize(namespace, set_namespace)}
+              >
+                Random
+              </button>
+            </span>
             <input
               name="namespace"
               required
+              value={namespace}
+              onInput={(event) =>
+                update_draft(() => set_namespace(event.currentTarget.value))}
               placeholder="your-name"
               autocomplete="off"
             />
           </label>
           <span class="path-separator" aria-hidden="true">/</span>
           <label>
-            <span>
-              Page name <small>optional</small>
+            <span class="field-heading">
+              <span>
+                Page name <small>optional</small>
+              </span>
+              <button
+                type="button"
+                class="helper-button"
+                onClick={() => randomize(page_name, set_page_name)}
+              >
+                Random
+              </button>
             </span>
             <input
               name="page_name"
+              value={page_name}
+              onInput={(event) =>
+                update_draft(() => set_page_name(event.currentTarget.value))}
               placeholder="notes/today"
               autocomplete="off"
             />
           </label>
         </div>
 
-        <label>
-          <span>Markdown</span>
-          <textarea
-            name="md"
-            required
-            rows={12}
-            maxLength={64 * 1024}
-            placeholder="# Hello world"
-          />
-          <small>Up to 64 KiB. HTML is sanitized before publishing.</small>
-        </label>
-
-        <details>
-          <summary>Optional CSS</summary>
-          <label>
-            <span>Stylesheet</span>
-            <textarea
-              name="css"
-              rows={6}
-              maxLength={16 * 1024}
-              placeholder="body { max-width: 48rem; margin: 3rem auto; }"
-            />
-            <small>Up to 16 KiB. Applied only to the direct page.</small>
-          </label>
-        </details>
+        <PageEditor
+          markdown={markdown}
+          css={css}
+          on_markdown_input={(value) => update_draft(() => set_markdown(value))}
+          on_css_input={(value) => update_draft(() => set_css(value))}
+        />
 
         <button type="submit" disabled={is_publishing}>
           {is_publishing ? "Publishing…" : "Publish page"}

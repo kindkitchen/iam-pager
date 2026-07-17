@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Improved the guest publishing UX without changing publishing logic: the
+  mobile-first form now prefills a four-word random namespace, offers random
+  helpers for both locator fields with local numeric collision fallback, and
+  provides a Page editor with All, Preview, and CSS views. Markdown and editable
+  element-oriented CSS presets update a sandboxed live preview through the
+  existing `MdPageHandler`. Added 3 random-name tests (75 total).
+
 - Fixed blank guest pages under `deno task dev` by scoping the site stylesheet
   to the Fresh app shell instead of Vite's global HTML injection, which had
   invalidated raw delivery `Content-Length`; standalone Markdown pages now also
