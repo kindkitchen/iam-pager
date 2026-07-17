@@ -33,17 +33,32 @@ export async function deliver_locator_path(
       : text_response(500, "page content is not deliverable");
   }
   const { page, payload } = delivery;
-  return new Response(payload.body as BodyInit, {
-    status: 200,
-    headers: {
-      "content-type": payload.media_type,
-      "content-length": String(page.content.meta.size_bytes),
-      // Guest pages are replaceable in place; no caching until validators
-      // (etag/last-modified) are introduced.
-      "cache-control": "no-store",
-      "content-disposition": content_disposition(payload.download_filename),
-    },
+  const headers = new Headers({
+    "content-type": payload.media_type,
+    "content-length": String(page.content.meta.size_bytes),
+    // Guest pages are replaceable in place; no caching until validators
+    // (etag/last-modified) are introduced.
+    "cache-control": "no-store",
+    "content-disposition": content_disposition(payload.download_filename),
+    "x-content-type-options": "nosniff",
   });
+  if (is_active_content(payload.media_type)) {
+    // Active creator content shares the deployment host with the site. An
+    // origin-less sandbox prevents it from reading management state even if a
+    // future handler's sanitization regresses; the remaining directives allow
+    // only the resources needed by a standalone styled document.
+    headers.set(
+      "content-security-policy",
+      "sandbox; default-src 'none'; img-src https: data:; " +
+        "style-src 'unsafe-inline'",
+    );
+  }
+  return new Response(payload.body as BodyInit, { status: 200, headers });
+}
+
+function is_active_content(media_type: string): boolean {
+  const type = media_type.split(";", 1)[0].trim().toLowerCase();
+  return type === "text/html" || type === "image/svg+xml";
 }
 
 function text_response(status: number, message: string): Response {

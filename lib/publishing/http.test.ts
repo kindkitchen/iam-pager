@@ -57,6 +57,12 @@ Deno.test("delivers a published md page with intentional headers", async () => {
   );
   assertEquals(response.headers.get("cache-control"), "no-store");
   assertEquals(response.headers.get("content-disposition"), "inline");
+  assertEquals(response.headers.get("x-content-type-options"), "nosniff");
+  assertEquals(
+    response.headers.get("content-security-policy"),
+    "sandbox; default-src 'none'; img-src https: data:; " +
+      "style-src 'unsafe-inline'",
+  );
   const body = await response.text();
   assertStringIncludes(body, "Hello");
   assertEquals(
@@ -75,6 +81,7 @@ Deno.test("attachment disposition carries fallback and RFC 5987 filename", async
 
   const response = await deliver_locator_path(engine, service, "/ada/dl");
   assertEquals(response.status, 200);
+  assertEquals(response.headers.get("content-security-policy"), null);
   assertEquals(
     response.headers.get("content-disposition"),
     `attachment; filename="notes d_taill_es.txt"; ` +
