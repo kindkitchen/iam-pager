@@ -32,9 +32,13 @@ interface InsertionState {
   dirty: boolean;
 }
 
+type SectionDropTarget =
+  | { type: "move"; target_index: number }
+  | { type: "merge"; target_index: number };
+
 interface DraggingState {
   from_index: number;
-  target_index: number;
+  drop_target: SectionDropTarget;
   pointer_id: number;
 }
 
@@ -96,6 +100,8 @@ function MarkdownSectionPreview(props: MarkdownSectionPreviewProps) {
       }),
     [props.section.raw, props.css, props.previewer],
   );
+  const line_count = props.section.raw.split("\n").length;
+  const preview_height = Math.min(18, 5 + (line_count - 1) * 1.5);
 
   return (
     <iframe
@@ -104,6 +110,7 @@ function MarkdownSectionPreview(props: MarkdownSectionPreviewProps) {
       loading="lazy"
       srcdoc={preview_document}
       tabIndex={-1}
+      style={{ height: `${preview_height}rem` }}
     />
   );
 }
@@ -698,6 +705,36 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     );
   }
 
+  function commit_merge(from_index: number, into_index: number) {
+    if (
+      editing?.dirty &&
+      (editing.index === from_index || editing.index === into_index)
+    ) {
+      set_drag_message(
+        "Save or cancel the affected section edit before merging.",
+      );
+      return;
+    }
+
+    emit(section_editor.merge(sections, from_index, into_index));
+    set_editing((current) => {
+      if (
+        current === null || current.index === from_index ||
+        current.index === into_index
+      ) {
+        return null;
+      }
+      return {
+        ...current,
+        index: current.index > from_index ? current.index - 1 : current.index,
+      };
+    });
+    set_delete_armed_index(null);
+    set_drag_message(
+      `Merged section ${from_index + 1} into section ${into_index + 1}.`,
+    );
+  }
+
   function update_dragging(next: DraggingState | null) {
     dragging_ref.current = next;
     set_dragging(next);
@@ -713,7 +750,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     drag_element_ref.current = event.currentTarget;
     update_dragging({
       from_index: index,
-      target_index: index,
+      drop_target: { type: "move", target_index: index },
       pointer_id: event.pointerId,
     });
     set_drag_message(`Picked up section ${index + 1}.`);
@@ -729,17 +766,42 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
         "[data-markdown-section-index]",
       ),
     );
-    let target_index = section_elements.length;
+    let drop_target: SectionDropTarget = {
+      type: "move",
+      target_index: section_elements.length,
+    };
     for (const element of section_elements) {
       const bounds = element.getBoundingClientRect();
-      if (event.clientY < bounds.top + bounds.height / 2) {
-        target_index = Number(element.dataset.markdownSectionIndex);
+      const target_index = Number(element.dataset.markdownSectionIndex);
+      const edge_size = Math.min(32, bounds.height * 0.25);
+      if (event.clientY < bounds.top + edge_size) {
+        drop_target = { type: "move", target_index };
+        break;
+      }
+      if (event.clientY <= bounds.bottom - edge_size) {
+        drop_target = target_index === current.from_index
+          ? { type: "move", target_index: target_index + 1 }
+          : { type: "merge", target_index };
+        break;
+      }
+      if (event.clientY <= bounds.bottom) {
+        drop_target = { type: "move", target_index: target_index + 1 };
         break;
       }
     }
 
-    if (target_index !== current.target_index) {
-      update_dragging({ ...current, target_index });
+    if (
+      drop_target.type !== current.drop_target.type ||
+      drop_target.target_index !== current.drop_target.target_index
+    ) {
+      update_dragging({ ...current, drop_target });
+      set_drag_message(
+        drop_target.type === "merge"
+          ? `Drop section ${current.from_index + 1} into section ${
+            drop_target.target_index + 1
+          }.`
+          : `Move section ${current.from_index + 1} to the indicated position.`,
+      );
     }
     if (event.clientY < 72) {
       globalThis.scrollBy({ top: -24, behavior: "instant" });
@@ -751,9 +813,6 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
   function finish_drag(event: JSX.TargetedPointerEvent<HTMLButtonElement>) {
     const current = dragging_ref.current;
     if (!current || current.pointer_id !== event.pointerId) return;
-    const to_index = current.target_index > current.from_index
-      ? current.target_index - 1
-      : current.target_index;
     try {
       drag_element_ref.current?.releasePointerCapture(event.pointerId);
     } catch {
@@ -761,6 +820,14 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     }
     drag_element_ref.current = null;
     update_dragging(null);
+
+    if (current.drop_target.type === "merge") {
+      commit_merge(current.from_index, current.drop_target.target_index);
+      return;
+    }
+    const to_index = current.drop_target.target_index > current.from_index
+      ? current.drop_target.target_index - 1
+      : current.drop_target.target_index;
     commit_move(current.from_index, to_index);
   }
 
@@ -860,7 +927,10 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                   key={`${index}:${section.raw}`}
                   class="markdown-section"
                   data-markdown-section-index={index}
-                  data-drop-before={dragging?.target_index === index}
+                  data-drop-before={dragging?.drop_target.type === "move" &&
+                    dragging.drop_target.target_index === index}
+                  data-drop-into={dragging?.drop_target.type === "merge" &&
+                    dragging.drop_target.target_index === index}
                   data-dragging={dragging?.from_index === index}
                 >
                   <div
@@ -871,7 +941,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                       type="button"
                       class="markdown-drag-handle compact-button"
                       aria-label={`Drag section ${index + 1}`}
-                      title="Drag to reorder; use arrow keys when focused"
+                      title="Drag between sections to reorder or over a section to merge; use arrow keys when focused"
                       disabled={sections.length < 2}
                       onPointerDown={(event) => begin_drag(event, index)}
                       onPointerMove={drag_section}
@@ -965,7 +1035,8 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
             {dragging && (
               <li
                 class="markdown-section-drop-end"
-                data-active={dragging.target_index === sections.length}
+                data-active={dragging.drop_target.type === "move" &&
+                  dragging.drop_target.target_index === sections.length}
               >
                 Drop at end
               </li>
@@ -997,7 +1068,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       <small>
         {mode === "raw"
           ? "Up to 64 KiB. Switch to Steps for guided section editing."
-          : "Tap a preview to edit it. Drag the grip to reorder sections; focused grips also use arrow keys. The plus button adds at the end."}
+          : "Tap a preview to edit it. Drag the grip between sections to reorder, or over a section to append its value there. Focused grips also use arrow keys. The plus button adds at the end."}
       </small>
       <span class="visually-hidden" role="status" aria-live="polite">
         {drag_message}

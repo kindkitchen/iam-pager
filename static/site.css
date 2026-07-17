@@ -345,6 +345,29 @@ h2 {
   text-transform: uppercase;
 }
 
+.markdown-section[data-drop-into="true"] {
+  border-color: #1c5333;
+  box-shadow: 0 0 0 3px rgb(28 83 51 / 22%);
+}
+
+.markdown-section[data-drop-into="true"] .markdown-section-summary::after {
+  content: "Drop value into this section";
+  position: absolute;
+  z-index: 4;
+  inset: 0 0 0 2.75rem;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+  color: #123d24;
+  background: rgb(237 243 235 / 92%);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
 .markdown-section-summary {
   position: relative;
   display: grid;
@@ -446,6 +469,8 @@ h2 {
 }
 
 .markdown-list-field {
+  grid-template-columns: max-content max-content;
+  align-items: center;
   border: 1px solid #d4d8d3;
   border-radius: 0.35rem;
   padding: 0.65rem;
@@ -465,7 +490,6 @@ h2 {
 }
 
 .markdown-list-numbered-checkbox {
-  margin-left: 1.7rem;
   border-left: 2px solid #d4d8d3;
   padding-left: 0.65rem;
 }

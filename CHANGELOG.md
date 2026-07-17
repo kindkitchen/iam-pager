@@ -1,6 +1,13 @@
 # Changelog
 
-## 2026-07-18
+## 2026-07-17
+
+- Added drag-to-merge for Steps sections: card centers now propose an absorbing
+  drop target, the destination combines the source's primary value while the
+  source card disappears, and edge/final targets retain reordering. One-line
+  destinations use a space and Code blocks use a newline; no HTML break tags are
+  generated. `Numbered` now remains beside `Is list item`. Added 4
+  section-engine tests (96 total).
 
 - Evolved Steps from line controls to lossless Markdown sections. Fenced code
   blocks are grouped and edited as one section with language and multiline code
@@ -76,8 +83,6 @@
   task.
 - Activated task `content-publishing` with a design analysis and a code review
   entry.
-
-## 2026-07-17
 
 - Made Steps Paste usable when Clipboard API reads are blocked: it now opens an
   explicit manual-paste fallback and preserves physical-line normalization.

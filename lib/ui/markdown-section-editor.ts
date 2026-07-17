@@ -128,6 +128,11 @@ export interface MarkdownSectionEditor {
     from_index: number,
     to_index: number,
   ): readonly MarkdownSection[];
+  merge(
+    sections: readonly MarkdownSection[],
+    from_index: number,
+    into_index: number,
+  ): readonly MarkdownSection[];
 }
 
 const heading_pattern = /^(#{1,6})(?:[\t ]+(.*)|[\t ]*)$/;
@@ -385,6 +390,61 @@ export class DeterministicMarkdownSectionEditor
     const next_sections = [...sections];
     const [section] = next_sections.splice(from_index, 1);
     next_sections.splice(to_index, 0, section);
+    return next_sections;
+  }
+
+  merge(
+    sections: readonly MarkdownSection[],
+    from_index: number,
+    into_index: number,
+  ): readonly MarkdownSection[] {
+    assert_index(from_index, sections.length);
+    assert_index(into_index, sections.length);
+    if (from_index === into_index) return [...sections];
+
+    const source_value = primary_value(this.draft(sections[from_index]));
+    const destination = sections[into_index];
+    const destination_draft = this.draft(destination);
+    const inline_source_value = source_value.replace(/\r\n?|\n/g, " ");
+    const append = (value: string, source: string, separator: " " | "\n") =>
+      value === ""
+        ? source
+        : source === ""
+        ? value
+        : `${value}${separator}${source}`;
+
+    let merged_draft: MarkdownSectionDraft;
+    switch (destination_draft.type) {
+      case "heading":
+        merged_draft = {
+          ...destination_draft,
+          value: append(destination_draft.value, inline_source_value, " "),
+        };
+        break;
+      case "link":
+        merged_draft = {
+          ...destination_draft,
+          label: append(destination_draft.label, inline_source_value, " "),
+        };
+        break;
+      case "code-block":
+        merged_draft = {
+          ...destination_draft,
+          value: append(destination_draft.value, source_value, "\n"),
+        };
+        break;
+      case "text":
+      case "raw":
+        merged_draft = {
+          ...destination_draft,
+          value: append(destination_draft.value, inline_source_value, " "),
+        };
+        break;
+    }
+
+    const next_sections = [...sections];
+    next_sections[into_index] = this.update(destination, merged_draft);
+    next_sections.splice(from_index, 1);
     return next_sections;
   }
 

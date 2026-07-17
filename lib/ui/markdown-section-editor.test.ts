@@ -76,6 +76,21 @@ Deno.test("section editor recognizes content types independently from lists", ()
   ]);
 });
 
+Deno.test("section editor leaves HTML break tags as independent raw input", () => {
+  assertEquals(editor.parse("# Heading\n<br>first\n\nafter"), [
+    {
+      type: "heading",
+      raw: "# Heading",
+      list: null,
+      level: 1,
+      value: "Heading",
+    },
+    { type: "raw", raw: "<br>first", list: null, value: "<br>first" },
+    { type: "text", raw: "", list: null, value: "" },
+    { type: "text", raw: "after", list: null, value: "after" },
+  ]);
+});
+
 Deno.test("section editor groups a fenced code block as one section", () => {
   assertEquals(editor.parse("before\n```ts\none\ntwo\n```\nafter"), [
     { type: "text", raw: "before", list: null, value: "before" },
@@ -269,6 +284,100 @@ Deno.test("section editor validates focused and code fields", () => {
   );
 });
 
+Deno.test("section editor merges a source value into a destination", () => {
+  const heading = editor.create({
+    type: "heading",
+    level: 2,
+    value: "Heading",
+    list_type: "numbered",
+  });
+  const text = editor.create({
+    type: "text",
+    value: "Body",
+    list_type: null,
+  });
+  const merged = editor.merge([heading, text], 0, 1);
+
+  assertEquals(merged, [
+    {
+      type: "text",
+      raw: "Body Heading",
+      list: null,
+      value: "Body Heading",
+    },
+  ]);
+  assertEquals(editor.serialize(merged), "Body Heading");
+  assertFalse(editor.serialize(merged).includes("<br>"));
+});
+
+Deno.test("section editor retains the destination type when merging", () => {
+  const heading = editor.create({
+    type: "heading",
+    level: 3,
+    value: "Destination",
+    list_type: null,
+  });
+  const text = editor.create({
+    type: "text",
+    value: "Source",
+    list_type: null,
+  });
+  const [merged] = editor.merge([heading, text], 1, 0);
+
+  assertEquals(merged, {
+    type: "heading",
+    raw: "### Destination Source",
+    list: null,
+    level: 3,
+    value: "Destination Source",
+  });
+  assertEquals(
+    editor.update(merged, {
+      type: "heading",
+      level: 2,
+      value: "Destination Source",
+      list_type: null,
+    }).raw,
+    "## Destination Source",
+  );
+  assertEquals(
+    editor.update(
+      merged,
+      editor.change_type(editor.draft(merged), "code-block"),
+    ).raw,
+    "```\nDestination Source\n```",
+  );
+});
+
+Deno.test("section editor merges plain link labels into code", () => {
+  const link = editor.create({
+    type: "link",
+    label: "Docs",
+    url: "https://example.test",
+    list_type: null,
+  });
+  const code = editor.create({
+    type: "code-block",
+    language: "txt",
+    value: "Existing\nMore",
+    list_type: null,
+  });
+  const [merged] = editor.merge([link, code], 0, 1);
+  const [plain] = editor.merge(
+    [
+      code,
+      editor.create({ type: "text", value: "Body", list_type: null }),
+    ],
+    0,
+    1,
+  );
+
+  assertEquals(merged.type, "code-block");
+  assertEquals(merged.raw, "```txt\nExisting\nMore\nDocs\n```");
+  assertFalse(merged.raw.includes("example.test"));
+  assertEquals(plain.raw, "Body Existing More");
+});
+
 Deno.test("section editor moves a complete code section immutably", () => {
   const original = editor.parse("one\n```ts\ntwo\nmore\n```\nthree");
   const moved = editor.move(original, 1, 0);
@@ -293,4 +402,5 @@ Deno.test("section editor moves a complete code section immutably", () => {
   );
   assertThrows(() => editor.remove(original, 3), RangeError);
   assertThrows(() => editor.insert(original, -1, original[0]), RangeError);
+  assertThrows(() => editor.merge(original, 0, 3), RangeError);
 });

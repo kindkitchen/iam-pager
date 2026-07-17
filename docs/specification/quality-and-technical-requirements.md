@@ -81,23 +81,29 @@ actions. Code block sections expose optional language and multiline code fields,
 generate a non-conflicting fence when changed, and cannot convert to a one-line
 type while multiline content remains. Text, Heading, Link, Code block, and raw
 Markdown are content types. For focused one-line content, an `Is list item`
-checkbox enables an indented `Numbered` checkbox; unchecked Numbered means
-bulleted. Empty Text represents a blank physical line. Fenced code blocks remain
-standalone because list-owned fences require coordinated indentation across the
-whole block.
+checkbox enables an adjacent `Numbered` checkbox on the same line; unchecked
+Numbered means bulleted. Empty Text represents a blank physical line. Fenced
+code blocks remain standalone because list-owned fences require coordinated
+indentation across the whole block.
 
 New sections append at the end. A prefixed drag grip and visible insertion/final
-drop indicators replace directional and contextual insertion buttons; Pointer
-Events support mouse, touch, and pen, while focused grips support keyboard
-arrow, Home, and End ordering with live announcements. Paste must fall back to
-explicit manual entry when browser clipboard reads are unavailable or denied.
-Structured editing is presentation logic only and does not replace the publish
-input or server content handler. This draft representation is intentionally
-simple; authoritative validation and sanitization remain in the server-side
-content handler at publish time, keeping Deno/server dependencies out of the
-browser module graph. CSS presets contain element-oriented starting styles and
-replace the editable CSS draft when selected. The CSS textarea remains the
-source while pinned CDN-hosted Prism provides optional syntax highlighting.
+drop indicators replace directional and contextual insertion buttons. Dropping
+between cards reorders; dropping over a card's central merge target removes the
+dragged card and combines its primary value with the destination, without
+retaining the source Heading, Link, list, or code-block syntax. The destination
+type remains authoritative: one-line fields use a space and Code block values
+use a physical newline. The editor must not inject HTML break tags for this
+operation. Pointer Events support mouse, touch, and pen, while focused grips
+support keyboard arrow, Home, and End ordering with live announcements. Paste
+must fall back to explicit manual entry when browser clipboard reads are
+unavailable or denied. Structured editing is presentation logic only and does
+not replace the publish input or server content handler. This draft
+representation is intentionally simple; authoritative validation and
+sanitization remain in the server-side content handler at publish time, keeping
+Deno/server dependencies out of the browser module graph. CSS presets contain
+element-oriented starting styles and replace the editable CSS draft when
+selected. The CSS textarea remains the source while pinned CDN-hosted Prism
+provides optional syntax highlighting.
 
 ## QT-LIMITS — Publishing limits
 

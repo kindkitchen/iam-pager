@@ -99,10 +99,10 @@ The first publishing slice currently provides:
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
   with four-word random locator helpers, raw and guided Markdown section
-  editing, fenced code-block sections, grip-driven section ordering,
-  CSS-reactive sandboxed section previews, editable element-based CSS presets,
-  CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
-  `site` and `api` remain reserved as namespaces;
+  editing, fenced code-block sections, grip-driven section ordering and value
+  merging, CSS-reactive sandboxed section previews, editable element-based CSS
+  presets, CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS
+  preview; `site` and `api` remain reserved as namespaces;
 - `POST /api/pages` for JSON guest publishing, returning the direct path and
   URL;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -126,19 +126,22 @@ one-line raw sections instead of approximating a full Markdown AST. Collapsed
 sections render in isolated frames with the current page CSS and toggle their
 controls when tapped. Text, Heading, Link, Code block, and raw Markdown have
 focused forms; Code block exposes optional language and multiline code fields.
-For Text, Heading, and Link, `Is list item` enables a nested `Numbered`
-checkbox: unselected means bulleted. Empty Text represents a blank physical
-line. Every content field has Paste, Copy, and Clear actions; blocked code
-clipboard reads focus the multiline field for direct paste. The plus button
-appends a section; move it with the grip using mouse, touch, pen, or
-focused-grip arrow keys. Choosing a CSS preset replaces the current CSS, which
-remains editable in a Prism-highlighted textarea. Random locator suggestions are
-browser-only conveniences and do not check server availability. Draft preview
-renders locally in the browser inside a sandbox; authoritative validation and
-sanitization run through `MdPageHandler` only when publishing. Keep the
-development server running because guest pages are stored only in that process.
-Site styling is loaded by the site shell only; it is not injected into direct
-page responses.
+For Text, Heading, and Link, `Is list item` enables an adjacent `Numbered`
+checkbox on the same line: unselected means bulleted. Empty Text represents a
+blank physical line. Every content field has Paste, Copy, and Clear actions;
+blocked code clipboard reads focus the multiline field for direct paste. The
+plus button appends a section. Drag a grip between sections to reorder, or over
+the center of another section to combine the dragged section's primary value
+with it and remove the original card. The destination keeps its type: focused
+one-line values join with a space, while Code block values join with a newline.
+Mouse, touch, and pen support both drop modes, while focused-grip arrow keys
+reorder. Choosing a CSS preset replaces the current CSS, which remains editable
+in a Prism-highlighted textarea. Random locator suggestions are browser-only
+conveniences and do not check server availability. Draft preview renders locally
+in the browser inside a sandbox; authoritative validation and sanitization run
+through `MdPageHandler` only when publishing. Keep the development server
+running because guest pages are stored only in that process. Site styling is
+loaded by the site shell only; it is not injected into direct page responses.
 
 ## Technical stack
 
