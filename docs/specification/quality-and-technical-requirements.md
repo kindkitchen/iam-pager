@@ -68,7 +68,10 @@ The first supported set can be small, but the design should not assume that all
 future pages are short text. The current `MdPage` form previews Markdown and CSS
 locally inside a sandboxed iframe, without a preview HTTP request. Its Page
 workspace is collapsible without resetting the selected source or layout;
-Markdown and CSS are mutually exclusive source panes. `Split with preview`
+Markdown and CSS are mutually exclusive source panes. Markdown/CSS and Raw/Steps
+use attached tabs because they replace interchangeable content immediately below
+them. Split/full-width remains a detached segmented control because it
+rearranges the same content rather than replacing it. `Split with preview`
 places source and preview side by side where space permits, while `Full width`
 places the preview below, and the preview can enter browser fullscreen. Markdown
 has switchable raw and guided section editors backed by the same source string.

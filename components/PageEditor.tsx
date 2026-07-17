@@ -10,6 +10,10 @@ import {
   page_style_presets,
 } from "../lib/ui/page-style-presets.ts";
 import { CssSourceEditor } from "./CssSourceEditor.tsx";
+import {
+  type ExclusiveContentOption,
+  ExclusiveContentSwitcher,
+} from "./ExclusiveContentSwitcher.tsx";
 import { MarkdownContentEditor } from "./MarkdownContentEditor.tsx";
 
 export interface PageEditorProps {
@@ -22,9 +26,19 @@ export interface PageEditorProps {
 
 const workspace_controller = new DeterministicEditorWorkspace();
 
-const source_options: readonly { id: EditorSource; label: string }[] = [
-  { id: "markdown", label: "Markdown" },
-  { id: "css", label: "CSS" },
+const source_options: readonly ExclusiveContentOption<EditorSource>[] = [
+  {
+    value: "markdown",
+    label: "Markdown",
+    button_id: "source-markdown-button",
+    panel_id: "source-markdown-panel",
+  },
+  {
+    value: "css",
+    label: "CSS",
+    button_id: "source-css-button",
+    panel_id: "source-css-panel",
+  },
 ];
 
 const layout_options: readonly { id: EditorLayout; label: string }[] = [
@@ -155,81 +169,81 @@ export function PageEditor(props: PageEditorProps) {
         hidden={!workspace.expanded}
       >
         <div class="page-editor-toolbar">
-          <div
-            class="source-switcher contextual-switcher"
-            role="group"
-            aria-label="Source editor"
-          >
-            {source_options.map((option) => (
-              <button
-                type="button"
-                class="context-button"
-                aria-pressed={workspace.source === option.id}
-                onClick={() =>
-                  set_workspace((current) =>
-                    workspace_controller.select_source(current, option.id)
-                  )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div
-            class="layout-switcher contextual-switcher"
-            role="group"
-            aria-label="Editor layout"
-          >
-            {layout_options.map((option) => (
-              <button
-                type="button"
-                class="context-button"
-                aria-pressed={workspace.layout === option.id}
-                onClick={() =>
-                  set_workspace((current) =>
-                    workspace_controller.select_layout(current, option.id)
-                  )}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div class="layout-control">
+            <span class="field-title">Layout</span>
+            <div
+              class="layout-switcher contextual-switcher"
+              role="group"
+              aria-label="Editor layout"
+            >
+              {layout_options.map((option) => (
+                <button
+                  type="button"
+                  class="context-button"
+                  aria-pressed={workspace.layout === option.id}
+                  onClick={() =>
+                    set_workspace((current) =>
+                      workspace_controller.select_layout(current, option.id)
+                    )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div class={`page-editor-areas editor-layout-${workspace.layout}`}>
-          <MarkdownContentEditor
-            markdown={props.markdown}
-            css={props.css}
-            active={workspace.expanded && workspace.source === "markdown"}
-            on_markdown_input={props.on_markdown_input}
-            previewer={props.previewer}
-          />
-
-          <fieldset
-            class="editor-area css-area"
-            disabled={!workspace.expanded || workspace.source !== "css"}
-            hidden={workspace.source !== "css"}
-          >
-            <div class="css-heading">
-              <label for="style-preset">Style preset</label>
-              <select
-                id="style-preset"
-                aria-label="Replace CSS with preset"
-                value={preset_id}
-                onChange={(event) => apply_preset(event.currentTarget.value)}
-              >
-                <option value="">Blank</option>
-                {page_style_presets.map((preset) => (
-                  <option value={preset.id}>{preset.label}</option>
-                ))}
-              </select>
-            </div>
-            <CssSourceEditor
-              value={props.css}
-              max_length={16 * 1024}
-              on_input={update_css}
+          <div class="editor-source exclusive-content-stack">
+            <ExclusiveContentSwitcher
+              aria_label="Source editor"
+              value={workspace.source}
+              options={source_options}
+              class_name="source-switcher"
+              on_select={(source) =>
+                set_workspace((current) =>
+                  workspace_controller.select_source(current, source)
+                )}
             />
-            <small>Up to 16 KiB. Choosing a preset replaces all CSS.</small>
-          </fieldset>
+            <MarkdownContentEditor
+              panel_id="source-markdown-panel"
+              label_id="source-markdown-button"
+              markdown={props.markdown}
+              css={props.css}
+              active={workspace.expanded && workspace.source === "markdown"}
+              on_markdown_input={props.on_markdown_input}
+              previewer={props.previewer}
+            />
+
+            <fieldset
+              id="source-css-panel"
+              class="editor-area css-area exclusive-content-panel"
+              aria-labelledby="source-css-button"
+              disabled={!workspace.expanded || workspace.source !== "css"}
+              hidden={workspace.source !== "css"}
+            >
+              <div class="css-heading">
+                <label for="style-preset">Style preset</label>
+                <select
+                  id="style-preset"
+                  aria-label="Replace CSS with preset"
+                  value={preset_id}
+                  onChange={(event) => apply_preset(event.currentTarget.value)}
+                >
+                  <option value="">Blank</option>
+                  {page_style_presets.map((preset) => (
+                    <option value={preset.id}>{preset.label}</option>
+                  ))}
+                </select>
+              </div>
+              <CssSourceEditor
+                value={props.css}
+                max_length={16 * 1024}
+                on_input={update_css}
+              />
+              <small>Up to 16 KiB. Choosing a preset replaces all CSS.</small>
+            </fieldset>
+          </div>
 
           <section
             ref={preview_area_ref}

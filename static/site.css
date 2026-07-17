@@ -194,7 +194,6 @@ h2 {
 .page-editor-toolbar,
 .css-heading,
 .preview-heading,
-.markdown-editor-heading,
 .markdown-insertion-heading,
 .markdown-save-actions,
 .contextual-input-heading {
@@ -306,8 +305,19 @@ h2 {
 }
 
 .page-editor-toolbar {
-  align-items: stretch;
+  align-items: flex-end;
   flex-direction: column;
+}
+
+.layout-control {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.55rem;
+}
+
+.layout-control .layout-switcher {
+  flex: 1;
 }
 
 .contextual-switcher {
@@ -330,6 +340,60 @@ h2 {
 
 .contextual-switcher .context-button:last-child {
   border-radius: 0 0.35rem 0.35rem 0;
+}
+
+.exclusive-content-stack {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0;
+}
+
+.exclusive-content-switcher {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: min(14rem, calc(100% - 1rem));
+  margin: 0 0 -1px 0.5rem;
+}
+
+.exclusive-content-button {
+  flex: 1;
+  min-height: 2.4rem;
+  border: 1px solid #aeb9b0;
+  border-bottom-color: #c4c6bf;
+  border-radius: 0.4rem 0.4rem 0 0;
+  padding: 0.4rem 0.7rem;
+  color: #476052;
+  background: #e9ede7;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.exclusive-content-button + .exclusive-content-button {
+  border-left: 0;
+}
+
+.exclusive-content-button:hover:not(:disabled) {
+  color: #173c27;
+  background: #e0e9df;
+}
+
+.exclusive-content-button[aria-pressed="true"] {
+  position: relative;
+  z-index: 1;
+  border-color: #9faa9f;
+  border-bottom-color: #fbfaf5;
+  color: #173c27;
+  background: #fbfaf5;
+}
+
+.exclusive-content-panel {
+  border-top-left-radius: 0.2rem;
+}
+
+.editor-source {
+  min-width: 0;
 }
 
 .page-editor-areas {
@@ -356,28 +420,23 @@ h2 {
   min-height: 19rem;
 }
 
-.markdown-editor-heading {
-  min-height: 2.75rem;
+.markdown-mode-stack {
+  margin-bottom: 0.1rem;
 }
 
 .markdown-mode-switcher {
+  width: min(12rem, calc(100% - 1rem));
+}
+
+.markdown-mode-panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: min(12rem, 58%);
-}
-
-.markdown-mode-switcher .compact-button {
-  min-height: 2.75rem;
-  border-radius: 0;
-}
-
-.markdown-mode-switcher .compact-button:first-child {
-  border-radius: 0.35rem 0 0 0.35rem;
-}
-
-.markdown-mode-switcher .compact-button:last-child {
-  border-left: 0;
-  border-radius: 0 0.35rem 0.35rem 0;
+  min-width: 0;
+  gap: 0.55rem;
+  border: 1px solid #c4c6bf;
+  border-radius: 0.35rem;
+  border-top-left-radius: 0.2rem;
+  padding: 0.65rem;
+  background: #fffefa;
 }
 
 .markdown-step-editor {
@@ -861,10 +920,11 @@ h2 {
   .page-editor-toolbar {
     align-items: center;
     flex-direction: row;
+    justify-content: flex-end;
   }
 
-  .source-switcher {
-    width: 14rem;
+  .layout-control {
+    width: auto;
   }
 
   .layout-switcher {

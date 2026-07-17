@@ -141,18 +141,20 @@ value with it and remove the original card. The destination keeps its type:
 focused one-line values join with a space, while Code block values join with a
 newline. Mouse, touch, and pen support both drop modes, while focused-grip arrow
 keys reorder. Choosing a CSS preset replaces the current CSS, which remains
-editable in a Prism-highlighted textarea. Markdown and CSS occupy the same
-switchable source position rather than appearing together. The Page workspace
-can collapse without losing its selected source or layout; `Split with preview`
-places source and preview beside each other where space permits, while
-`Full width` places the preview below. Preview can also enter browser
-fullscreen. Random locator actions sit inside their subdued field headers;
-suggestions are browser-only conveniences and do not check server availability.
-Draft preview renders locally in the browser inside a sandbox; authoritative
-validation and sanitization run through `MdPageHandler` only when publishing.
-Keep the development server running because guest pages are stored only in that
-process. Site styling is loaded by the site shell only; it is not injected into
-direct page responses.
+editable in a Prism-highlighted textarea. Markdown/CSS and Raw/Steps are
+interchangeable-content controls rendered as tabs attached to the panel edge
+they replace; the detached split/full-width control remains a layout choice.
+Markdown and CSS occupy the same source position rather than appearing together.
+The Page workspace can collapse without losing its selected source or layout;
+`Split with preview` places source and preview beside each other where space
+permits, while `Full width` places the preview below. Preview can also enter
+browser fullscreen. Random locator actions sit inside their subdued field
+headers; suggestions are browser-only conveniences and do not check server
+availability. Draft preview renders locally in the browser inside a sandbox;
+authoritative validation and sanitization run through `MdPageHandler` only when
+publishing. Keep the development server running because guest pages are stored
+only in that process. Site styling is loaded by the site shell only; it is not
+injected into direct page responses.
 
 ## Technical stack
 

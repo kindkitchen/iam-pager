@@ -2,6 +2,11 @@
 
 ## 2026-07-17
 
+- Clarified exclusive content replacement controls as attached tabs:
+  Markdown/CSS now meets the source panel edge and Raw/Steps meets its nested
+  content panel. Split/full-width remains a detached, labelled layout control,
+  while section type remains a draft-shape picker.
+
 - Completed the softer guest editor hierarchy: Random is now a quiet action
   inside each locator field, labels and optional controls are less prominent,
   and the collapsible Page workspace switches between Markdown/CSS without

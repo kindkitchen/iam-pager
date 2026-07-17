@@ -13,8 +13,14 @@ import {
   type MarkdownSectionDraft,
   type MarkdownSectionType,
 } from "../lib/ui/markdown-section-editor.ts";
+import {
+  type ExclusiveContentOption,
+  ExclusiveContentSwitcher,
+} from "./ExclusiveContentSwitcher.tsx";
 
 export interface MarkdownContentEditorProps {
+  panel_id: string;
+  label_id: string;
   markdown: string;
   css: string;
   active: boolean;
@@ -24,6 +30,21 @@ export interface MarkdownContentEditorProps {
 
 type MarkdownEditorMode = "raw" | "steps";
 type InsertableSectionType = Exclude<MarkdownSectionType, "raw">;
+
+const mode_options: readonly ExclusiveContentOption<MarkdownEditorMode>[] = [
+  {
+    value: "raw",
+    label: "Raw",
+    button_id: "markdown-mode-raw-button",
+    panel_id: "markdown-mode-panel",
+  },
+  {
+    value: "steps",
+    label: "Steps",
+    button_id: "markdown-mode-steps-button",
+    panel_id: "markdown-mode-panel",
+  },
+];
 
 interface EditingState {
   index: number;
@@ -976,224 +997,227 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
 
   return (
     <fieldset
-      class="editor-area markdown-area"
-      aria-labelledby="markdown-editor-heading"
+      id={props.panel_id}
+      class="editor-area markdown-area exclusive-content-panel"
+      aria-labelledby={props.label_id}
       disabled={!props.active}
       hidden={!props.active}
     >
-      <div class="markdown-editor-heading">
-        <span class="field-title" id="markdown-editor-heading">Markdown</span>
-        <div
-          class="markdown-mode-switcher"
-          role="group"
-          aria-label="Markdown editing mode"
-        >
-          <button
-            type="button"
-            class="compact-button"
-            aria-pressed={mode === "raw"}
-            onClick={() => change_mode("raw")}
-          >
-            Raw
-          </button>
-          <button
-            type="button"
-            class="compact-button"
-            aria-pressed={mode === "steps"}
-            onClick={() => change_mode("steps")}
-          >
-            Steps
-          </button>
-        </div>
-      </div>
-
-      {mode === "raw" && (
-        <textarea
-          name="md"
-          aria-label="Raw Markdown"
-          required
-          rows={15}
-          maxLength={64 * 1024}
-          value={props.markdown}
-          onInput={(event) =>
-            props.on_markdown_input(event.currentTarget.value)}
+      <div class="markdown-mode-stack exclusive-content-stack">
+        <ExclusiveContentSwitcher
+          aria_label="Markdown editing mode"
+          value={mode}
+          options={mode_options}
+          class_name="markdown-mode-switcher"
+          on_select={change_mode}
         />
-      )}
+        <div
+          id="markdown-mode-panel"
+          class="markdown-mode-panel"
+          role="region"
+          aria-labelledby={mode === "raw"
+            ? "markdown-mode-raw-button"
+            : "markdown-mode-steps-button"}
+        >
+          {mode === "raw" && (
+            <textarea
+              name="md"
+              aria-label="Raw Markdown"
+              required
+              rows={15}
+              maxLength={64 * 1024}
+              value={props.markdown}
+              onInput={(event) =>
+                props.on_markdown_input(event.currentTarget.value)}
+            />
+          )}
 
-      {mode === "steps" && section_limit_exceeded && (
-        <div class="markdown-limit-message" role="status">
-          <strong>This draft has {physical_line_count} physical lines.</strong>
-          <span>
-            Steps is limited to {structured_physical_line_limit}{" "}
-            physical lines to keep section editing responsive. Switch to Raw to
-            continue.
-          </span>
-        </div>
-      )}
+          {mode === "steps" && section_limit_exceeded && (
+            <div class="markdown-limit-message" role="status">
+              <strong>
+                This draft has {physical_line_count} physical lines.
+              </strong>
+              <span>
+                Steps is limited to {structured_physical_line_limit}{" "}
+                physical lines to keep section editing responsive. Switch to Raw
+                to continue.
+              </span>
+            </div>
+          )}
 
-      {mode === "steps" && !section_limit_exceeded && (
-        <div class="markdown-step-editor">
-          <ol class="markdown-sections" aria-label="Markdown sections">
-            {sections.map((section, index) => {
-              const is_editing = editing?.index === index;
-              const density = section_densities[index] ?? "whole";
-              return (
-                <li
-                  key={`${index}:${section.raw}`}
-                  class="markdown-section"
-                  data-markdown-section-index={index}
-                  data-drop-before={dragging?.drop_target.type === "move" &&
-                    dragging.drop_target.target_index === index}
-                  data-drop-into={dragging?.drop_target.type === "merge" &&
-                    dragging.drop_target.target_index === index}
-                  data-dragging={dragging?.from_index === index}
-                >
-                  <div
-                    class="markdown-section-summary"
-                    data-expanded={is_editing}
-                  >
-                    <button
-                      type="button"
-                      class="markdown-drag-handle compact-button"
-                      aria-label={`Drag section ${index + 1}`}
-                      title="Drag between sections to reorder or over a section to merge; use arrow keys when focused"
-                      disabled={sections.length < 2}
-                      onPointerDown={(event) => begin_drag(event, index)}
-                      onPointerMove={drag_section}
-                      onPointerUp={finish_drag}
-                      onPointerCancel={cancel_drag}
-                      onKeyDown={(event) => keyboard_move(event, index)}
+          {mode === "steps" && !section_limit_exceeded && (
+            <div class="markdown-step-editor">
+              <ol class="markdown-sections" aria-label="Markdown sections">
+                {sections.map((section, index) => {
+                  const is_editing = editing?.index === index;
+                  const density = section_densities[index] ?? "whole";
+                  return (
+                    <li
+                      key={`${index}:${section.raw}`}
+                      class="markdown-section"
+                      data-markdown-section-index={index}
+                      data-drop-before={dragging?.drop_target.type === "move" &&
+                        dragging.drop_target.target_index === index}
+                      data-drop-into={dragging?.drop_target.type === "merge" &&
+                        dragging.drop_target.target_index === index}
+                      data-dragging={dragging?.from_index === index}
                     >
-                      <DragGripIcon />
-                    </button>
-                    <MarkdownSectionPreview
-                      section={section}
-                      section_number={index + 1}
-                      css={props.css}
-                      density={density}
-                      previewer={props.previewer}
-                    />
-                    <button
-                      type="button"
-                      class="markdown-density-toggle context-button"
-                      aria-label={density === "compact"
-                        ? `Show whole section ${index + 1}`
-                        : `Compact section ${index + 1}`}
-                      aria-pressed={density === "compact"}
-                      onClick={() =>
-                        set_section_densities((current) =>
-                          density_controller.toggle(current, index)
-                        )}
-                    >
-                      {density === "compact" ? "Whole" : "Compact"}
-                    </button>
-                    <button
-                      type="button"
-                      class="markdown-section-toggle"
-                      aria-label={`Edit section ${index + 1}`}
-                      aria-expanded={is_editing}
-                      onClick={() => toggle_edit(index)}
-                    >
-                      <span class="visually-hidden">
-                        Edit section {index + 1}
-                      </span>
-                    </button>
-                  </div>
-
-                  {is_editing && editing && (
-                    <div class="markdown-section-details">
-                      <div class="markdown-section-form">
-                        <div class="markdown-section-modifiers">
-                          <MarkdownTypeField
-                            draft={editing.draft}
-                            id_prefix={`edit-${index}`}
-                            on_change={(draft) =>
-                              set_editing({ ...editing, draft, dirty: true })}
-                          />
-                          <MarkdownListField
-                            draft={editing.draft}
-                            id_prefix={`edit-${index}`}
-                            on_change={(draft) =>
-                              set_editing({ ...editing, draft, dirty: true })}
-                          />
-                        </div>
-                        <MarkdownDraftFields
-                          draft={editing.draft}
-                          id_prefix={`edit-${index}`}
-                          on_change={(draft) =>
-                            set_editing({ ...editing, draft, dirty: true })}
-                        />
-                        <div class="markdown-save-actions">
-                          <button
-                            type="button"
-                            disabled={!can_save(editing.draft)}
-                            onClick={save_edit}
-                          >
-                            Save section
-                          </button>
-                          <button
-                            type="button"
-                            class="compact-button"
-                            onClick={() => set_editing(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="markdown-section-actions">
+                      <div
+                        class="markdown-section-summary"
+                        data-expanded={is_editing}
+                      >
                         <button
                           type="button"
-                          class="compact-button danger-button"
-                          onClick={() => delete_section(index)}
+                          class="markdown-drag-handle compact-button"
+                          aria-label={`Drag section ${index + 1}`}
+                          title="Drag between sections to reorder or over a section to merge; use arrow keys when focused"
+                          disabled={sections.length < 2}
+                          onPointerDown={(event) => begin_drag(event, index)}
+                          onPointerMove={drag_section}
+                          onPointerUp={finish_drag}
+                          onPointerCancel={cancel_drag}
+                          onKeyDown={(event) => keyboard_move(event, index)}
                         >
-                          {delete_armed_index === index
-                            ? "Confirm delete"
-                            : "Delete section"}
+                          <DragGripIcon />
+                        </button>
+                        <MarkdownSectionPreview
+                          section={section}
+                          section_number={index + 1}
+                          css={props.css}
+                          density={density}
+                          previewer={props.previewer}
+                        />
+                        <button
+                          type="button"
+                          class="markdown-density-toggle context-button"
+                          aria-label={density === "compact"
+                            ? `Show whole section ${index + 1}`
+                            : `Compact section ${index + 1}`}
+                          aria-pressed={density === "compact"}
+                          onClick={() =>
+                            set_section_densities((current) =>
+                              density_controller.toggle(current, index)
+                            )}
+                        >
+                          {density === "compact" ? "Whole" : "Compact"}
+                        </button>
+                        <button
+                          type="button"
+                          class="markdown-section-toggle"
+                          aria-label={`Edit section ${index + 1}`}
+                          aria-expanded={is_editing}
+                          onClick={() => toggle_edit(index)}
+                        >
+                          <span class="visually-hidden">
+                            Edit section {index + 1}
+                          </span>
                         </button>
                       </div>
-                      {delete_armed_index === index && (
-                        <small role="status">
-                          Tap again to delete section {index + 1}.
-                        </small>
+
+                      {is_editing && editing && (
+                        <div class="markdown-section-details">
+                          <div class="markdown-section-form">
+                            <div class="markdown-section-modifiers">
+                              <MarkdownTypeField
+                                draft={editing.draft}
+                                id_prefix={`edit-${index}`}
+                                on_change={(draft) =>
+                                  set_editing({
+                                    ...editing,
+                                    draft,
+                                    dirty: true,
+                                  })}
+                              />
+                              <MarkdownListField
+                                draft={editing.draft}
+                                id_prefix={`edit-${index}`}
+                                on_change={(draft) =>
+                                  set_editing({
+                                    ...editing,
+                                    draft,
+                                    dirty: true,
+                                  })}
+                              />
+                            </div>
+                            <MarkdownDraftFields
+                              draft={editing.draft}
+                              id_prefix={`edit-${index}`}
+                              on_change={(draft) =>
+                                set_editing({ ...editing, draft, dirty: true })}
+                            />
+                            <div class="markdown-save-actions">
+                              <button
+                                type="button"
+                                disabled={!can_save(editing.draft)}
+                                onClick={save_edit}
+                              >
+                                Save section
+                              </button>
+                              <button
+                                type="button"
+                                class="compact-button"
+                                onClick={() => set_editing(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="markdown-section-actions">
+                            <button
+                              type="button"
+                              class="compact-button danger-button"
+                              onClick={() => delete_section(index)}
+                            >
+                              {delete_armed_index === index
+                                ? "Confirm delete"
+                                : "Delete section"}
+                            </button>
+                          </div>
+                          {delete_armed_index === index && (
+                            <small role="status">
+                              Tap again to delete section {index + 1}.
+                            </small>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-            {dragging && (
-              <li
-                class="markdown-section-drop-end"
-                data-active={dragging.drop_target.type === "move" &&
-                  dragging.drop_target.target_index === sections.length}
+                    </li>
+                  );
+                })}
+                {dragging && (
+                  <li
+                    class="markdown-section-drop-end"
+                    data-active={dragging.drop_target.type === "move" &&
+                      dragging.drop_target.target_index === sections.length}
+                  >
+                    Drop at end
+                  </li>
+                )}
+                {insertion && (
+                  <MarkdownInsertion
+                    section_number={sections.length + 1}
+                    insertion={insertion}
+                    on_choose={choose_insertion_type}
+                    on_change={(draft) =>
+                      set_insertion({ ...insertion, draft, dirty: true })}
+                    on_save={save_insertion}
+                    on_cancel={() => set_insertion(null)}
+                  />
+                )}
+              </ol>
+              <button
+                type="button"
+                class="markdown-add-section-button"
+                aria-label="Add section at end"
+                disabled={insertion !== null || dragging !== null}
+                onClick={begin_insert}
               >
-                Drop at end
-              </li>
-            )}
-            {insertion && (
-              <MarkdownInsertion
-                section_number={sections.length + 1}
-                insertion={insertion}
-                on_choose={choose_insertion_type}
-                on_change={(draft) =>
-                  set_insertion({ ...insertion, draft, dirty: true })}
-                on_save={save_insertion}
-                on_cancel={() => set_insertion(null)}
-              />
-            )}
-          </ol>
-          <button
-            type="button"
-            class="markdown-add-section-button"
-            aria-label="Add section at end"
-            disabled={insertion !== null || dragging !== null}
-            onClick={begin_insert}
-          >
-            +
-          </button>
+                +
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <small>
         {mode === "raw"
