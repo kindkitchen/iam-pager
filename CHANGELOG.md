@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-18
+
+- Implemented the routing-agnostic locator layer under `lib/locator/` (locator
+  model with case-insensitive identity key, strategy interface, engine with
+  forbidden-namespace policy, first `path-slug` strategy) and the
+  interface-first content contracts under `lib/content/` (`ContentTypeHandler`,
+  `ContentRepository`, delivery metadata), with 23 tests and a `deno task test`
+  task.
+- Activated task `content-publishing` with a design analysis and a code review
+  entry.
+
 ## 2026-07-17
 
 - Specified that guest pages are excluded from site search and browsing and are
