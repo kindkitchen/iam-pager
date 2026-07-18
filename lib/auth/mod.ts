@@ -39,6 +39,7 @@ export {
   ConsoleAuthenticationHttpLogger,
 } from "./http.ts";
 export {
+  compose_google_gauth,
   compose_google_gauth_service,
   type EnvironmentSource,
   GOOGLE_AUTH_CLIENT_ID_ENV,
@@ -47,6 +48,8 @@ export {
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
   type GoogleAuthConfig,
+  type GoogleGAuthComposition,
+  type GoogleMockConsentScreen,
   type LocalGoogleAuthConfig,
   type OriginalGoogleAuthConfig,
   parse_google_auth_config,
@@ -55,6 +58,11 @@ export {
   type GAuthService,
   GoogleGAuthStrategy,
 } from "./google-gauth-strategy.ts";
+export {
+  GoogleMockConsentHttpAdapter,
+  type GoogleMockConsentHttpAdapterOptions,
+  type GoogleMockConsentHttpHandler,
+} from "./google-mock-consent-http.ts";
 export { MemoryIdentityRepository } from "./memory-identity-repository.ts";
 export { AuthenticationStrategyRegistry } from "./strategy-registry.ts";
 export {

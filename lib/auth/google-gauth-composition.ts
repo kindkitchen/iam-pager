@@ -32,6 +32,41 @@ export type GoogleAuthConfig =
   | LocalGoogleAuthConfig
   | OriginalGoogleAuthConfig;
 
+/** Package-owned local consent rendering kept behind an application interface. */
+export interface GoogleMockConsentScreen {
+  readonly callback_url: string;
+  render(state: string): string;
+}
+
+export interface GoogleGAuthComposition {
+  readonly service: GAuthService;
+  readonly mock_consent_screen: GoogleMockConsentScreen | null;
+}
+
+class PackageGoogleMockConsentScreen implements GoogleMockConsentScreen {
+  readonly callback_url: string;
+  readonly #render_consent_screen: (
+    input: { state: string; redirect_uri: string },
+  ) => string;
+
+  constructor(
+    callback_url: string,
+    render_consent_screen: (
+      input: { state: string; redirect_uri: string },
+    ) => string,
+  ) {
+    this.callback_url = callback_url;
+    this.#render_consent_screen = render_consent_screen;
+  }
+
+  render(state: string): string {
+    return this.#render_consent_screen({
+      state,
+      redirect_uri: this.callback_url,
+    });
+  }
+}
+
 function require_environment_value(
   environment: EnvironmentSource,
   name: string,
@@ -152,10 +187,10 @@ export function parse_google_auth_config(
   };
 }
 
-/** Loads only the selected gauth preset and materializes its interface service. */
-export async function compose_google_gauth_service(
+/** Loads only the selected preset and returns its application adapters. */
+export async function compose_google_gauth(
   config: GoogleAuthConfig,
-): Promise<GAuthService> {
+): Promise<GoogleGAuthComposition> {
   if (config.mode === "local") {
     const { Preset, Requirements } = await GAuth.load_preset.local();
     const layer = Preset.pipe(
@@ -167,11 +202,18 @@ export async function compose_google_gauth_service(
         }),
       ),
     );
-    return await Effect.runPromise(
+    const service = await Effect.runPromise(
       Effect.gen(function* () {
         return yield* GAuth.Interface;
       }).pipe(Effect.provide(layer)),
     );
+    return {
+      service,
+      mock_consent_screen: new PackageGoogleMockConsentScreen(
+        config.redirect_uri,
+        (input) => Requirements.render_consent_screen(input),
+      ),
+    };
   }
 
   const { Preset, Requirements } = await GAuth.load_preset.original();
@@ -184,9 +226,20 @@ export async function compose_google_gauth_service(
       }),
     ),
   );
-  return await Effect.runPromise(
+  const service = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* GAuth.Interface;
     }).pipe(Effect.provide(layer)),
   );
+  return {
+    service,
+    mock_consent_screen: null,
+  };
+}
+
+/** Compatibility surface for callers needing only the provider service. */
+export async function compose_google_gauth_service(
+  config: GoogleAuthConfig,
+): Promise<GAuthService> {
+  return (await compose_google_gauth(config)).service;
 }

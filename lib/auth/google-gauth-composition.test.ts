@@ -1,5 +1,6 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  compose_google_gauth,
   compose_google_gauth_service,
   type EnvironmentSource,
   GOOGLE_AUTH_CLIENT_ID_ENV,
@@ -99,13 +100,13 @@ Deno.test("Google auth configuration validates explicit local and original modes
 });
 
 Deno.test("local gauth composition selects the mock preset without network access", async () => {
-  const service = await compose_google_gauth_service({
+  const composition = await compose_google_gauth({
     mode: "local",
     redirect_uri: "http://localhost:5173/auth/google/callback",
     mocked_google_consent_screen_url:
       "http://localhost:5173/auth/google/mock-consent",
   });
-  const result = await new GoogleGAuthStrategy(service).begin({
+  const result = await new GoogleGAuthStrategy(composition.service).begin({
     state: "local-state",
     callback_url: "http://localhost:5173/auth/google/callback",
   });
@@ -123,6 +124,14 @@ Deno.test("local gauth composition selects the mock preset without network acces
     "http://localhost:5173/auth/google/callback",
   );
   assertEquals(result.value.attempt_context, "fake-code-verifier");
+  assertEquals(
+    composition.mock_consent_screen?.callback_url,
+    authorization_url.searchParams.get("redirect_uri"),
+  );
+  const consent_html = composition.mock_consent_screen?.render("local-state") ??
+    "";
+  assertEquals(consent_html.includes("Mocked Google Consent Screen"), true);
+  assertEquals(consent_html.includes('value="local-state"'), true);
 });
 
 Deno.test("original gauth composition creates a Google authorization request without network or real credentials", async () => {

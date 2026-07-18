@@ -6,10 +6,13 @@ import {
   type AuthenticationStrategy,
   AuthenticationStrategyRegistry,
   type AuthenticationStrategyResolver,
-  compose_google_gauth_service,
+  compose_google_gauth,
   ConsoleAuthenticationHttpLogger,
   type EnvironmentSource,
   GoogleGAuthStrategy,
+  GoogleMockConsentHttpAdapter,
+  type GoogleMockConsentHttpHandler,
+  type GoogleMockConsentScreen,
   type IdentityRepository,
   MemoryIdentityRepository,
   parse_google_auth_config,
@@ -62,6 +65,7 @@ export interface AppServices {
   authentication_strategies: AuthenticationStrategyResolver;
   authentication: AuthenticationOrchestrator;
   authentication_http: AuthenticationHttpHandler;
+  google_mock_consent_http: GoogleMockConsentHttpHandler;
 }
 
 export interface AppServiceOptions {
@@ -69,6 +73,8 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Provider implementations are supplied at the composition boundary. */
   readonly authentication_strategies?: readonly AuthenticationStrategy[];
+  /** Present only with the loopback-only local Google preset. */
+  readonly google_mock_consent_screen?: GoogleMockConsentScreen;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -132,6 +138,9 @@ export function create_app_services(
     sessions: session,
     logger: new ConsoleAuthenticationHttpLogger(),
   });
+  const google_mock_consent_http = new GoogleMockConsentHttpAdapter({
+    screen: options.google_mock_consent_screen ?? null,
+  });
   return {
     engine,
     repository,
@@ -143,6 +152,7 @@ export function create_app_services(
     authentication_strategies,
     authentication,
     authentication_http,
+    google_mock_consent_http,
   };
 }
 
@@ -151,12 +161,15 @@ export async function create_configured_app_services(
   environment: EnvironmentSource,
 ): Promise<AppServices> {
   const google_auth_config = parse_google_auth_config(environment);
-  const google_gauth = await compose_google_gauth_service(google_auth_config);
+  const google_gauth = await compose_google_gauth(google_auth_config);
   return create_app_services({
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),
-    authentication_strategies: [new GoogleGAuthStrategy(google_gauth)],
+    authentication_strategies: [new GoogleGAuthStrategy(google_gauth.service)],
+    ...(google_gauth.mock_consent_screen === null
+      ? {}
+      : { google_mock_consent_screen: google_gauth.mock_consent_screen }),
   });
 }
 

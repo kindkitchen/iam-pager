@@ -7,12 +7,13 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phases 1 and 2 are complete. Phase 3 now validates explicit local or
-original Google configuration, loads only the selected gauth 0.4.1 preset,
-registers `GoogleGAuthStrategy`, and keeps local fake auth on a same-origin
-loopback callback/consent pair. All 157 tests pass without network access or
-real credentials; see [[010.summary]] and [[011.log]].
+Active. Phases 1 and 2 are complete. Phase 3 now includes validated explicit
+local/original gauth 0.4.1 composition, Google registration, and the
+package-rendered development consent route. The complete local browser flow
+preserves the logical session, upgrades it, rotates its bearer, and rejects the
+stale guest credential. All 161 tests pass without network access or real
+credentials; see [[010.summary]], [[011.log]], and [[012.log]].
 
-Next: add the development-only package-rendered mock consent route and test the
-complete local start/callback/session-upgrade browser flow. Header/navigation
-remain gated behind that verified flow.
+Next: add guest sign-in and authenticated session actions to the site
+header/navigation, keeping session and authorization decisions outside UI
+components.

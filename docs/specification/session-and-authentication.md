@@ -33,6 +33,8 @@ keeping the logic independent from Fresh routes:
   depending only on its exported interface; validated startup configuration
   explicitly composes the package's selected local or original preset before
   registering Google;
+- `GoogleMockConsentHttpAdapter` serves gauth's package-rendered consent screen
+  only for the loopback local preset, behind a Fresh-independent interface;
 - `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
   rotation centrally, superseding any credential renewal staged at resolution.
 
@@ -159,8 +161,16 @@ two localhost URLs. Other startup commands must provide
 `IAM_PAGER_GOOGLE_AUTH_MODE`, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, and either
 `IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL` for local mode or
 `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID` and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET` for
-original mode. The package-rendered mock consent route is not implemented yet,
-so the registered local strategy cannot complete its browser flow in this slice.
+original mode.
+
+Local mode serves `GET /auth/google/mock-consent` through gauth's package
+renderer. The boundary requires exactly the generated 256-bit state,
+`openid email profile` scope, and configured callback URI before rendering; it
+is unavailable in original mode. Its response is no-store and no-referrer, and
+its CSP permits only the package's inline script/style and same-origin callback
+form. The verified browser flow preserves the guest logical session, upgrades it
+to authenticated, publishes a rotated bearer, and rejects the stale guest bearer
+without provider network access or credentials.
 
 ## Storage limitation
 
@@ -173,8 +183,7 @@ storage.
 
 ## Next boundary
 
-Phase 3 is complete through validated local/original preset composition and
-Google registration. Next, add the development-only package-rendered mock
-consent route and verify the complete local browser flow without network access
-or real credentials. Header and authenticated navigation work stays gated behind
-that verified provider flow.
+Phase 3 is complete through validated preset composition, Google registration,
+and the verified local consent/browser flow. Next, expose guest sign-in and
+trusted authenticated session actions in the site header/navigation without
+making UI code the source of session or authorization logic.

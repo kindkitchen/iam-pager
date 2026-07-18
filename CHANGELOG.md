@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Added the development-only `/auth/google/mock-consent` boundary using gauth's
+  package-rendered screen. It accepts only the exact local authorization query,
+  stays unavailable in original mode, and applies no-store, restrictive CSP, and
+  no-referrer headers. Added 4 tests, including the complete local browser
+  start/consent/callback flow, logical-session upgrade, bearer rotation, and
+  stale-guest rejection (161 total).
+
 - Completed Google provider composition with startup-validated, explicit local
   or original gauth preset selection and strategy registration. Local fake auth
   is restricted to same-origin loopback callback/consent URLs; original mode

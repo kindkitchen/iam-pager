@@ -114,9 +114,11 @@ The first publishing slice currently provides:
   access, and publishes a distinct fresh guest session and bearer; the pinned
   gauth 0.4.1 Google adapter maps exact authorization inputs, server-only PKCE
   context, and verified profile output without retaining provider tokens or
-  exposing provider failures; startup configuration now explicitly selects and
+  exposing provider failures; startup configuration explicitly selects and
   composes the package's loopback-only local or original preset and registers
-  Google, while the local mock consent route is not served yet;
+  Google; local mode also serves gauth's package-rendered mock consent screen
+  behind exact authorization-query validation, while original mode keeps that
+  route unavailable;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -146,51 +148,52 @@ the live preview, publish the page, and use the resulting link to open its
 direct URL. The development task explicitly sets
 `IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
 `iam_pager_session_local` cookie for localhost. It also explicitly selects the
-local gauth preset with the localhost Google callback and mock-consent URLs; the
-mock-consent route is the next authentication slice, so Google start cannot yet
-complete locally. Every other entry point defaults to the production
-`__Host-iam_pager_session` cookie with `Secure`; do not set either local mode in
-a deployed environment. Original Google authentication requires
-`IAM_PAGER_GOOGLE_AUTH_MODE=original`, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`,
-`IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`;
-configuration is validated before the shared application services are created.
-Static/framework assets served before Fresh application routing intentionally
-receive neither session state nor a request ID. Markdown can be edited as raw
-source or as guided sections; both modes update the same draft. The
-deterministic section adapter groups a fenced code block into one editable unit
-while retaining unfamiliar Markdown as safe one-line raw sections instead of
-approximating a full Markdown AST. Collapsed sections render in isolated frames
-with the current page CSS and toggle their controls when tapped. Each preview
-measures and shows its complete rendered content by default; its quiet
-`Compact`/`Whole` action preserves that individual choice across content saves,
-focus changes, reordering, and removal. Text, Heading, Link, Code block, and raw
-Markdown have focused forms; Code block exposes optional language and multiline
-code fields. For Text, Heading, and Link, `Is list item` enables an adjacent
-`Numbered` checkbox on the same line: unselected means bulleted. Empty Text
-represents a blank physical line. Every content field integrates quiet Paste,
-Copy, and Clear actions into its input header; blocked code clipboard reads
-focus the multiline field for direct paste. The plus button appends a section.
-Drag a grip between sections to reorder, or over the center of another section
-to combine the dragged section's primary value with it and remove the original
-card. The destination keeps its type: focused one-line values join with a space,
-while Code block values join with a newline. Mouse, touch, and pen support both
-drop modes, while focused-grip arrow keys reorder. Choosing a CSS preset
-replaces the current CSS, which remains editable in a Prism-highlighted
-textarea. Markdown/CSS and Raw/Steps are interchangeable-content controls
-rendered as tabs attached to the panel edge they replace; selected tabs expose
-their controlled panel and support arrow, Home, and End navigation. The detached
-split/full-width control remains a layout choice. Markdown and CSS occupy the
-same source position rather than appearing together. The Page workspace can
-collapse without losing its selected source or layout; `Split with preview`
-places source and preview beside each other where space permits, while
-`Full width` places the preview below. Preview can also enter browser
-fullscreen. Random locator actions sit inside their subdued field headers;
-suggestions are browser-only conveniences and do not check server availability.
-Draft preview renders locally in the browser inside a sandbox; authoritative
-validation and sanitization run through `MdPageHandler` only when publishing.
-Keep the development server running because guest pages are stored only in that
-process. Site styling is loaded by the site shell only; it is not injected into
-direct page responses.
+local gauth preset with the localhost Google callback and mock-consent URLs.
+Until authenticated navigation is added, the complete development flow can be
+started manually at `/auth/google/start?return_to=/`; the package-rendered
+consent screen returns through the callback and upgrades the browser session.
+Every other entry point defaults to the production `__Host-iam_pager_session`
+cookie with `Secure`; do not set either local mode in a deployed environment.
+Original Google authentication requires `IAM_PAGER_GOOGLE_AUTH_MODE=original`,
+`IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`; configuration is validated before the
+shared application services are created. Static/framework assets served before
+Fresh application routing intentionally receive neither session state nor a
+request ID. Markdown can be edited as raw source or as guided sections; both
+modes update the same draft. The deterministic section adapter groups a fenced
+code block into one editable unit while retaining unfamiliar Markdown as safe
+one-line raw sections instead of approximating a full Markdown AST. Collapsed
+sections render in isolated frames with the current page CSS and toggle their
+controls when tapped. Each preview measures and shows its complete rendered
+content by default; its quiet `Compact`/`Whole` action preserves that individual
+choice across content saves, focus changes, reordering, and removal. Text,
+Heading, Link, Code block, and raw Markdown have focused forms; Code block
+exposes optional language and multiline code fields. For Text, Heading, and
+Link, `Is list item` enables an adjacent `Numbered` checkbox on the same line:
+unselected means bulleted. Empty Text represents a blank physical line. Every
+content field integrates quiet Paste, Copy, and Clear actions into its input
+header; blocked code clipboard reads focus the multiline field for direct paste.
+The plus button appends a section. Drag a grip between sections to reorder, or
+over the center of another section to combine the dragged section's primary
+value with it and remove the original card. The destination keeps its type:
+focused one-line values join with a space, while Code block values join with a
+newline. Mouse, touch, and pen support both drop modes, while focused-grip arrow
+keys reorder. Choosing a CSS preset replaces the current CSS, which remains
+editable in a Prism-highlighted textarea. Markdown/CSS and Raw/Steps are
+interchangeable-content controls rendered as tabs attached to the panel edge
+they replace; selected tabs expose their controlled panel and support arrow,
+Home, and End navigation. The detached split/full-width control remains a layout
+choice. Markdown and CSS occupy the same source position rather than appearing
+together. The Page workspace can collapse without losing its selected source or
+layout; `Split with preview` places source and preview beside each other where
+space permits, while `Full width` places the preview below. Preview can also
+enter browser fullscreen. Random locator actions sit inside their subdued field
+headers; suggestions are browser-only conveniences and do not check server
+availability. Draft preview renders locally in the browser inside a sandbox;
+authoritative validation and sanitization run through `MdPageHandler` only when
+publishing. Keep the development server running because guest pages are stored
+only in that process. Site styling is loaded by the site shell only; it is not
+injected into direct page responses.
 
 ## Technical stack
 

@@ -166,8 +166,11 @@ provider tokens, and prevents raw provider failures from crossing the strategy
 boundary. Startup-validated configuration now explicitly composes the package's
 local or original preset and registers Google. Local fake authentication is
 restricted to same-origin loopback callback and consent URLs; original mode
-requires client credentials and HTTPS outside loopback. The package-rendered
-local consent route remains unimplemented. The current in-memory repository is
+requires client credentials and HTTPS outside loopback. The development-only
+local route validates the exact authorization query before serving gauth's
+package-rendered consent screen and remains unavailable in original mode. The
+complete local browser flow is covered through logical-session upgrade, bearer
+rotation, and stale-bearer rejection. The current in-memory repository is
 process-local and invalidates sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 
