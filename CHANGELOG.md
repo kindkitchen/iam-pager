@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Completed Google provider composition with startup-validated, explicit local
+  or original gauth preset selection and strategy registration. Local fake auth
+  is restricted to same-origin loopback callback/consent URLs; original mode
+  requires client credentials and HTTPS outside loopback. Development now
+  selects local mode explicitly. Added 4 configuration/composition tests (157
+  total); the package-rendered mock consent route remains.
+
 - Pinned `jsr:@kindkitchen/gauth@0.4.1` and its compatible direct Effect
   dependency, then added the thin provider-neutral `GoogleGAuthStrategy`
   adapter. It passes the exact OpenID/profile scope, application state, and

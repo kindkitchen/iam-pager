@@ -1,5 +1,15 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { create_app_services, parse_session_cookie_mode } from "./app.ts";
+import {
+  GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
+  GOOGLE_AUTH_MODE_ENV,
+  GOOGLE_AUTH_REDIRECT_URI_ENV,
+} from "./auth/mod.ts";
+import {
+  create_app_services,
+  create_configured_app_services,
+  parse_session_cookie_mode,
+  SESSION_COOKIE_MODE_ENV,
+} from "./app.ts";
 import { deliver_locator_path } from "./publishing/mod.ts";
 
 Deno.test("composition root publishes and delivers an md page end to end", async () => {
@@ -47,6 +57,26 @@ Deno.test("composition root wires interface-backed identity services", async () 
   });
   assertEquals(identity.created, true);
   assertEquals(identity.identity.user_id, identity.user.user_id);
+});
+
+Deno.test("configured composition registers the selected Google strategy", async () => {
+  const values: Readonly<Record<string, string>> = {
+    [SESSION_COOKIE_MODE_ENV]: "local",
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+  };
+  const services = await create_configured_app_services({
+    get: (name) => values[name],
+  });
+
+  assertEquals(
+    services.authentication_strategies.resolve("google")?.strategy_id,
+    "google",
+  );
+  assertEquals(services.authentication_strategies.resolve("unknown"), null);
 });
 
 Deno.test("composition root defaults secure and requires explicit local cookies", () => {

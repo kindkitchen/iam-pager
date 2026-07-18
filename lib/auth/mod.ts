@@ -39,6 +39,19 @@ export {
   ConsoleAuthenticationHttpLogger,
 } from "./http.ts";
 export {
+  compose_google_gauth_service,
+  type EnvironmentSource,
+  GOOGLE_AUTH_CLIENT_ID_ENV,
+  GOOGLE_AUTH_CLIENT_SECRET_ENV,
+  GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
+  GOOGLE_AUTH_MODE_ENV,
+  GOOGLE_AUTH_REDIRECT_URI_ENV,
+  type GoogleAuthConfig,
+  type LocalGoogleAuthConfig,
+  type OriginalGoogleAuthConfig,
+  parse_google_auth_config,
+} from "./google-gauth-composition.ts";
+export {
   type GAuthService,
   GoogleGAuthStrategy,
 } from "./google-gauth-strategy.ts";

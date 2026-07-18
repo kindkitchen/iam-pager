@@ -4,7 +4,7 @@ import { define } from "../../../utils.ts";
 /** Generic provider callback route; successful rotation is staged centrally. */
 export const handler = define.handlers({
   async GET(context) {
-    const services = app_services();
+    const services = await app_services();
     const result = await services.authentication_http.callback(
       context.req,
       context.params.strategy,

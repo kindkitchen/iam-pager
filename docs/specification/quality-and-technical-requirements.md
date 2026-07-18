@@ -163,8 +163,11 @@ fresh guest session and credential; stale, cross-session, and replayed requests
 cannot revoke authenticated access. The pinned gauth 0.4.1 Google adapter keeps
 its PKCE verifier server-side, maps only verified identity fields, discards
 provider tokens, and prevents raw provider failures from crossing the strategy
-boundary. Explicit preset composition and provider registration remain, so
-Google routes still resolve as unknown. The current in-memory repository is
+boundary. Startup-validated configuration now explicitly composes the package's
+local or original preset and registers Google. Local fake authentication is
+restricted to same-origin loopback callback and consent URLs; original mode
+requires client credentials and HTTPS outside loopback. The package-rendered
+local consent route remains unimplemented. The current in-memory repository is
 process-local and invalidates sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 

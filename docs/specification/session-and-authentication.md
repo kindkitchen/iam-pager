@@ -30,8 +30,9 @@ keeping the logic independent from Fresh routes:
 - `AuthenticationHttpAdapter` maps generic browser requests and outcomes without
   depending on Fresh, while thin routes select strategies or publish logout;
 - `GoogleGAuthStrategy` is the first provider adapter, pinned to gauth 0.4.1 and
-  depending only on its exported interface; preset selection remains a separate
-  composition concern;
+  depending only on its exported interface; validated startup configuration
+  explicitly composes the package's selected local or original preset before
+  registering Google;
 - `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
   rotation centrally, superseding any credential renewal staged at resolution.
 
@@ -142,9 +143,24 @@ and profile fields, and discards access, ID, and refresh tokens. Missing
 verifier context and all gauth failures become the provider-neutral failure
 result; raw `GAuthErr` causes do not cross the adapter boundary.
 
-The composition root wires the generic routes but does not yet construct or
-register the Google adapter, so valid strategy paths return `404` until an
-explicit local or original preset is configured.
+The configured composition root requires an explicit `local` or `original`
+Google mode, loads only that gauth preset, constructs the adapter, and registers
+the `google` strategy. Both modes require the exact absolute
+`/auth/google/callback` URL without credentials, query, or fragment. Local mode
+also requires a same-origin `/auth/google/mock-consent` URL and is restricted to
+loopback hosts so fake authentication cannot be configured for a deployment.
+Original mode requires the Google client ID and secret and rejects non-HTTPS
+callbacks outside loopback development. Missing, whitespace-padded, oversized,
+or mode-inconsistent values fail before shared application services are created;
+diagnostics name variables but never values.
+
+`deno task dev` explicitly supplies the local session and Google modes plus the
+two localhost URLs. Other startup commands must provide
+`IAM_PAGER_GOOGLE_AUTH_MODE`, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, and either
+`IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL` for local mode or
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_ID` and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET` for
+original mode. The package-rendered mock consent route is not implemented yet,
+so the registered local strategy cannot complete its browser flow in this slice.
 
 ## Storage limitation
 
@@ -157,7 +173,8 @@ storage.
 
 ## Next boundary
 
-Phase 2 and the gauth 0.4.1 adapter are complete. Next, add validated
-configuration and explicit local/original preset composition, then register the
-Google strategy. The mocked local consent flow follows in phase 4; header and
-authenticated navigation work stays gated behind that verified provider flow.
+Phase 3 is complete through validated local/original preset composition and
+Google registration. Next, add the development-only package-rendered mock
+consent route and verify the complete local browser flow without network access
+or real credentials. Header and authenticated navigation work stays gated behind
+that verified provider flow.

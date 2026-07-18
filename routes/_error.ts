@@ -4,7 +4,7 @@ import { app_services } from "../lib/app.ts";
 import { define } from "../utils.ts";
 
 /** Root error boundary keeps framework failures inside the request contract. */
-export const handler = define.handlers((context) => {
+export const handler = define.handlers(async (context) => {
   const error = context.error;
   const status = error instanceof HttpError ? error.status : 500;
   if (status >= 500) console.error(error);
@@ -19,5 +19,8 @@ export const handler = define.handlers((context) => {
   // Session resolution itself may fail before typed state exists. In that case
   // fail closed without trying to issue a credential from incomplete state.
   if (!("request_context" in context.state)) return response;
-  return app_services().request_context.decorate(context.state, response);
+  return (await app_services()).request_context.decorate(
+    context.state,
+    response,
+  );
 });

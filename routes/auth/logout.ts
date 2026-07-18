@@ -4,7 +4,7 @@ import { define } from "../../utils.ts";
 /** CSRF-protected logout; the lifecycle transition stays outside Fresh. */
 export const handler = define.handlers({
   async POST(context) {
-    const services = app_services();
+    const services = await app_services();
     const result = await services.authentication_http.logout(
       context.req,
       context.state.request_context,

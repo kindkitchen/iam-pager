@@ -3,11 +3,16 @@ import {
   type AuthenticationHttpHandler,
   type AuthenticationOrchestrator,
   AuthenticationService,
+  type AuthenticationStrategy,
   AuthenticationStrategyRegistry,
   type AuthenticationStrategyResolver,
+  compose_google_gauth_service,
   ConsoleAuthenticationHttpLogger,
+  type EnvironmentSource,
+  GoogleGAuthStrategy,
   type IdentityRepository,
   MemoryIdentityRepository,
+  parse_google_auth_config,
 } from "./auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import {
@@ -62,6 +67,8 @@ export interface AppServices {
 export interface AppServiceOptions {
   /** Defaults secure; localhost must be selected deliberately. */
   readonly session_cookie_mode?: SessionCookieMode;
+  /** Provider implementations are supplied at the composition boundary. */
+  readonly authentication_strategies?: readonly AuthenticationStrategy[];
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -110,7 +117,9 @@ export function create_app_services(
   const identity_repository = new MemoryIdentityRepository(
     new CryptoIdGenerator(),
   );
-  const authentication_strategies = new AuthenticationStrategyRegistry([]);
+  const authentication_strategies = new AuthenticationStrategyRegistry(
+    options.authentication_strategies ?? [],
+  );
   const authentication = new AuthenticationService({
     strategies: authentication_strategies,
     sessions: session,
@@ -137,14 +146,24 @@ export function create_app_services(
   };
 }
 
-let services: AppServices | undefined;
+/** Validates environment configuration, composes gauth, and registers Google. */
+export async function create_configured_app_services(
+  environment: EnvironmentSource,
+): Promise<AppServices> {
+  const google_auth_config = parse_google_auth_config(environment);
+  const google_gauth = await compose_google_gauth_service(google_auth_config);
+  return create_app_services({
+    session_cookie_mode: parse_session_cookie_mode(
+      environment.get(SESSION_COOKIE_MODE_ENV),
+    ),
+    authentication_strategies: [new GoogleGAuthStrategy(google_gauth)],
+  });
+}
+
+let services: Promise<AppServices> | undefined;
 
 /** Process-wide services shared by all HTTP routes. */
-export function app_services(): AppServices {
-  services ??= create_app_services({
-    session_cookie_mode: parse_session_cookie_mode(
-      Deno.env.get(SESSION_COOKIE_MODE_ENV),
-    ),
-  });
+export function app_services(): Promise<AppServices> {
+  services ??= create_configured_app_services(Deno.env);
   return services;
 }

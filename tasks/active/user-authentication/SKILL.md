@@ -7,12 +7,12 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phases 1 and 2 are complete. gauth 0.4.1 and compatible Effect are
-pinned, and the thin Google adapter now passes exact authorization inputs, keeps
-only the PKCE verifier as server-side attempt context, maps verified profile
-fields, discards provider tokens, and hides provider failures. All 153 tests
-pass. No provider strategy is registered yet; see [[010.summary]].
+Active. Phases 1 and 2 are complete. Phase 3 now validates explicit local or
+original Google configuration, loads only the selected gauth 0.4.1 preset,
+registers `GoogleGAuthStrategy`, and keeps local fake auth on a same-origin
+loopback callback/consent pair. All 157 tests pass without network access or
+real credentials; see [[010.summary]] and [[011.log]].
 
-Next: finish phase 3 with startup-validated configuration and explicit
-local/original preset composition, register Google, and test both modes without
-network access or secrets. Mocked consent and header/navigation remain gated.
+Next: add the development-only package-rendered mock consent route and test the
+complete local start/callback/session-upgrade browser flow. Header/navigation
+remain gated behind that verified flow.

@@ -4,7 +4,7 @@ import { define } from "../../../utils.ts";
 /** Generic provider start route; provider behavior stays behind its strategy. */
 export const handler = define.handlers({
   async GET(context) {
-    const services = app_services();
+    const services = await app_services();
     const result = await services.authentication_http.start(
       context.req,
       context.params.strategy,
