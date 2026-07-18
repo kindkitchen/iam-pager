@@ -2,17 +2,13 @@
 
 ## 2026-07-18
 
-- Recorded the spec-priority development policy on the `namespace-reservation`
-  task: implementation proposals diverging from the specification are rejected
-  early; direction changes update the specification first, then implementation
-  continues against it.
-
-- Planned the next delivery step: activated the `namespace-reservation` task
-  (DS-PROTECT core - namespace ownership and publishing authorization) with a
-  seven-part sub-task plan, and queued the `durable-storage` backlog task
-  fixing the interface-pattern persistence approach with switchable backends
-  (Postgres, MongoDB, Deno KV, ...) while in-memory remains the first
-  legitimate implementation.
+- Planned the next delivery step as two focused tasks: activated
+  `namespace-reservation-contracts`, step 1 of the four-step DS-PROTECT
+  namespace direction (spec-priority policy: divergent implementation is
+  rejected, direction changes update the spec first), and queued the
+  `durable-storage` backlog task on purpose - interface-pattern persistence
+  with switchable backends (Postgres, MongoDB, Deno KV, ...) while in-memory
+  remains the first legitimate implementation.
 
 - Simplified dynamic local Google authentication configuration: a configured
   request-host pattern now takes precedence immediately, so request-derived
