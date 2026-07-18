@@ -164,26 +164,37 @@ cannot revoke authenticated access. The pinned gauth 0.4.1 Google adapter keeps
 its PKCE verifier server-side, maps only verified identity fields, discards
 provider tokens, and prevents raw provider failures from crossing the strategy
 boundary. Startup-validated configuration now explicitly composes the package's
-local or original preset and registers Google. Local fake authentication is
-restricted to same-origin loopback callback and consent URLs; original mode
-requires client credentials and HTTPS outside loopback. The development-only
-local route validates the exact authorization query before serving gauth's
-package-rendered consent screen and remains unavailable in original mode. The
-local integration covers sign-in, logical-session upgrade, bearer rotation,
-authenticated resolution, logout to a distinct guest, and rejection of both
-stale guest and stale authenticated bearers. Callback failures use a
-provider-neutral presentation model and restrictive site-owned HTML response
-with a validated local retry link; the consumed attempt cannot be replayed, the
-guest session remains available, and callback values and provider causes remain
-absent. The site header receives a complete model from an interface-backed
-server presenter: guests get a Google start link with a validated local return,
-while authenticated sessions get only signed-in state and the fixed
-CSRF-protected logout form. UI components receive neither session/user IDs nor
-responsibility for deciding the available action. The current in-memory
-repository is process-local and invalidates sessions on restart. Authentication
-establishes user identity only: it does not reserve a namespace or authorize
-publishing. Concurrency-safe namespace ownership and its mutation policy remain
-the next implementation boundary. See
+local or original preset and registers Google. Local fake authentication keeps
+its configured fallback callback and consent URLs restricted to same-origin
+loopback; original mode requires client credentials and HTTPS outside loopback.
+Either mode preserves the configured callback unless an optional bounded
+request-host regex is set. Dynamic selection uses only the HTTPS `Request.url`,
+requires a full case-insensitive host match including any port, builds the fixed
+callback path through the URL API, and rejects mismatches before orchestration;
+`Origin` and `Referer` are not trusted. Pattern-based local mode needs no static
+URL variables: callback and mock consent are both built on the selected origin.
+If optional fallback URLs are supplied, they remain a complete same-loopback
+pair. The mock-consent boundary rejects callbacks that are not allowlisted and
+same-origin. Authorization and token exchange use services configured with the
+same selected callback URI, and no unbounded host cache is retained. Every
+matched local-mode host deliberately exposes fake sign-in, so preview patterns
+must be narrow and exclude production. The local route validates the exact
+authorization query before serving gauth's package-rendered consent screen and
+remains unavailable in original mode. The local integration covers sign-in,
+logical-session upgrade, bearer rotation, authenticated resolution, logout to a
+distinct guest, and rejection of both stale guest and stale authenticated
+bearers. Callback failures use a provider-neutral presentation model and
+restrictive site-owned HTML response with a validated local retry link; the
+consumed attempt cannot be replayed, the guest session remains available, and
+callback values and provider causes remain absent. The site header receives a
+complete model from an interface-backed server presenter: guests get a Google
+start link with a validated local return, while authenticated sessions get only
+signed-in state and the fixed CSRF-protected logout form. UI components receive
+neither session/user IDs nor responsibility for deciding the available action.
+The current in-memory repository is process-local and invalidates sessions on
+restart. Authentication establishes user identity only: it does not reserve a
+namespace or authorize publishing. Concurrency-safe namespace ownership and its
+mutation policy remain the next implementation boundary. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication

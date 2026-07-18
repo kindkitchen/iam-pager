@@ -85,6 +85,27 @@ Deno.test("Google gauth strategy maps verified identity and discards provider to
   assertEquals(JSON.stringify(result).includes("discarded"), false);
 });
 
+Deno.test("Google gauth strategy resolves the same callback-specific service for start and exchange", async () => {
+  const fake = fake_gauth_service();
+  const callback_urls: string[] = [];
+  const strategy = new GoogleGAuthStrategy(fake.service, {
+    resolve(callback_url) {
+      callback_urls.push(callback_url);
+      return Promise.resolve(fake.service);
+    },
+  });
+  const callback_url = "https://preview-change-42.example/auth/google/callback";
+
+  await strategy.begin({ state: "state", callback_url });
+  await strategy.complete({
+    code: "provider-code",
+    callback_url,
+    attempt_context: "server-only-verifier",
+  });
+
+  assertEquals(callback_urls, [callback_url, callback_url]);
+});
+
 Deno.test("Google gauth strategy maps provider errors without exposing causes", async () => {
   const secret_cause = new Error("provider response with secret details");
   const service: GAuthService = {

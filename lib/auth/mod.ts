@@ -28,6 +28,13 @@ export {
   normalize_authentication_return_to,
 } from "./model.ts";
 export {
+  type AuthenticationCallbackUrlResolver,
+  ConfiguredAuthenticationCallbackUrlResolver,
+  type ConfiguredAuthenticationCallbackUrlResolverOptions,
+  RequestHostMatcher,
+  RequestOriginAuthenticationCallbackUrlResolver,
+} from "./authentication-callback-url.ts";
+export {
   type AuthenticationCallbackFailurePresenter,
   type AuthenticationCallbackFailureView,
   AuthenticationHttpAdapter,
@@ -50,6 +57,7 @@ export {
   GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
+  GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
   type GoogleAuthConfig,
   type GoogleGAuthComposition,
   type GoogleMockConsentScreen,
@@ -59,6 +67,7 @@ export {
 } from "./google-gauth-composition.ts";
 export {
   type GAuthService,
+  type GoogleGAuthServiceResolver,
   GoogleGAuthStrategy,
 } from "./google-gauth-strategy.ts";
 export {

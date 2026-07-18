@@ -2,6 +2,17 @@
 
 ## 2026-07-18
 
+- Added opt-in dynamic Google callbacks for preview deployments through
+  `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`. Configured production callbacks
+  remain unchanged when it is unset; enabled contexts require a full HTTPS
+  request-host regex match, reject mismatches, ignore `Origin`/`Referer`, and
+  use the selected URI for both authorization and token exchange without
+  retaining an unbounded host cache. Local preview mode needs no static URL
+  variables: it derives and validates its same-origin callback and mock-consent
+  endpoints while warning that every matched host exposes fake sign-in.
+  Documented Google's independent original- mode redirect registration
+  requirement and added 9 tests (177 total).
+
 - Fixed built-server authentication startup by keeping gauth and Effect out of
   circular SSR chunks. Added an environment-driven production runner with
   validated optional `PORT`, preserving Deno's port-8000 default when omitted;

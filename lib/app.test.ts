@@ -5,9 +5,12 @@ import {
   assertThrows,
 } from "@std/assert";
 import {
+  GOOGLE_AUTH_CLIENT_ID_ENV,
+  GOOGLE_AUTH_CLIENT_SECRET_ENV,
   GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
+  GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
 } from "./auth/mod.ts";
 import {
   type AppServices,
@@ -84,6 +87,128 @@ Deno.test("configured composition registers the selected Google strategy", async
     "google",
   );
   assertEquals(services.authentication_strategies.resolve("unknown"), null);
+});
+
+Deno.test("configured original Google flow prefers an allowlisted request host", async () => {
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "original",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "https://pager.example/auth/google/callback",
+    [GOOGLE_AUTH_CLIENT_ID_ENV]: "test-client-id",
+    [GOOGLE_AUTH_CLIENT_SECRET_ENV]: "not-a-real-secret",
+    [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
+      "pager-pr-[a-z0-9-]+\\.example\\.com",
+  };
+  const services = await create_configured_app_services({
+    get: (name) => values[name],
+  });
+  const start_request = new Request(
+    "https://pager-pr-change-42.example.com/auth/google/start",
+  );
+  const started = await run_application_request(
+    services,
+    start_request,
+    async (state) =>
+      (await services.authentication_http.start(
+        start_request,
+        "google",
+        state.request_context,
+      )).response,
+  );
+
+  assertEquals(started.response.status, 303);
+  const authorization_location = started.response.headers.get("location");
+  assertExists(authorization_location);
+  assertEquals(
+    new URL(authorization_location).searchParams.get("redirect_uri"),
+    "https://pager-pr-change-42.example.com/auth/google/callback",
+  );
+});
+
+Deno.test("configured local Google flow uses an allowlisted preview origin", async () => {
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
+      "pager-pr-[a-z0-9-]+\\.example\\.com",
+  };
+  const services = await create_configured_app_services({
+    get: (name) => values[name],
+  });
+  const start_request = new Request(
+    "https://pager-pr-change-42.example.com/auth/google/start",
+  );
+  const started = await run_application_request(
+    services,
+    start_request,
+    async (state) =>
+      (await services.authentication_http.start(
+        start_request,
+        "google",
+        state.request_context,
+      )).response,
+  );
+  const guest_cookie = response_cookie_header(started.response);
+  const consent_location = started.response.headers.get("location");
+  assertExists(consent_location);
+  const consent_url = new URL(consent_location);
+
+  assertEquals(
+    `${consent_url.origin}${consent_url.pathname}`,
+    "https://pager-pr-change-42.example.com/auth/google/mock-consent",
+  );
+  assertEquals(
+    consent_url.searchParams.get("redirect_uri"),
+    "https://pager-pr-change-42.example.com/auth/google/callback",
+  );
+  const consent_response = services.google_mock_consent_http.handle(
+    new Request(consent_url),
+  );
+  assertEquals(consent_response.status, 200);
+  const consent_html = await consent_response.text();
+  assertStringIncludes(
+    consent_html,
+    'action="https://pager-pr-change-42.example.com/auth/google/callback"',
+  );
+  const callback_url = matched_html_value(
+    consent_html,
+    /<form id="consent-form" method="GET" action="([^"]+)">/,
+  );
+  const state = matched_html_value(
+    consent_html,
+    /<input\s+id="state-input"[\s\S]*?value="([^"]+)"/,
+  );
+  const code = decode_package_html(matched_html_value(
+    consent_html,
+    /<textarea name="code" id="code-json"[^>]*>([\s\S]*?)<\/textarea>/,
+  ));
+  const callback_request = new Request(
+    `${decode_package_html(callback_url)}?${new URLSearchParams({
+      code,
+      state,
+    })}`,
+    { headers: { cookie: guest_cookie } },
+  );
+  const callback = await run_application_request(
+    services,
+    callback_request,
+    async (request_state) => {
+      const result = await services.authentication_http.callback(
+        callback_request,
+        "google",
+        request_state.request_context,
+      );
+      if (result.session_resolution !== undefined) {
+        services.request_context.apply_session_resolution(
+          request_state,
+          result.session_resolution,
+        );
+      }
+      return result.response;
+    },
+  );
+
+  assertEquals(callback.response.status, 303);
+  assertEquals(callback.state.request_context.session.kind, "authenticated");
 });
 
 Deno.test("configured local Google browser flow renders consent and upgrades the session", async () => {

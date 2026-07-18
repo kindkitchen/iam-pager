@@ -1,5 +1,9 @@
 import { read_bounded_request_text } from "../http/request-body.ts";
 import type { SessionLogoutManager } from "../session/interfaces.ts";
+import {
+  type AuthenticationCallbackUrlResolver,
+  RequestOriginAuthenticationCallbackUrlResolver,
+} from "./authentication-callback-url.ts";
 import type {
   Session,
   SessionLogoutResult,
@@ -30,6 +34,7 @@ export interface AuthenticationHttpResult {
 
 export type AuthenticationHttpFailureCategory =
   | "start_invalid_query"
+  | "start_untrusted_request_host"
   | "start_internal_failure"
   | `start_${Exclude<AuthenticationStartResult, { ok: true }>["reason"]}`
   | "callback_invalid_query"
@@ -107,6 +112,7 @@ export interface AuthenticationHttpAdapterOptions {
   readonly sessions: SessionLogoutManager;
   readonly logger: AuthenticationHttpLogger;
   readonly callback_failure_presenter: AuthenticationCallbackFailurePresenter;
+  readonly callback_url_resolver?: AuthenticationCallbackUrlResolver;
 }
 
 export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
@@ -114,12 +120,15 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
   readonly #sessions: SessionLogoutManager;
   readonly #logger: AuthenticationHttpLogger;
   readonly #callback_failure_presenter: AuthenticationCallbackFailurePresenter;
+  readonly #callback_url_resolver: AuthenticationCallbackUrlResolver;
 
   constructor(options: AuthenticationHttpAdapterOptions) {
     this.#authentication = options.authentication;
     this.#sessions = options.sessions;
     this.#logger = options.logger;
     this.#callback_failure_presenter = options.callback_failure_presenter;
+    this.#callback_url_resolver = options.callback_url_resolver ??
+      new RequestOriginAuthenticationCallbackUrlResolver();
   }
 
   async start(
@@ -149,15 +158,34 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
       );
     }
 
+    let callback_url: string | null;
+    try {
+      callback_url = this.#callback_url_resolver.resolve(request, strategy_id);
+    } catch {
+      return this.#failure(
+        context,
+        strategy_id,
+        "start_internal_failure",
+        500,
+        "authentication could not be started",
+      );
+    }
+    if (callback_url === null) {
+      return this.#failure(
+        context,
+        strategy_id,
+        "start_untrusted_request_host",
+        400,
+        "invalid authentication request",
+      );
+    }
+
     let result: AuthenticationStartResult;
     try {
       result = await this.#authentication.start({
         session: context.session,
         strategy_id,
-        callback_url: new URL(
-          `/auth/${strategy_id}/callback`,
-          request_url.origin,
-        ).href,
+        callback_url,
         return_to: return_values[0],
       });
     } catch {

@@ -37,22 +37,25 @@ export class GoogleMockConsentHttpAdapter
       [...url.searchParams].length !== 3 || state_values.length !== 1 ||
       !STATE_PATTERN.test(state_values[0]) || scope_values.length !== 1 ||
       scope_values[0] !== EXPECTED_SCOPE || redirect_values.length !== 1 ||
-      redirect_values[0] !== this.#screen.callback_url
+      !this.#screen.allows(url, redirect_values[0])
     ) {
       return text_response(400, "invalid mock consent request");
     }
 
     try {
-      return new Response(this.#screen.render(state_values[0]), {
-        status: 200,
-        headers: response_headers({
-          "content-type": "text/html; charset=utf-8",
-          "content-security-policy":
-            "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-          "x-content-type-options": "nosniff",
-          "x-robots-tag": "noindex",
-        }),
-      });
+      return new Response(
+        this.#screen.render(state_values[0], redirect_values[0]),
+        {
+          status: 200,
+          headers: response_headers({
+            "content-type": "text/html; charset=utf-8",
+            "content-security-policy":
+              "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            "x-content-type-options": "nosniff",
+            "x-robots-tag": "noindex",
+          }),
+        },
+      );
     } catch {
       return text_response(500, "mock consent could not be rendered");
     }

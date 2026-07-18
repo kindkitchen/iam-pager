@@ -12,6 +12,7 @@ import type {
   AuthenticationStartRequest,
   AuthenticationStartResult,
 } from "./model.ts";
+import type { AuthenticationCallbackUrlResolver } from "./authentication-callback-url.ts";
 import {
   AuthenticationHttpAdapter,
   type AuthenticationHttpFailure,
@@ -124,7 +125,9 @@ class MemoryLogger implements AuthenticationHttpLogger {
   }
 }
 
-function make_fixture() {
+function make_fixture(
+  callback_url_resolver?: AuthenticationCallbackUrlResolver,
+) {
   const authentication = new FakeAuthentication();
   const sessions = new FakeSessions();
   const logger = new MemoryLogger();
@@ -134,6 +137,7 @@ function make_fixture() {
     logger,
     callback_failure_presenter:
       new SiteAuthenticationCallbackFailurePresenter(),
+    callback_url_resolver,
   });
   const context = {
     request_id: "request-1",
@@ -177,6 +181,28 @@ Deno.test("authentication HTTP start builds an exact callback and redirects", as
     return_to: "/site/account?tab=security",
   }]);
   assertEquals(logger.events, []);
+});
+
+Deno.test("authentication HTTP start rejects an untrusted request host before orchestration", async () => {
+  const { adapter, authentication, context, logger } = make_fixture({
+    resolve: () => null,
+  });
+
+  const result = await adapter.start(
+    new Request("https://attacker.example/auth/google/start"),
+    "google",
+    context,
+  );
+
+  assertEquals(result.response.status, 400);
+  assertEquals(
+    await result.response.text(),
+    "invalid authentication request\n",
+  );
+  assertEquals(authentication.start_inputs, []);
+  assertEquals(logger.events.map((event) => event.category), [
+    "start_untrusted_request_host",
+  ]);
 });
 
 Deno.test("authentication HTTP callback returns the rotated session for publication", async () => {
