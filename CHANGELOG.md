@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Planned the next delivery step: activated the `namespace-reservation` task
+  (DS-PROTECT core - namespace ownership and publishing authorization) with a
+  seven-part sub-task plan, and queued the `durable-storage` backlog task
+  fixing the interface-pattern persistence approach with switchable backends
+  (Postgres, MongoDB, Deno KV, ...) while in-memory remains the first
+  legitimate implementation.
+
 - Simplified dynamic local Google authentication configuration: a configured
   request-host pattern now takes precedence immediately, so request-derived
   callback and mock-consent URLs no longer require inherited static URL
