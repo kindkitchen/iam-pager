@@ -2,6 +2,17 @@
 
 ## 2026-07-18
 
+- Delivered the first durable-storage vertical slice: `DenoKvIdentityRepository`
+  and `DenoKvNamespaceRepository` use versioned serialization and native atomic
+  commits, with identity find-or-create/profile ordering and case-insensitive
+  namespace claiming covered by shared implementation-agnostic conformance
+  suites. Environment-driven composition switches application users, external
+  identities, and namespace reservations together so durable claims cannot be
+  orphaned by process-local user IDs; unset remains memory, while content and
+  sessions remain explicitly process-local. Documented no automatic migration,
+  deletion, expiry, or application-managed backup. Added 26 tests (229 total).
+  `durable-storage` remains active for the next repository slice.
+
 - Delivered namespace-reservation step 2 (DS-PROTECT business core):
   `NamespaceReservationService` behind the new `NamespaceReservationManager`
   contract validates candidate namespaces through the locator engine (typed

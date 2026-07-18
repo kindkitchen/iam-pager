@@ -78,3 +78,10 @@ Authenticated storage should be durable enough for normal management use, but
 the app should not promise that content can never disappear under any
 circumstance. The practical retention and backup behavior should be stated when
 those systems are implemented.
+
+The first optional durable boundary covers ownership records, not content: Deno
+KV stores application users, provider identities, and namespace reservations
+together so a persisted claim always retains a resolvable owner after restart.
+There is currently no application expiry or deletion for those records and no
+automatic migration between memory, database paths, or backends. Pages and
+sessions remain process-local.

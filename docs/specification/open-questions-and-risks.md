@@ -25,12 +25,14 @@ session is upgraded in place to preserve attributable guest activity while its
 bearer rotates; matching email never links another provider identity.
 
 Account recovery for this flow belongs to Google. The application provides no
-password reset or provider-account recovery, and its current process-local
-identity storage is not durable account persistence. Logout revokes the
-currently authenticated session and establishes an unrelated fresh guest; it
-does not delete the application user or provider identity. Namespace reservation
-and concurrent uniqueness are a subsequent authorization capability, not an
-effect of authentication itself.
+password reset or provider-account recovery. Identity storage is process-local
+by default; optional Deno KV persists users and provider identities together
+with namespace claims, but still provides no account deletion or
+application-managed recovery. Logout revokes the currently authenticated session
+and establishes an unrelated fresh guest; it does not delete the application
+user, provider identity, or namespace reservation. Reservation and concurrent
+uniqueness remain an explicit authorization capability, not an effect of
+authentication itself.
 
 ## OQ-OPEN — MVP decisions still needed
 
@@ -74,6 +76,13 @@ required unless reliable counts become useful to the MVP.
 State practical cleanup, deletion, and backup behavior. Avoid an absolute
 promise that authenticated content can never disappear; the first version only
 needs understandable normal-operation behavior.
+
+The first concrete policy applies only to Deno KV ownership records: application
+users, external identities, and namespace reservations do not expire and have no
+application deletion workflow. They remain until the selected database is
+manually removed; backup and recovery follow the KV provider or deployment
+operator. Switching the backend or path does not migrate records. Retention for
+pages, sessions, and future account deletion remains open.
 
 ## OQ-RISKS — Nearby risks
 

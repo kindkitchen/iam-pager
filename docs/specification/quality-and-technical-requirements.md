@@ -31,6 +31,27 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
+## QT-STORAGE — Repository persistence
+
+Each durable adapter must preserve its repository contract and pass the same
+implementation-agnostic conformance suite as the in-memory reference. Storage
+keys, indexes, serialization versions, transactions, and drivers remain inside
+the adapter; services and domain models do not depend on them.
+
+The first durable option is an ownership bundle backed by Deno KV. It persists
+application users and provider identities atomically and persists a namespace
+claim with its owner index in one atomic commit. These repositories are selected
+together because a durable namespace claim pointing at a process-local user ID
+would become orphaned after restart. Unset configuration retains both in-memory
+repositories. Content and session repositories remain independently in-memory;
+the ownership setting must not imply that pages or browser sessions survive a
+restart.
+
+Deno KV ownership records have no application expiry or deletion workflow yet.
+Changing backend or database path performs no migration, and backup/recovery is
+the responsibility of the configured KV service or deployment operator. These
+limits must remain visible until lifecycle and migration behavior is delivered.
+
 ## QT-ROUTING — Routing and HTTP behavior
 
 - Namespace and page matching must follow `DA-LOCATOR` consistently during
@@ -191,11 +212,13 @@ complete model from an interface-backed server presenter: guests get a Google
 start link with a validated local return, while authenticated sessions get only
 signed-in state and the fixed CSRF-protected logout form. UI components receive
 neither session/user IDs nor responsibility for deciding the available action.
-The current in-memory repository is process-local and invalidates sessions on
-restart. Authentication establishes user identity only: it does not reserve a
-namespace or authorize publishing. Concurrency-safe namespace ownership and its
-mutation policy remain the next implementation boundary. See
-[session-and-authentication.md](session-and-authentication.md).
+The current session repository is process-local and invalidates sessions on
+restart. Authentication establishes user identity only: namespace reservation
+and publishing authorization remain explicit services above it. Those services
+now enforce concurrency-safe ownership, and configured Deno KV can preserve the
+provider identity, application user, and namespace claim across restarts; the
+reservation HTTP/UI boundary and authenticated actor wiring are still pending.
+See [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication
 routes cannot collide with direct page locators.

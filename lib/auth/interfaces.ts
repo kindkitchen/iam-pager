@@ -26,8 +26,11 @@ export interface AuthenticationStateGenerator {
 
 /**
  * Identity persistence keyed exclusively by (strategy_id, provider_subject).
- * Implementations must atomically find-or-create the local user/identity pair
- * and may update only the existing identity's non-authoritative profile fields.
+ * Implementations must atomically find-or-create the local user/identity pair,
+ * never link by mutable profile fields, and may update only the existing
+ * identity's non-authoritative profile fields. Older observations cannot roll
+ * those fields backward. Implementations must pass
+ * `test_identity_repository_conformance` unchanged.
  */
 export interface IdentityRepository {
   find_or_create(

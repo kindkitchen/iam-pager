@@ -100,8 +100,8 @@ The first publishing slice currently provides:
   revocation; root application middleware now gives every routed request a
   server-generated request ID and typed session, using an opaque host-only
   cookie without changing direct-content response bodies or isolation headers;
-- provider-neutral authentication contracts, an interface-backed process-local
-  identity repository keyed by stable `(strategy_id, provider_subject)`, and a
+- provider-neutral authentication contracts, an interface-backed identity
+  repository keyed by stable `(strategy_id, provider_subject)`, and a
   multi-strategy registry that rejects duplicate IDs; bounded, expiring OAuth
   attempts are owned by guest sessions with hashed one-use state, while the
   route-independent authentication service selects strategies, saves identity,
@@ -132,8 +132,10 @@ The first publishing slice currently provides:
   rejections for forbidden and malformed names) and atomically claims them
   case-insensitively for one owner, plus publishing authorization that rejects
   guest and cross-user writes into reserved namespaces while the owner and all
-  unreserved namespaces keep current behavior (no HTTP surface yet; reservations
-  are process-local);
+  unreserved namespaces keep current behavior (no HTTP surface yet); ownership
+  persistence is in-memory by default, or Deno KV can atomically persist users,
+  external identities, and namespace claims together so claims cannot be
+  orphaned by process-local user IDs;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -151,11 +153,15 @@ The first publishing slice currently provides:
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages, sessions, users, external identities, and namespace reservations
-are currently process-local. Guest pages in unreserved namespaces remain
+Guest pages and sessions are currently process-local. Users, external
+identities, and namespace reservations are also process-local by default, but
+can be switched together to Deno KV; selecting only durable claims is
+intentionally impossible because a restart would otherwise orphan them from
+newly generated user IDs. Guest pages in unreserved namespaces remain
 replaceable by anyone. Total page capacity, publishing frequency, expiry, a
-reservation HTTP/UI surface, and durable/shared storage are not implemented;
-this endpoint is not ready for untrusted public traffic.
+reservation HTTP/UI surface, durable content/session storage, and backend
+migration are not implemented; this endpoint is not ready for untrusted public
+traffic.
 
 ## Local development
 
@@ -172,8 +178,8 @@ current local site URL with an upgraded browser session. A failed callback shows
 a site-owned retry page without preserving reusable callback state. An
 authenticated header shows only signed-in state and the CSRF-protected
 `Sign out` action; signing out revokes that authenticated bearer and immediately
-rotates the browser to a distinct guest session. Authenticated publishing,
-namespace ownership, and management are not implemented yet.
+rotates the browser to a distinct guest session. Authenticated publishing actor
+wiring, namespace reservation HTTP/UI, and management are not implemented yet.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed
@@ -257,6 +263,26 @@ deno task --env-file=.env.production.local start
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
 requires original Google mode and its callback URL, client ID, and client secret
 variables listed above.
+
+Ownership persistence is selected independently from content and sessions. Unset
+configuration, or an explicit `memory` value, keeps both identities and
+namespace reservations process-local. Deno KV selects both linked repositories
+as one unit:
+
+```env
+IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
+IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/ownership.kv
+```
+
+The path is optional. When omitted, `Deno.openKv()` uses the runtime's default
+KV database (including the linked database on Deno Deploy); an explicit local
+path is durable only when its filesystem is durable. Changing the backend or
+path does not migrate or merge records. Deno KV ownership records currently have
+no application expiry or deletion path: they remain until the backing database
+is manually removed, and backup/recovery follows the selected KV service or
+deployment operator. Sessions still end on restart and pages still disappear,
+but signing in with the same provider subject resolves the same persisted user
+and therefore retains namespace ownership.
 
 For Deno Deploy, use `deno task build` as the build command and
 `_fresh/server.js` as the application entrypoint. Configure the original-mode

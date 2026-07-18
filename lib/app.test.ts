@@ -1,6 +1,7 @@
 import {
   assertEquals,
   assertExists,
+  assertStrictEquals,
   assertStringIncludes,
   assertThrows,
 } from "@std/assert";
@@ -11,6 +12,7 @@ import {
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
   GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
+  MemoryIdentityRepository,
 } from "./auth/mod.ts";
 import {
   type AppServices,
@@ -19,8 +21,15 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
+import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
 import { deliver_locator_path } from "./publishing/mod.ts";
+import {
+  OWNERSHIP_DENO_KV_PATH_ENV,
+  OWNERSHIP_STORAGE_BACKEND_ENV,
+  type OwnershipRepositoryFactory,
+  type OwnershipStorageConfig,
+} from "./storage/mod.ts";
 
 Deno.test("composition root publishes and delivers an md page end to end", async () => {
   const { engine, publishing } = create_app_services();
@@ -120,6 +129,65 @@ Deno.test("configured composition registers the selected Google strategy", async
     "google",
   );
   assertEquals(services.authentication_strategies.resolve("unknown"), null);
+});
+
+Deno.test("configured composition selects linked ownership storage at its factory boundary", async () => {
+  const selected_identity_repository = new MemoryIdentityRepository({
+    generate: () => "user-a",
+  });
+  const selected_namespace_repository = new MemoryNamespaceRepository();
+  let selected_config: OwnershipStorageConfig | undefined;
+  const ownership_repository_factory: OwnershipRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve({
+        identity_repository: selected_identity_repository,
+        namespace_repository: selected_namespace_repository,
+      });
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    { ownership_repository_factory },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  assertStrictEquals(
+    services.identity_repository,
+    selected_identity_repository,
+  );
+  assertStrictEquals(
+    services.namespace_repository,
+    selected_namespace_repository,
+  );
+  const identity = await services.identity_repository.find_or_create({
+    strategy_id: "google",
+    provider_subject: "provider-user",
+    email: "person@example.com",
+    observed_at: new Date("2026-07-18T00:00:00.000Z"),
+  });
+  const reserved = await services.namespaces.reserve({
+    namespace: "Selected",
+    owner_user_id: identity.user.user_id,
+  });
+  assertEquals(reserved.ok, true);
+  assertEquals(
+    (await selected_namespace_repository.find("selected"))?.owner_user_id,
+    identity.user.user_id,
+  );
 });
 
 Deno.test("configured original Google flow prefers an allowlisted request host", async () => {

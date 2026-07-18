@@ -54,6 +54,12 @@ import {
   type RequestContextHandler,
   RequestContextMiddleware,
 } from "./request-context.ts";
+import {
+  DefaultOwnershipRepositoryFactory,
+  type OwnershipRepositories,
+  type OwnershipRepositoryFactory,
+  parse_ownership_storage_config,
+} from "./storage/mod.ts";
 
 /**
  * Namespaces reserved for site and platform routes (QT-ROUTING): `site` is
@@ -83,6 +89,8 @@ export interface AppServices {
 export interface AppServiceOptions {
   /** Defaults secure; localhost must be selected deliberately. */
   readonly session_cookie_mode?: SessionCookieMode;
+  /** Referentially linked repositories are supplied as one composition unit. */
+  readonly ownership_repositories?: OwnershipRepositories;
   /** Provider implementations are supplied at the composition boundary. */
   readonly authentication_strategies?: readonly AuthenticationStrategy[];
   /** Selects static or explicitly allowlisted request-derived callbacks. */
@@ -90,6 +98,11 @@ export interface AppServiceOptions {
     AuthenticationCallbackUrlResolver;
   /** Present only with the loopback-only local Google preset. */
   readonly google_mock_consent_screen?: GoogleMockConsentScreen;
+}
+
+export interface ConfiguredAppServiceOptions {
+  /** Override only at an outer composition or test boundary. */
+  readonly ownership_repository_factory?: OwnershipRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -113,7 +126,11 @@ export function create_app_services(
     forbidden_namespaces,
   });
   const repository = new MemoryContentRepository();
-  const namespace_repository = new MemoryNamespaceRepository();
+  const ownership_repositories = options.ownership_repositories ?? {
+    identity_repository: new MemoryIdentityRepository(new CryptoIdGenerator()),
+    namespace_repository: new MemoryNamespaceRepository(),
+  };
+  const namespace_repository = ownership_repositories.namespace_repository;
   const namespaces = new NamespaceReservationService({
     engine,
     repository: namespace_repository,
@@ -141,9 +158,7 @@ export function create_app_services(
     session_transport,
     request_id_generator: new CryptoIdGenerator(),
   });
-  const identity_repository = new MemoryIdentityRepository(
-    new CryptoIdGenerator(),
-  );
+  const identity_repository = ownership_repositories.identity_repository;
   const authentication_strategies = new AuthenticationStrategyRegistry(
     options.authentication_strategies ?? [],
   );
@@ -182,13 +197,22 @@ export function create_app_services(
   };
 }
 
-/** Validates environment configuration, composes gauth, and registers Google. */
+/** Validates environment configuration, composes integrations, and registers Google. */
 export async function create_configured_app_services(
   environment: EnvironmentSource,
+  options: ConfiguredAppServiceOptions = {},
 ): Promise<AppServices> {
+  const ownership_storage_config = parse_ownership_storage_config(environment);
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
+  const ownership_repositories = await (
+    options.ownership_repository_factory ??
+      new DefaultOwnershipRepositoryFactory()
+  ).create(ownership_storage_config, {
+    user_id_generator: new CryptoIdGenerator(),
+  });
   return create_app_services({
+    ownership_repositories,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),

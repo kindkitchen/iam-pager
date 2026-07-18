@@ -231,12 +231,13 @@ is implied by this header state.
 
 ## Storage limitation
 
-`MemorySessionRepository` and `MemoryIdentityRepository` are process-local.
-Restarting the process invalidates all sessions and loses users/identities, and
-multiple app instances do not share either state. They are not production
-durability or horizontal-scaling solutions. Repository interfaces are the
-replacement boundaries; cookie transport remains independent from session
-storage.
+`MemorySessionRepository` remains process-local. Restarting the process
+invalidates all sessions, and multiple app instances do not share session state.
+`MemoryIdentityRepository` is still the default, but configured Deno KV can
+persist application users and provider identities together with namespace
+reservations so claims retain stable owners across restarts. This does not make
+sessions or page content durable. Repository interfaces remain the replacement
+boundaries; cookie transport remains independent from session storage.
 
 ## Next boundary
 
@@ -246,6 +247,9 @@ verification gates. `OQ-AUTH` is settled around Google-first account creation,
 provider-owned recovery, in-place guest upgrade, and logout revocation.
 Authentication does not itself confer namespace or publishing authority.
 
-Persistent namespace ownership and authenticated publishing authorization are
-the next product boundary. Profile/account/settings navigation remains optional
-follow-up UI work and must not substitute for that server-owned authority.
+Namespace reservation and publishing authorization now exist as server-owned
+business services, with optional Deno KV persistence for the linked identity and
+claim records. Their authenticated HTTP/API and site surfaces, including wiring
+the resolved session user as the publishing actor, are the next product
+boundary. Profile/account/settings navigation remains optional follow-up UI work
+and must not substitute for that authority.
