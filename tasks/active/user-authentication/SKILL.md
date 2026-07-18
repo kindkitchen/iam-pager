@@ -7,13 +7,12 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phase 1 and the provider-neutral phase-2 authentication core are
-complete. Start/callback routes own bounded browser mapping and one-use state;
-authenticated upgrades rotate the bearer and issue a 256-bit synchronizer token.
-Bounded form-only logout validates repository state, atomically revokes access,
-and centrally publishes a distinct fresh guest session and credential. No
-provider strategy is registered yet.
+Active. Phases 1 and 2 are complete. gauth 0.4.1 and compatible Effect are
+pinned, and the thin Google adapter now passes exact authorization inputs, keeps
+only the PKCE verifier as server-side attempt context, maps verified profile
+fields, discards provider tokens, and hides provider failures. All 153 tests
+pass. No provider strategy is registered yet; see [[010.summary]].
 
-Next: phase 3 from [[001.draft]] — pin gauth 0.4.1 and implement the Google
-strategy adapter with explicit local/original preset composition and tests.
-Mocked consent and header/navigation remain gated behind that provider work.
+Next: finish phase 3 with startup-validated configuration and explicit
+local/original preset composition, register Google, and test both modes without
+network access or secrets. Mocked consent and header/navigation remain gated.

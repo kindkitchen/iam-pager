@@ -111,8 +111,11 @@ The first publishing slice currently provides:
   no-store redirects, secret-free diagnostics, and centralized publication of
   the rotated session cookie; bounded form-only `POST /auth/logout` validates
   its CSRF token against repository state, atomically revokes authenticated
-  access, and publishes a distinct fresh guest session and bearer; provider
-  adapters are not registered yet;
+  access, and publishes a distinct fresh guest session and bearer; the pinned
+  gauth 0.4.1 Google adapter now maps exact authorization inputs, server-only
+  PKCE context, and verified profile output without retaining provider tokens or
+  exposing provider failures, but preset composition and strategy registration
+  are not wired yet;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,

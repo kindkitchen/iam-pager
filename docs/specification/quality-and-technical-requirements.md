@@ -160,8 +160,12 @@ also issues a 256-bit synchronizer token outside the cookie. Bounded form-only
 `POST /auth/logout` validates that token against the current repository record,
 atomically revokes the authenticated bearer, and centrally publishes a distinct
 fresh guest session and credential; stale, cross-session, and replayed requests
-cannot revoke authenticated access. No provider is registered yet. The current
-in-memory repository is process-local and invalidates sessions on restart. See
+cannot revoke authenticated access. The pinned gauth 0.4.1 Google adapter keeps
+its PKCE verifier server-side, maps only verified identity fields, discards
+provider tokens, and prevents raw provider failures from crossing the strategy
+boundary. Explicit preset composition and provider registration remain, so
+Google routes still resolve as unknown. The current in-memory repository is
+process-local and invalidates sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication

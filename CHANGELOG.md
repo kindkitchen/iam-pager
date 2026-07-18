@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+- Pinned `jsr:@kindkitchen/gauth@0.4.1` and its compatible direct Effect
+  dependency, then added the thin provider-neutral `GoogleGAuthStrategy`
+  adapter. It passes the exact OpenID/profile scope, application state, and
+  callback URI; retains only the PKCE verifier as server-side attempt context;
+  maps verified profile fields; discards provider tokens; and collapses raw
+  provider failures. Added 4 adapter tests (153 total); preset composition and
+  registration remain.
+
 - Completed the provider-neutral authentication core with a bounded, form-only
   `POST /auth/logout`. Authentication now issues a 256-bit session-bound
   synchronizer token; logout validates it against repository state, atomically

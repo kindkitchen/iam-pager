@@ -38,6 +38,10 @@ export {
   type AuthenticationHttpResult,
   ConsoleAuthenticationHttpLogger,
 } from "./http.ts";
+export {
+  type GAuthService,
+  GoogleGAuthStrategy,
+} from "./google-gauth-strategy.ts";
 export { MemoryIdentityRepository } from "./memory-identity-repository.ts";
 export { AuthenticationStrategyRegistry } from "./strategy-registry.ts";
 export {

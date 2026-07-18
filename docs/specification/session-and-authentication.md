@@ -29,6 +29,9 @@ keeping the logic independent from Fresh routes:
   identity persistence, logical-session upgrade, and bearer rotation;
 - `AuthenticationHttpAdapter` maps generic browser requests and outcomes without
   depending on Fresh, while thin routes select strategies or publish logout;
+- `GoogleGAuthStrategy` is the first provider adapter, pinned to gauth 0.4.1 and
+  depending only on its exported interface; preset selection remains a separate
+  composition concern;
 - `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
   rotation centrally, superseding any credential renewal staged at resolution.
 
@@ -132,8 +135,16 @@ restrictive content headers. Diagnostics carry only request ID, optional
 validated strategy ID, and an internal category. Raw query/form values, cookies,
 tokens, and provider causes are absent.
 
-The composition root wires these routes but currently registers no provider
-adapter, so valid strategy paths return `404` until a strategy is configured.
+The gauth adapter supplies the exact `openid email profile` scope,
+application-owned state, and callback URI. It persists only the returned PKCE
+verifier as opaque server-side attempt context, maps the verified Google subject
+and profile fields, and discards access, ID, and refresh tokens. Missing
+verifier context and all gauth failures become the provider-neutral failure
+result; raw `GAuthErr` causes do not cross the adapter boundary.
+
+The composition root wires the generic routes but does not yet construct or
+register the Google adapter, so valid strategy paths return `404` until an
+explicit local or original preset is configured.
 
 ## Storage limitation
 
@@ -146,7 +157,7 @@ storage.
 
 ## Next boundary
 
-Phase 2 is complete. Next, implement the Google strategy through pinned gauth
-0.4.1 with explicit local/original preset composition and adapter tests. The
-mocked local consent flow follows in phase 4; header and authenticated
-navigation work stays gated behind that verified provider flow.
+Phase 2 and the gauth 0.4.1 adapter are complete. Next, add validated
+configuration and explicit local/original preset composition, then register the
+Google strategy. The mocked local consent flow follows in phase 4; header and
+authenticated navigation work stays gated behind that verified provider flow.
