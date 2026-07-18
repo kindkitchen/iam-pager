@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Reopened the authentication task after validating its original acceptance
+  criteria. Its final step now covers the integrated logout-to-fresh-guest flow,
+  safe callback retry presentation, settled authentication specification, local
+  browser smoke, and final verification gates; namespace ownership remains a
+  separate task.
+
 - Added server-rendered site session navigation backed by an interface-first
   presenter. Guests can start Google sign-in and return to the validated current
   site URL; authenticated sessions expose signed-in state and a CSRF-protected

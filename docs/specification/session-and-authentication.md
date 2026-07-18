@@ -195,6 +195,10 @@ storage.
 
 ## Next boundary
 
-The authentication foundation is complete through trusted site navigation. Next,
-introduce persistent namespace ownership and apply authenticated authority to
-publishing before exposing creator management controls.
+One final authentication acceptance step remains: extend the configured local
+integration through logout and fresh-guest rotation, add a provider-neutral
+callback failure presentation with a safe retry link, settle `OQ-AUTH`, record
+the local browser smoke, and rerun all verification gates. Profile/account
+navigation may remain follow-up UI work. After this step closes authentication,
+persistent namespace ownership and authenticated publishing authority begin a
+separate task.

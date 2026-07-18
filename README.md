@@ -153,10 +153,10 @@ direct URL. The development task explicitly sets
 `iam_pager_session_local` cookie for localhost. It also explicitly selects the
 local gauth preset with the localhost Google callback and mock-consent URLs.
 
-The site's `Sign in with Google` header action starts the complete development
-flow, and the package-rendered consent screen returns through the callback to
-the current local site URL with an upgraded browser session. An authenticated
-header shows only signed-in state and the CSRF-protected `Sign out` action;
+The site's `Sign in with Google` header action starts the local sign-in flow,
+and the package-rendered consent screen returns through the callback to the
+current local site URL with an upgraded browser session. An authenticated header
+shows only signed-in state and the CSRF-protected `Sign out` action;
 authenticated publishing and management are not implemented yet.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
