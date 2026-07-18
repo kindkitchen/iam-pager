@@ -4,7 +4,7 @@
   "tasks": {
     "check": "deno fmt --check . && deno lint . && deno check",
     "test": "deno test --allow-env lib",
-    "dev": "vite",
+    "dev": "IAM_PAGER_SESSION_COOKIE_MODE=local IAM_PAGER_GOOGLE_AUTH_MODE=local IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI=http://localhost:5173/auth/google/callback IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL=http://localhost:5173/auth/google/mock-consent vite",
     "build": "vite build",
     "start": "deno serve -A _fresh/server.js",
     "update": "deno run -A -r jsr:@fresh/update ."
@@ -14,9 +14,14 @@
   "imports": {
     "@/": "./",
     "@deno/gfm": "jsr:@deno/gfm@^0.12.0",
+    "@kindkitchen/gauth": "jsr:@kindkitchen/gauth@0.4.1",
     "@std/assert": "jsr:@std/assert@^1.0.16",
+    "@std/http/cookie": "jsr:@std/http@^1.0.21/cookie",
+    "@std/http/status": "jsr:@std/http@^1.0.21/status",
+    "effect": "npm:effect@^4.0.0-beta.91",
     "fresh": "jsr:@fresh/core@^2.3.3",
     "preact": "npm:preact@^10.29.1",
+    "preact-render-to-string": "npm:preact-render-to-string@^6.7.0",
     "@preact/signals": "npm:@preact/signals@^2.9.0",
     "marked": "npm:marked@^17.0.6",
     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",

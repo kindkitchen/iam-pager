@@ -94,7 +94,36 @@ content or download it.
 The first publishing slice currently provides:
 
 - a path locator where the first segment is the namespace and the remaining
-  segments are the optional page name;
+  segments are the optional page name; `site`, `api`, and `auth` are reserved;
+- an interface-first, process-local session lifecycle with guest/authenticated
+  state, hashed bearer lookup, bounded renewal, atomic credential rotation, and
+  revocation; root application middleware now gives every routed request a
+  server-generated request ID and typed session, using an opaque host-only
+  cookie without changing direct-content response bodies or isolation headers;
+- provider-neutral authentication contracts, an interface-backed process-local
+  identity repository keyed by stable `(strategy_id, provider_subject)`, and a
+  multi-strategy registry that rejects duplicate IDs; bounded, expiring OAuth
+  attempts are owned by guest sessions with hashed one-use state, while the
+  route-independent authentication service selects strategies, saves identity,
+  upgrades the logical session, rotates its bearer credential, and issues a
+  256-bit synchronizer token to trusted application UI; generic browser
+  start/callback routes provide bounded query handling, no-store redirects,
+  secret-free diagnostics, centralized publication of the rotated session
+  cookie, and a provider-neutral site-owned callback failure page whose safe
+  retry link retains no callback values; bounded form-only `POST /auth/logout`
+  validates its CSRF token against repository state, atomically revokes
+  authenticated access, and publishes a distinct fresh guest session and bearer;
+  the pinned gauth 0.4.1 Google adapter maps exact authorization inputs,
+  server-only PKCE context, and verified profile output without retaining
+  provider tokens or exposing provider failures; startup configuration
+  explicitly selects and composes the package's loopback-only local or original
+  preset and registers Google; local mode also serves gauth's package-rendered
+  mock consent screen behind exact authorization-query validation, while
+  original mode keeps that route unavailable; a server-owned site-navigation
+  presenter maps the typed session to either Google sign-in with a validated
+  local return or a CSRF-protected logout form, and components render that
+  complete model without receiving session IDs or making authorization
+  decisions;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -112,16 +141,37 @@ The first publishing slice currently provides:
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages are currently process-local and replaceable by anyone. Total page
-capacity, publishing frequency, expiry, namespace reservation, and durable
-storage are not implemented; this endpoint is not ready for untrusted public
-traffic.
+Guest pages, sessions, users, and external identities are currently
+process-local. Guest pages remain replaceable by anyone. Total page capacity,
+publishing frequency, expiry, namespace reservation, and durable/shared storage
+are not implemented; this endpoint is not ready for untrusted public traffic.
 
 ## Local development
 
 Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
 the live preview, publish the page, and use the resulting link to open its
-direct URL. Markdown can be edited as raw source or as guided sections; both
+direct URL. The development task explicitly sets
+`IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
+`iam_pager_session_local` cookie for localhost. It also explicitly selects the
+local gauth preset with the localhost Google callback and mock-consent URLs.
+
+The site's `Sign in with Google` header action starts the local sign-in flow,
+and the package-rendered consent screen returns through the callback to the
+current local site URL with an upgraded browser session. A failed callback shows
+a site-owned retry page without preserving reusable callback state. An
+authenticated header shows only signed-in state and the CSRF-protected
+`Sign out` action; signing out revokes that authenticated bearer and immediately
+rotates the browser to a distinct guest session. Authenticated publishing,
+namespace ownership, and management are not implemented yet.
+
+Every other entry point defaults to the production `__Host-iam_pager_session`
+cookie with `Secure`; do not set either local mode in a deployed environment.
+Original Google authentication requires `IAM_PAGER_GOOGLE_AUTH_MODE=original`,
+`IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`; configuration is validated before the
+shared application services are created. Static/framework assets served before
+Fresh application routing intentionally receive neither session state nor a
+request ID. Markdown can be edited as raw source or as guided sections; both
 modes update the same draft. The deterministic section adapter groups a fenced
 code block into one editable unit while retaining unfamiliar Markdown as safe
 one-line raw sections instead of approximating a full Markdown AST. Collapsed

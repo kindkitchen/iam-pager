@@ -1,6 +1,96 @@
 # Changelog
 
+## 2026-07-18
+
+- Completed authentication acceptance. The configured local integration now
+  covers sign-in, authenticated resolution, logout to a distinct fresh guest,
+  and stale-bearer rejection; callback failures render a provider-neutral safe
+  retry without reusable state or leaked values. Settled Google-first account
+  entry/recovery separately from namespace authority, recorded a headless
+  Chromium sign-in/logout smoke, and passed check, 165 tests, and production
+  build.
+
+- Reopened the authentication task after validating its original acceptance
+  criteria. Its final step now covers the integrated logout-to-fresh-guest flow,
+  safe callback retry presentation, settled authentication specification, local
+  browser smoke, and final verification gates; namespace ownership remains a
+  separate task.
+
+- Added server-rendered site session navigation backed by an interface-first
+  presenter. Guests can start Google sign-in and return to the validated current
+  site URL; authenticated sessions expose signed-in state and a CSRF-protected
+  logout form without passing identity or authorization decisions into UI
+  components. Added 3 presenter/rendering tests (164 total).
+
+- Added the development-only `/auth/google/mock-consent` boundary using gauth's
+  package-rendered screen. It accepts only the exact local authorization query,
+  stays unavailable in original mode, and applies no-store, restrictive CSP, and
+  no-referrer headers. Added 4 tests, including the complete local browser
+  start/consent/callback flow, logical-session upgrade, bearer rotation, and
+  stale-guest rejection (161 total).
+
+- Completed Google provider composition with startup-validated, explicit local
+  or original gauth preset selection and strategy registration. Local fake auth
+  is restricted to same-origin loopback callback/consent URLs; original mode
+  requires client credentials and HTTPS outside loopback. Development now
+  selects local mode explicitly. Added 4 configuration/composition tests (157
+  total); the package-rendered mock consent route remains.
+
+- Pinned `jsr:@kindkitchen/gauth@0.4.1` and its compatible direct Effect
+  dependency, then added the thin provider-neutral `GoogleGAuthStrategy`
+  adapter. It passes the exact OpenID/profile scope, application state, and
+  callback URI; retains only the PKCE verifier as server-side attempt context;
+  maps verified profile fields; discards provider tokens; and collapses raw
+  provider failures. Added 4 adapter tests (153 total); preset composition and
+  registration remain.
+
+- Completed the provider-neutral authentication core with a bounded, form-only
+  `POST /auth/logout`. Authentication now issues a 256-bit session-bound
+  synchronizer token; logout validates it against repository state, atomically
+  revokes the authenticated bearer, and publishes a distinct fresh guest session
+  and credential. Added 5 lifecycle/HTTP tests (149 total); no provider strategy
+  is registered yet.
+
+- Added provider-neutral `GET /auth/:strategy/start` and callback HTTP
+  boundaries with bounded query handling, one-use invalid-callback state,
+  no-store redirects, browser-safe error mapping, secret-free diagnostics, and
+  centralized rotated-cookie publication. Added 6 adapter/session-transition
+  tests (144 total); no provider strategy is registered yet.
+
+- Added session-owned OAuth attempts and provider-neutral authentication
+  orchestration. Guest sessions now retain at most five 10-minute attempts with
+  hashed one-use state and server-only provider context; callbacks consume state
+  atomically before provider exchange, reject unsafe local returns, persist the
+  stable external identity, and upgrade the logical session with bearer
+  rotation. Wired the service at composition and added 7 attempt/orchestration
+  tests (138 total).
+
+- Added the first phase-2 authentication core: provider-neutral identity and
+  strategy interfaces, an atomic process-local identity repository keyed by
+  stable provider subject rather than email, and a multi-strategy registry with
+  route-safe IDs and duplicate rejection. Wired the defaults at composition and
+  added 10 identity/registry tests (131 total).
+
+- Completed the session HTTP boundary with explicit production/local host-only
+  cookie strategies, typed request context, unique server-owned request IDs, and
+  root Fresh middleware. Routed success, redirect, API/error, missing, and
+  direct-content responses receive pending cookies and diagnostics without
+  changing status, body, length, existing cookies, or CSP isolation. Added 9
+  cookie/composition/request-preservation tests (121 total).
+
 ## 2026-07-17
+
+- Activated user authentication and implemented its transport-independent
+  session lifecycle: interface-backed process-local storage, discriminated
+  guest/authenticated state, hashed 256-bit bearer lookup, bounded renewal,
+  revocation, and atomic logical-session upgrade with credential rotation.
+  Reserved `auth`, documented the storage and HTTP boundaries, and added 10
+  lifecycle/concurrency tests (112 total).
+
+- Added an implementation-ready user-authentication task covering request IDs,
+  guest/authenticated sessions, opaque cookie transport, multi-strategy auth,
+  Google OAuth through `jsr:@kindkitchen/gauth@0.4.1`, its mocked local consent
+  flow, security tests, and gated authenticated header/navigation follow-ups.
 
 - Clarified exclusive content replacement controls as attached tabs:
   Markdown/CSS now meets the source panel edge and Raw/Steps meets its nested

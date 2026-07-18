@@ -46,11 +46,12 @@ those choices should not require rewriting the corresponding product rules.
 - Content updates must not expose a new payload with stale metadata or the
   reverse.
 
-The current prototype maps `/` and `/site/*` to the site, reserves `site` and
-`api` as namespaces, and maps every other unclaimed path through the path-slug
-locator strategy. Replaceable guest content uses `no-store` until validators
-exist. Active HTML and SVG delivery must receive an origin-less sandbox and a
-restrictive content security policy in addition to content sanitization.
+The current prototype maps `/` and `/site/*` to the site, reserves `site`,
+`api`, and `auth` as namespaces, and maps every other unclaimed path through the
+path-slug locator strategy. Replaceable guest content uses `no-store` until
+validators exist. Active HTML and SVG delivery must receive an origin-less
+sandbox and a restrictive content security policy in addition to content
+sanitization.
 
 ## QT-CONTENT — Content handling
 
@@ -140,6 +141,53 @@ still unimplemented.
   browser.
 - Session behavior must protect state-changing operations from unrelated sites
   and creator-supplied page content.
+
+The session foundation keeps transport and storage separate. A browser bearer
+credential is opaque; only its hash is stored. Every request reaching
+application routing now resolves to a guest or authenticated server-side
+session, never a caller-selected identity or a nullable state, and receives a
+new server-owned request ID. Production uses an explicit secure host-only
+cookie; localhost uses a distinct configuration selected by the development
+command. Middleware adds only the request-ID and pending cookie headers,
+preserving direct-content status, body, length, and CSP isolation.
+Authentication preserves the logical session but atomically rotates its
+credential. Generic browser start/callback routes use the provider-neutral
+orchestrator, bounded query values, one-use state, validated local returns,
+no-store responses, and diagnostics that omit callback values and raw provider
+causes. Successful callback rotation is published by the central request
+boundary so it supersedes a concurrently staged renewal cookie. Authentication
+also issues a 256-bit synchronizer token outside the cookie. Bounded form-only
+`POST /auth/logout` validates that token against the current repository record,
+atomically revokes the authenticated bearer, and centrally publishes a distinct
+fresh guest session and credential; stale, cross-session, and replayed requests
+cannot revoke authenticated access. The pinned gauth 0.4.1 Google adapter keeps
+its PKCE verifier server-side, maps only verified identity fields, discards
+provider tokens, and prevents raw provider failures from crossing the strategy
+boundary. Startup-validated configuration now explicitly composes the package's
+local or original preset and registers Google. Local fake authentication is
+restricted to same-origin loopback callback and consent URLs; original mode
+requires client credentials and HTTPS outside loopback. The development-only
+local route validates the exact authorization query before serving gauth's
+package-rendered consent screen and remains unavailable in original mode. The
+local integration covers sign-in, logical-session upgrade, bearer rotation,
+authenticated resolution, logout to a distinct guest, and rejection of both
+stale guest and stale authenticated bearers. Callback failures use a
+provider-neutral presentation model and restrictive site-owned HTML response
+with a validated local retry link; the consumed attempt cannot be replayed, the
+guest session remains available, and callback values and provider causes remain
+absent. The site header receives a complete model from an interface-backed
+server presenter: guests get a Google start link with a validated local return,
+while authenticated sessions get only signed-in state and the fixed
+CSRF-protected logout form. UI components receive neither session/user IDs nor
+responsibility for deciding the available action. The current in-memory
+repository is process-local and invalidates sessions on restart. Authentication
+establishes user identity only: it does not reserve a namespace or authorize
+publishing. Concurrency-safe namespace ownership and its mutation policy remain
+the next implementation boundary. See
+[session-and-authentication.md](session-and-authentication.md).
+
+The `auth` namespace is reserved alongside `site` and `api`, so authentication
+routes cannot collide with direct page locators.
 
 ## QT-API — API behavior
 

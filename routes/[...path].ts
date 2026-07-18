@@ -8,8 +8,8 @@ import { deliver_locator_path } from "../lib/publishing/mod.ts";
  * All mapping logic lives in `lib/publishing/http.ts`.
  */
 export const handler = define.handlers({
-  GET(ctx) {
-    const { engine, publishing } = app_services();
+  async GET(ctx) {
+    const { engine, publishing } = await app_services();
     return deliver_locator_path(engine, publishing, ctx.url.pathname);
   },
 });

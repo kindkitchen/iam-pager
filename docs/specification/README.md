@@ -26,5 +26,6 @@ Section markers use a short file prefix and a stable descriptive word, such as
 | [domain-and-addressing.md](domain-and-addressing.md)                           | Pages, namespaces, locators, content, and access |
 | [capabilities.md](capabilities.md)                                             | Functions the app exposes                        |
 | [quality-and-technical-requirements.md](quality-and-technical-requirements.md) | Important technical behavior and constraints     |
+| [session-and-authentication.md](session-and-authentication.md)                 | Session lifecycle boundaries and current status  |
 | [open-questions-and-risks.md](open-questions-and-risks.md)                     | MVP decisions and nearby implementation risks    |
 | [delivery-slices.md](delivery-slices.md)                                       | App-focused increments for building the product  |
