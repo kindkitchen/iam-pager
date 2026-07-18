@@ -125,9 +125,11 @@ Deno.test("configured original Google flow prefers an allowlisted request host",
   );
 });
 
-Deno.test("configured local Google flow uses an allowlisted preview origin", async () => {
+Deno.test("configured local Google flow prefers an allowlisted preview origin over partial static URLs", async () => {
   const values: Readonly<Record<string, string>> = {
     [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
     [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
       "pager-pr-[a-z0-9-]+\\.example\\.com",
   };

@@ -130,17 +130,18 @@ Deno.test("Google auth configuration validates explicit local and original modes
     TypeError,
     GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
   );
-  assertThrows(
-    () =>
-      parse_google_auth_config(environment({
-        [GOOGLE_AUTH_MODE_ENV]: "local",
-        [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
-          "pager-pr-[a-z0-9-]+\\.example\\.com",
-        [GOOGLE_AUTH_REDIRECT_URI_ENV]:
-          "http://localhost:5173/auth/google/callback",
-      })),
-    TypeError,
-    "must be configured together",
+  assertEquals(
+    parse_google_auth_config(environment({
+      [GOOGLE_AUTH_MODE_ENV]: "local",
+      [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
+        "pager-pr-[a-z0-9-]+\\.example\\.com",
+      [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+        "http://localhost:5173/auth/google/callback",
+    })),
+    {
+      mode: "local",
+      request_host_pattern: "pager-pr-[a-z0-9-]+\\.example\\.com",
+    },
   );
   assertEquals(
     parse_google_auth_config(environment({

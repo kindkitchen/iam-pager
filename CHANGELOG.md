@@ -2,6 +2,11 @@
 
 ## 2026-07-18
 
+- Simplified dynamic local Google authentication configuration: a configured
+  request-host pattern now takes precedence immediately, so request-derived
+  callback and mock-consent URLs no longer require inherited static URL
+  variables to be present as a pair.
+
 - Added opt-in dynamic Google callbacks for preview deployments through
   `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`. Configured production callbacks
   remain unchanged when it is unset; enabled contexts require a full HTTPS
