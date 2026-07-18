@@ -23,12 +23,23 @@ export interface EnvironmentSource {
   get(name: string): string | undefined;
 }
 
-export interface LocalGoogleAuthConfig {
+export interface StaticLocalGoogleAuthConfig {
   readonly mode: "local";
-  readonly redirect_uri?: string;
-  readonly mocked_google_consent_screen_url?: string;
-  readonly request_host_pattern?: string;
+  readonly redirect_uri: string;
+  readonly mocked_google_consent_screen_url: string;
+  readonly request_host_pattern?: undefined;
 }
+
+export interface DynamicLocalGoogleAuthConfig {
+  readonly mode: "local";
+  readonly redirect_uri?: undefined;
+  readonly mocked_google_consent_screen_url?: undefined;
+  readonly request_host_pattern: string;
+}
+
+export type LocalGoogleAuthConfig =
+  | StaticLocalGoogleAuthConfig
+  | DynamicLocalGoogleAuthConfig;
 
 export interface OriginalGoogleAuthConfig {
   readonly mode: "original";
@@ -159,18 +170,6 @@ function require_environment_value(
   return value;
 }
 
-function optional_environment_value(
-  environment: EnvironmentSource,
-  name: string,
-): string | undefined {
-  const value = environment.get(name);
-  if (value === undefined || value.length === 0) return undefined;
-  if (value.length > 4096 || value.trim() !== value) {
-    throw new TypeError(`${name} must be an unpadded configured value`);
-  }
-  return value;
-}
-
 function parse_request_host_pattern(
   environment: EnvironmentSource,
 ): string | undefined {
@@ -265,51 +264,31 @@ export function parse_google_auth_config(
   const request_host_pattern = parse_request_host_pattern(environment);
 
   if (mode === "local") {
-    const redirect_uri = request_host_pattern === undefined
-      ? require_environment_value(environment, GOOGLE_AUTH_REDIRECT_URI_ENV)
-      : optional_environment_value(environment, GOOGLE_AUTH_REDIRECT_URI_ENV);
-    const mocked_google_consent_screen_url = request_host_pattern === undefined
-      ? require_environment_value(
-        environment,
-        GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
-      )
-      : optional_environment_value(
-        environment,
-        GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
-      );
+    if (request_host_pattern !== undefined) {
+      return { mode, request_host_pattern };
+    }
+
+    const redirect_uri = require_environment_value(
+      environment,
+      GOOGLE_AUTH_REDIRECT_URI_ENV,
+    );
+    const mocked_google_consent_screen_url = require_environment_value(
+      environment,
+      GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
+    );
+    const redirect_url = parse_callback_url(redirect_uri);
+    const consent_url = parse_mock_consent_url(
+      mocked_google_consent_screen_url,
+    );
     if (
-      (redirect_uri === undefined) !==
-        (mocked_google_consent_screen_url === undefined)
+      !is_loopback(redirect_url.hostname) ||
+      consent_url.origin !== redirect_url.origin
     ) {
       throw new TypeError(
-        `${GOOGLE_AUTH_REDIRECT_URI_ENV} and ${GOOGLE_AUTH_MOCK_CONSENT_URL_ENV} must be configured together`,
+        "local Google authentication URLs must use the same loopback origin",
       );
     }
-    if (
-      redirect_uri !== undefined &&
-      mocked_google_consent_screen_url !== undefined
-    ) {
-      const redirect_url = parse_callback_url(redirect_uri);
-      const consent_url = parse_mock_consent_url(
-        mocked_google_consent_screen_url,
-      );
-      if (
-        !is_loopback(redirect_url.hostname) ||
-        consent_url.origin !== redirect_url.origin
-      ) {
-        throw new TypeError(
-          "local Google authentication URLs must use the same loopback origin",
-        );
-      }
-    }
-    return {
-      mode,
-      ...(redirect_uri === undefined ? {} : { redirect_uri }),
-      ...(mocked_google_consent_screen_url === undefined
-        ? {}
-        : { mocked_google_consent_screen_url }),
-      ...(request_host_pattern === undefined ? {} : { request_host_pattern }),
-    };
+    return { mode, redirect_uri, mocked_google_consent_screen_url };
   }
 
   const redirect_uri = require_environment_value(
@@ -344,24 +323,23 @@ export async function compose_google_gauth(
   config: GoogleAuthConfig,
 ): Promise<GoogleGAuthComposition> {
   if (config.mode === "local") {
+    const uses_dynamic_urls = config.request_host_pattern !== undefined;
     if (
-      (config.redirect_uri === undefined) !==
-        (config.mocked_google_consent_screen_url === undefined) ||
-      (config.request_host_pattern === undefined &&
-        config.redirect_uri === undefined)
+      !uses_dynamic_urls &&
+      (config.redirect_uri === undefined ||
+        config.mocked_google_consent_screen_url === undefined)
     ) {
       throw new TypeError(
         "local Google authentication requires static URLs or a request host pattern",
       );
     }
     const { Requirements } = await GAuth.load_preset.local();
-    const service = config.redirect_uri !== undefined &&
-        config.mocked_google_consent_screen_url !== undefined
-      ? await compose_local_google_gauth_service(
+    const service = uses_dynamic_urls
+      ? null
+      : await compose_local_google_gauth_service(
         config.redirect_uri,
         config.mocked_google_consent_screen_url,
-      )
-      : null;
+      );
     return {
       service,
       service_resolver: new PackageGoogleGAuthServiceResolver(config, service),

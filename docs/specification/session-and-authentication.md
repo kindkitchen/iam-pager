@@ -168,11 +168,11 @@ expression. If absent or empty, the configured callback stays authoritative. If
 present, the complete case-insensitive `Request.url` host, including a
 non-default port, must match and the request must be HTTPS; then the callback
 endpoint is built on that request origin through the URL API. In local mode the
-static callback and mock-consent URL variables become optional because both
-endpoints are request-derived; if supplied as compatibility fallbacks, they must
-be supplied together and retain the loopback constraints. The dynamic
-mock-consent endpoint is built on the matched origin, and its HTTP boundary
-requires the selected callback to be same-origin and allowlisted before
+pattern is immediately authoritative: static callback and mock-consent URL
+variables are not read because both endpoints are request-derived, so inherited
+partial static configuration cannot introduce a false pair requirement. The
+dynamic mock-consent endpoint is built on the matched origin, and its HTTP
+boundary requires the selected callback to be same-origin and allowlisted before
 rendering. No match fails closed before orchestration or fake consent. `Origin`
 and `Referer` headers are never callback authorities. The same selected callback
 URI configures the gauth service used at authorization and token exchange,

@@ -119,13 +119,14 @@ The first publishing slice currently provides:
   explicitly selects and composes the package's loopback-only local or original
   preset and registers Google; both modes keep their configured callback by
   default and can opt into full-regex-allowlisted HTTPS request hosts for
-  dynamic preview callbacks; local mode derives its mock-consent endpoint from
-  that same trusted origin and serves gauth's package-rendered mock consent
-  screen behind exact authorization-query validation, while original mode keeps
-  that route unavailable; a server-owned site-navigation presenter maps the
-  typed session to either Google sign-in with a validated local return or a
-  CSRF-protected logout form, and components render that complete model without
-  receiving session IDs or making authorization decisions;
+  dynamic preview callbacks; local mode derives its callback and mock-consent
+  endpoints from that same trusted origin and serves gauth's package-rendered
+  mock consent screen behind exact authorization-query validation, while
+  original mode keeps that route unavailable; a server-owned site-navigation
+  presenter maps the typed session to either Google sign-in with a validated
+  local return or a CSRF-protected logout form, and components render that
+  complete model without receiving session IDs or making authorization
+  decisions;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -182,8 +183,10 @@ complete case-insensitive request host (including a non-default port) must match
 and the request URL must use HTTPS; then `/auth/google/callback` is built
 against that request origin with the URL API. Local mode also builds
 `/auth/google/mock-consent` against the same origin and validates that its
-requested callback is same-origin. In dynamic local mode the two static URL
-variables are optional because neither endpoint needs a configured origin:
+requested callback is same-origin. In dynamic local mode the request-host
+pattern is authoritative and the two static URL variables are ignored because
+neither endpoint needs a configured origin. This also permits deployments that
+still inherit only one of those static variables:
 
 ```env
 IAM_PAGER_SESSION_COOKIE_MODE=production
