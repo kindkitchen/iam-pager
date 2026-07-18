@@ -38,6 +38,11 @@ export {
   SystemClock,
 } from "./generators.ts";
 export { MemorySessionRepository } from "./memory-repository.ts";
+export { DenoKvSessionRepository } from "./kv-repository.ts";
+export {
+  type SessionRepositoryConformanceOptions,
+  test_session_repository_conformance,
+} from "./repository-conformance.ts";
 export {
   CookieSessionStrategy,
   session_cookie_config,

@@ -82,6 +82,8 @@ those systems are implemented.
 The first optional durable boundary covers ownership records, not content: Deno
 KV stores application users, provider identities, and namespace reservations
 together so a persisted claim always retains a resolvable owner after restart.
-There is currently no application expiry or deletion for those records and no
-automatic migration between memory, database paths, or backends. Pages and
-sessions remain process-local.
+Sessions may separately opt into that same ownership database and bounded
+lifecycle; durable sessions with process-local ownership are rejected. There is
+currently no application expiry or deletion for ownership records and no
+automatic migration between memory, database paths, or backends. Pages remain
+process-local.

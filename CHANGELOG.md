@@ -2,6 +2,17 @@
 
 ## 2026-07-18
 
+- Delivered the durable-session storage slice: `DenoKvSessionRepository` uses
+  versioned serialization, absolute-lifetime KV TTLs, and native atomic commits
+  for ID/credential uniqueness, renewal, bounded one-use authentication
+  attempts, credential rotation, CSRF-bound logout, and revocation. A shared
+  implementation-agnostic conformance suite now covers both memory and Deno KV
+  repositories, including concurrency. Environment composition keeps memory as
+  the default and allows `IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv` only with
+  Deno KV ownership, inheriting the ownership database so authenticated sessions
+  cannot outlive their users. Added 32 tests (261 total); page content remains
+  process-local and `durable-storage` remains active for its next slice.
+
 - Delivered the first durable-storage vertical slice: `DenoKvIdentityRepository`
   and `DenoKvNamespaceRepository` use versioned serialization and native atomic
   commits, with identity find-or-create/profile ordering and case-insensitive

@@ -23,12 +23,19 @@ import {
 } from "./app.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
+import {
+  hash_session_credential,
+  MemorySessionRepository,
+} from "./session/mod.ts";
 import { deliver_locator_path } from "./publishing/mod.ts";
 import {
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   type OwnershipRepositoryFactory,
   type OwnershipStorageConfig,
+  SESSION_STORAGE_BACKEND_ENV,
+  type SessionRepositoryFactory,
+  type SessionStorageConfig,
 } from "./storage/mod.ts";
 
 Deno.test("composition root publishes and delivers an md page end to end", async () => {
@@ -187,6 +194,58 @@ Deno.test("configured composition selects linked ownership storage at its factor
   assertEquals(
     (await selected_namespace_repository.find("selected"))?.owner_user_id,
     identity.user.user_id,
+  );
+});
+
+Deno.test("configured composition selects referentially safe session storage", async () => {
+  const selected_session_repository = new MemorySessionRepository();
+  let selected_config: SessionStorageConfig | undefined;
+  const session_repository_factory: SessionRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve(selected_session_repository);
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+    [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    {
+      ownership_repository_factory: {
+        create: () =>
+          Promise.resolve({
+            identity_repository: new MemoryIdentityRepository({
+              generate: () => "user-a",
+            }),
+            namespace_repository: new MemoryNamespaceRepository(),
+          }),
+      },
+      session_repository_factory,
+    },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  const resolution = await services.session.resolve();
+  assertExists(resolution.credential_to_set);
+  assertEquals(
+    (
+      await selected_session_repository.find_by_credential_hash(
+        await hash_session_credential(resolution.credential_to_set.value),
+      )
+    )?.session_id,
+    resolution.session.session_id,
   );
 });
 

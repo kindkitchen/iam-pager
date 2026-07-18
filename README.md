@@ -95,11 +95,12 @@ The first publishing slice currently provides:
 
 - a path locator where the first segment is the namespace and the remaining
   segments are the optional page name; `site`, `api`, and `auth` are reserved;
-- an interface-first, process-local session lifecycle with guest/authenticated
-  state, hashed bearer lookup, bounded renewal, atomic credential rotation, and
-  revocation; root application middleware now gives every routed request a
-  server-generated request ID and typed session, using an opaque host-only
-  cookie without changing direct-content response bodies or isolation headers;
+- an interface-first session lifecycle, in memory by default or optionally
+  backed by Deno KV, with guest/authenticated state, hashed bearer lookup,
+  bounded renewal, atomic credential rotation, and revocation; root application
+  middleware now gives every routed request a server-generated request ID and
+  typed session, using an opaque host-only cookie without changing
+  direct-content response bodies or isolation headers;
 - provider-neutral authentication contracts, an interface-backed identity
   repository keyed by stable `(strategy_id, provider_subject)`, and a
   multi-strategy registry that rejects duplicate IDs; bounded, expiring OAuth
@@ -153,15 +154,15 @@ The first publishing slice currently provides:
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages and sessions are currently process-local. Users, external
-identities, and namespace reservations are also process-local by default, but
-can be switched together to Deno KV; selecting only durable claims is
-intentionally impossible because a restart would otherwise orphan them from
-newly generated user IDs. Guest pages in unreserved namespaces remain
-replaceable by anyone. Total page capacity, publishing frequency, expiry, a
-reservation HTTP/UI surface, durable content/session storage, and backend
-migration are not implemented; this endpoint is not ready for untrusted public
-traffic.
+Guest pages are currently process-local. Users, external identities, namespace
+reservations, and sessions are also process-local by default. Deno KV can
+persist the linked ownership records, and sessions can separately opt into that
+same database; durable sessions are rejected unless ownership is durable so an
+authenticated session cannot outlive its user. Guest pages in unreserved
+namespaces remain replaceable by anyone. Total page capacity, publishing
+frequency, expiry, a reservation HTTP/UI surface, durable content storage, and
+backend migration are not implemented; this endpoint is not ready for untrusted
+public traffic.
 
 ## Local development
 
@@ -264,25 +265,35 @@ omitted, `Deno.serve` retains its port-8000 default. A deployed instance
 requires original Google mode and its callback URL, client ID, and client secret
 variables listed above.
 
-Ownership persistence is selected independently from content and sessions. Unset
-configuration, or an explicit `memory` value, keeps both identities and
-namespace reservations process-local. Deno KV selects both linked repositories
-as one unit:
+Ownership persistence is selected independently from content and session
+transport. Unset configuration, or an explicit `memory` value, keeps identities,
+namespace reservations, and sessions process-local. Deno KV selects the linked
+ownership repositories as one unit; sessions are a separate opt-in:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/ownership.kv
+IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 ```
 
 The path is optional. When omitted, `Deno.openKv()` uses the runtime's default
 KV database (including the linked database on Deno Deploy); an explicit local
-path is durable only when its filesystem is durable. Changing the backend or
-path does not migrate or merge records. Deno KV ownership records currently have
-no application expiry or deletion path: they remain until the backing database
-is manually removed, and backup/recovery follows the selected KV service or
-deployment operator. Sessions still end on restart and pages still disappear,
-but signing in with the same provider subject resolves the same persisted user
-and therefore retains namespace ownership.
+path is durable only when its filesystem is durable. Durable sessions require
+Deno KV ownership and inherit its exact path/default database. Startup rejects
+the session option with memory ownership, preventing an authenticated session
+from surviving without its user record. Omitting the session option keeps the
+existing restart-invalidated memory behavior even when ownership is durable.
+
+The Deno KV session adapter atomically preserves creation, renewal,
+authentication-attempt consumption, credential rotation, logout, and revocation.
+For browser bearers and OAuth state it stores only hashes, never raw values.
+Session records and credential indexes receive the absolute-session-lifetime KV
+TTL; idle and absolute expiry remain enforced by the service because KV expiry
+is lazy, and logout/revocation removes the credential index atomically. Changing
+the backend or ownership path does not migrate or merge records. Ownership
+records still have no application expiry or deletion path, and backup/recovery
+follows the selected KV service or deployment operator. Pages still disappear on
+restart.
 
 For Deno Deploy, use `deno task build` as the build command and
 `_fresh/server.js` as the application entrypoint. Configure the original-mode

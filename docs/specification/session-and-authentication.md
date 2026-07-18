@@ -10,7 +10,9 @@ keeping the logic independent from Fresh routes:
   `guest` or `authenticated` session;
 - `SessionRepository` owns atomic creation, bounded renewal, credential rotation
   during upgrade, CSRF-bound authenticated logout, and revocation;
-- `MemorySessionRepository` is the first implementation;
+- `MemorySessionRepository` is the default reference implementation, while an
+  optional `DenoKvSessionRepository` preserves the same contract across restarts
+  and application instances;
 - clock, logical-ID, request-ID, and credential generation are injectable
   interfaces; production generators use UUID IDs and 256-bit random base64url
   credentials;
@@ -229,15 +231,31 @@ logical session ID or user ID, and the UI component does not decide which
 actions are authorized. No account/profile or authenticated publishing behavior
 is implied by this header state.
 
-## Storage limitation
+## Storage behavior
 
-`MemorySessionRepository` remains process-local. Restarting the process
+`MemorySessionRepository` remains the default: restarting the process
 invalidates all sessions, and multiple app instances do not share session state.
-`MemoryIdentityRepository` is still the default, but configured Deno KV can
-persist application users and provider identities together with namespace
-reservations so claims retain stable owners across restarts. This does not make
-sessions or page content durable. Repository interfaces remain the replacement
-boundaries; cookie transport remains independent from session storage.
+A deployment with Deno KV ownership may separately set
+`IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv`. The session adapter inherits the
+ownership database path (or the runtime's same default KV database); startup
+rejects durable sessions with process-local ownership so an authenticated
+session cannot retain a user ID that disappears on restart. Omitting the session
+setting preserves memory behavior even when ownership is durable.
+
+`DenoKvSessionRepository` uses versioned ISO-date values, a logical-session
+record, and a credential-hash index. Native atomic commits preserve ID and
+credential uniqueness, bounded renewal, one-use authentication attempts,
+credential rotation, CSRF-bound logout, and revocation under concurrent access.
+Raw browser bearers and OAuth state are never stored. Records and indexes
+receive a TTL through the session's absolute expiry; the service still enforces
+idle and absolute expiry because Deno KV deletion is lazy. Logout and revocation
+delete the credential index atomically, while the inaccessible primary record
+remains only until its absolute-lifetime TTL.
+
+Changing backend or ownership path does not migrate sessions. Backup and
+recovery follow the selected KV provider or deployment operator. Page content
+remains process-local. Repository interfaces remain the replacement boundaries,
+and cookie transport remains independent from session storage.
 
 ## Next boundary
 

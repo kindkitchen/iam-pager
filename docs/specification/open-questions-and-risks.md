@@ -77,12 +77,15 @@ State practical cleanup, deletion, and backup behavior. Avoid an absolute
 promise that authenticated content can never disappear; the first version only
 needs understandable normal-operation behavior.
 
-The first concrete policy applies only to Deno KV ownership records: application
-users, external identities, and namespace reservations do not expire and have no
-application deletion workflow. They remain until the selected database is
-manually removed; backup and recovery follow the KV provider or deployment
+Deno KV ownership records have the first non-expiring policy: application users,
+external identities, and namespace reservations have no application deletion
+workflow and remain until the selected database is manually removed. Optional
+Deno KV sessions instead follow the bounded session lifecycle. Their record and
+credential-index TTL is the absolute expiry; idle and absolute checks remain
+service-enforced because KV cleanup is lazy, and revocation removes bearer
+lookup immediately. Backup and recovery follow the KV provider or deployment
 operator. Switching the backend or path does not migrate records. Retention for
-pages, sessions, and future account deletion remains open.
+pages and future account deletion remains open.
 
 ## OQ-RISKS — Nearby risks
 

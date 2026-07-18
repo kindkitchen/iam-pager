@@ -43,14 +43,23 @@ application users and provider identities atomically and persists a namespace
 claim with its owner index in one atomic commit. These repositories are selected
 together because a durable namespace claim pointing at a process-local user ID
 would become orphaned after restart. Unset configuration retains both in-memory
-repositories. Content and session repositories remain independently in-memory;
-the ownership setting must not imply that pages or browser sessions survive a
-restart.
+repositories.
+
+Session persistence is a separate opt-in behind the same `SessionRepository`
+contract, but a Deno KV session must inherit a configured Deno KV ownership
+database. Startup rejects durable sessions with memory ownership, preventing an
+authenticated session from outliving its user. Session creation, renewal,
+one-use authentication attempts, credential rotation, logout, and revocation
+remain atomic. Records and credential-hash indexes carry the absolute-session
+TTL; service checks remain authoritative because KV expiration is lazy. Content
+remains independently in-memory, and neither ownership nor session settings
+imply that pages survive a restart.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
-the responsibility of the configured KV service or deployment operator. These
-limits must remain visible until lifecycle and migration behavior is delivered.
+the responsibility of the configured KV service or deployment operator. Session
+records expire through their bounded lifecycle; these operational limits must
+remain visible until broader lifecycle and migration behavior is delivered.
 
 ## QT-ROUTING — Routing and HTTP behavior
 
@@ -212,13 +221,15 @@ complete model from an interface-backed server presenter: guests get a Google
 start link with a validated local return, while authenticated sessions get only
 signed-in state and the fixed CSRF-protected logout form. UI components receive
 neither session/user IDs nor responsibility for deciding the available action.
-The current session repository is process-local and invalidates sessions on
-restart. Authentication establishes user identity only: namespace reservation
+The default session repository is process-local and invalidates sessions on
+restart; configured Deno KV can preserve sessions only alongside durable
+ownership. Authentication establishes user identity only: namespace reservation
 and publishing authorization remain explicit services above it. Those services
 now enforce concurrency-safe ownership, and configured Deno KV can preserve the
-provider identity, application user, and namespace claim across restarts; the
-reservation HTTP/UI boundary and authenticated actor wiring are still pending.
-See [session-and-authentication.md](session-and-authentication.md).
+provider identity, application user, namespace claim, and opted-in session
+across restarts; the reservation HTTP/UI boundary and authenticated actor wiring
+are still pending. See
+[session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication
 routes cannot collide with direct page locators.
