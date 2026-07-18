@@ -7,8 +7,10 @@ tags: [backend, storage, backlog]
 relates: [namespace-reservation-contracts]
 ---
 
-Queued deliberately: waits for the namespace contracts (active task) to settle
-the newest repository contract and its conformance suite.
+Queued deliberately. The namespace contract layer and its business core are
+done (`namespace-reservation-contracts`, `namespace-reservation-service`):
+`NamespaceRepository` plus conformance suite are settled and ready for
+durable backends.
 
 The in-memory repositories are the first legitimate implementation, not mocks
 — acceptable in production while the product is in development, because

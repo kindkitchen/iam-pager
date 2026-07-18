@@ -2,6 +2,19 @@
 
 ## 2026-07-18
 
+- Delivered namespace-reservation step 2 (DS-PROTECT business core):
+  `NamespaceReservationService` behind the new `NamespaceReservationManager`
+  contract validates candidate namespaces through the locator engine (typed
+  `invalid_namespace` / `forbidden_namespace` / `taken` results) before
+  atomically reserving, and lists a user's reservations; publishing now takes an
+  optional `PublishActor` (absent = guest) and consults a `PublishingAuthorizer`
+  — implemented by `NamespacePublishingAuthorizer` over `NamespaceRepository` —
+  so guest and cross-user writes into reserved namespaces are rejected with
+  typed `namespace_reserved` (403 on the guest API) while owners and unreserved
+  namespaces keep current behavior; `ContentRepository` stays protection-free by
+  contract. Wired in the composition root; 17 new tests (203 total). Completed
+  `namespace-reservation-service`; step 3 (HTTP API + site UI) is next.
+
 - Delivered namespace-reservation step 1 (DS-PROTECT contracts): new
   `lib/namespace/` with the `NamespaceReservation` model, a
   `NamespaceRepository` contract documenting atomic reserve (exactly one winner
