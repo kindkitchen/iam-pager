@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Fixed built-server authentication startup by keeping gauth and Effect out of
+  circular SSR chunks. Added an environment-driven production runner with
+  validated optional `PORT`, preserving Deno's port-8000 default when omitted;
+  documented Deno Deploy configuration, excluded immutable task history from
+  code-quality scans, and added 3 server configuration tests.
+
 - Completed authentication acceptance. The configured local integration now
   covers sign-in, authenticated resolution, logout to a distinct fresh guest,
   and stale-bearer rejection; callback failures render a provider-neutral safe
