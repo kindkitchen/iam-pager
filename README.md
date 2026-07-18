@@ -105,11 +105,14 @@ The first publishing slice currently provides:
   multi-strategy registry that rejects duplicate IDs; bounded, expiring OAuth
   attempts are owned by guest sessions with hashed one-use state, while the
   route-independent authentication service selects strategies, saves identity,
-  upgrades the logical session, and rotates its bearer credential; provider
-  adapters are not registered yet; generic browser start/callback routes now
-  provide bounded query handling, browser-safe failures, no-store redirects,
-  secret-free diagnostics, and centralized publication of the rotated session
-  cookie, while logout is not wired yet;
+  upgrades the logical session, rotates its bearer credential, and issues a
+  256-bit synchronizer token to trusted application UI; generic browser
+  start/callback routes provide bounded query handling, browser-safe failures,
+  no-store redirects, secret-free diagnostics, and centralized publication of
+  the rotated session cookie; bounded form-only `POST /auth/logout` validates
+  its CSRF token against repository state, atomically revokes authenticated
+  access, and publishes a distinct fresh guest session and bearer; provider
+  adapters are not registered yet;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,

@@ -1,5 +1,10 @@
-import type { Session } from "../session/model.ts";
-import type { SessionResolution } from "../session/model.ts";
+import { read_bounded_request_text } from "../http/request-body.ts";
+import type { SessionLogoutManager } from "../session/interfaces.ts";
+import type {
+  Session,
+  SessionLogoutResult,
+  SessionResolution,
+} from "../session/model.ts";
 import type { AuthenticationOrchestrator } from "./interfaces.ts";
 import {
   type AuthenticationCallbackResult,
@@ -9,6 +14,7 @@ import {
 
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MAX_CALLBACK_CODE_LENGTH = 4096;
+const MAX_LOGOUT_BODY_BYTES = 256;
 
 export interface AuthenticationHttpRequestContext {
   readonly request_id: string;
@@ -27,11 +33,14 @@ export type AuthenticationHttpFailureCategory =
   | `start_${Exclude<AuthenticationStartResult, { ok: true }>["reason"]}`
   | "callback_invalid_query"
   | "callback_internal_failure"
-  | `callback_${Exclude<AuthenticationCallbackResult, { ok: true }>["reason"]}`;
+  | `callback_${Exclude<AuthenticationCallbackResult, { ok: true }>["reason"]}`
+  | "logout_invalid_request"
+  | "logout_internal_failure"
+  | `logout_${Exclude<SessionLogoutResult, { ok: true }>["reason"]}`;
 
 export interface AuthenticationHttpFailure {
   readonly request_id: string;
-  readonly strategy_id: string;
+  readonly strategy_id?: string;
   readonly category: AuthenticationHttpFailureCategory;
 }
 
@@ -52,19 +61,26 @@ export interface AuthenticationHttpHandler {
     strategy_id: string,
     context: AuthenticationHttpRequestContext,
   ): Promise<AuthenticationHttpResult>;
+  logout(
+    request: Request,
+    context: AuthenticationHttpRequestContext,
+  ): Promise<AuthenticationHttpResult>;
 }
 
 export interface AuthenticationHttpAdapterOptions {
   readonly authentication: AuthenticationOrchestrator;
+  readonly sessions: SessionLogoutManager;
   readonly logger: AuthenticationHttpLogger;
 }
 
 export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
   readonly #authentication: AuthenticationOrchestrator;
+  readonly #sessions: SessionLogoutManager;
   readonly #logger: AuthenticationHttpLogger;
 
   constructor(options: AuthenticationHttpAdapterOptions) {
     this.#authentication = options.authentication;
+    this.#sessions = options.sessions;
     this.#logger = options.logger;
   }
 
@@ -182,6 +198,81 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
     };
   }
 
+  async logout(
+    request: Request,
+    context: AuthenticationHttpRequestContext,
+  ): Promise<AuthenticationHttpResult> {
+    if (request.method !== "POST") {
+      const result = this.#failure(
+        context,
+        undefined,
+        "logout_invalid_request",
+        405,
+        "logout requires POST",
+      );
+      result.response.headers.set("allow", "POST");
+      return result;
+    }
+    if (!is_form_media_type(request.headers.get("content-type"))) {
+      return this.#failure(
+        context,
+        undefined,
+        "logout_invalid_request",
+        415,
+        "logout requires form data",
+      );
+    }
+
+    const body = await read_bounded_request_text(
+      request,
+      MAX_LOGOUT_BODY_BYTES,
+    );
+    if (!body.ok) {
+      return this.#failure(
+        context,
+        undefined,
+        "logout_invalid_request",
+        body.reason === "too_large" ? 413 : 400,
+        "invalid logout request",
+      );
+    }
+    const form = new URLSearchParams(body.text);
+    const csrf_tokens = form.getAll("csrf_token");
+    if (
+      csrf_tokens.length !== 1 ||
+      [...form.keys()].some((name) => name !== "csrf_token")
+    ) {
+      return this.#failure(
+        context,
+        undefined,
+        "logout_invalid_request",
+        400,
+        "invalid logout request",
+      );
+    }
+
+    let result: SessionLogoutResult;
+    try {
+      result = await this.#sessions.logout(
+        context.session,
+        csrf_tokens[0],
+      );
+    } catch {
+      return this.#failure(
+        context,
+        undefined,
+        "logout_internal_failure",
+        500,
+        "logout could not be completed",
+      );
+    }
+    if (!result.ok) return this.#logout_failure(context, result);
+    return {
+      response: redirect_response("/"),
+      session_resolution: result.resolution,
+    };
+  }
+
   #start_failure(
     context: AuthenticationHttpRequestContext,
     strategy_id: string,
@@ -226,16 +317,32 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
     );
   }
 
+  #logout_failure(
+    context: AuthenticationHttpRequestContext,
+    result: Exclude<SessionLogoutResult, { ok: true }>,
+  ): AuthenticationHttpResult {
+    const mapping = result.reason === "invalid_csrf"
+      ? { status: 403, message: "logout could not be authorized" }
+      : { status: 409, message: "authentication session is no longer valid" };
+    return this.#failure(
+      context,
+      undefined,
+      `logout_${result.reason}`,
+      mapping.status,
+      mapping.message,
+    );
+  }
+
   #failure(
     context: AuthenticationHttpRequestContext,
-    strategy_id: string,
+    strategy_id: string | undefined,
     category: AuthenticationHttpFailureCategory,
     status: number,
     message: string,
   ): AuthenticationHttpResult {
     this.#logger.failure({
       request_id: context.request_id,
-      strategy_id,
+      ...(strategy_id === undefined ? {} : { strategy_id }),
       category,
     });
     return { response: text_response(status, message) };
@@ -265,6 +372,11 @@ function text_response(status: number, message: string): Response {
       "x-content-type-options": "nosniff",
     }),
   });
+}
+
+function is_form_media_type(content_type: string | null): boolean {
+  return content_type?.split(";", 1)[0].trim().toLowerCase() ===
+    "application/x-www-form-urlencoded";
 }
 
 function response_headers(initial: HeadersInit): Headers {

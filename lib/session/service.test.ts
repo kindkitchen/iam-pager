@@ -52,6 +52,9 @@ function make_fixture(
     clock,
     id_generator,
     credential_generator,
+    csrf_token_generator: new SequenceGenerator(
+      "stuvwxyzabcdefghijk".split("").map(credential),
+    ),
     config: { ...default_session_config, ...config },
   });
   return { repository, clock, service };
@@ -309,6 +312,114 @@ Deno.test("authentication preserves the logical session and rotates its credenti
     authenticated.credential_to_set.value,
   );
   assertEquals(new_resolution.session, authenticated.session);
+});
+
+Deno.test("logout requires an authenticated session and its exact CSRF token", async () => {
+  const { service } = make_fixture();
+  const guest = await service.resolve();
+  assertEquals(await service.logout(guest.session, credential("x")), {
+    ok: false,
+    reason: "not_authenticated",
+  });
+
+  const upgraded = await service.upgrade(guest.session, "user-1");
+  assertEquals(upgraded.ok, true);
+  if (!upgraded.ok || upgraded.resolution.session.kind !== "authenticated") {
+    return;
+  }
+  const authenticated = upgraded.resolution.session;
+  const forged_token = credential("x");
+  assertEquals(
+    await service.logout(
+      { ...authenticated, csrf_token: forged_token },
+      forged_token,
+    ),
+    { ok: false, reason: "invalid_csrf" },
+  );
+
+  const other_guest = await service.resolve();
+  const other_upgraded = await service.upgrade(other_guest.session, "user-2");
+  assertEquals(other_upgraded.ok, true);
+  if (
+    !other_upgraded.ok ||
+    other_upgraded.resolution.session.kind !== "authenticated"
+  ) {
+    return;
+  }
+  assertEquals(
+    await service.logout(
+      authenticated,
+      other_upgraded.resolution.session.csrf_token,
+    ),
+    { ok: false, reason: "invalid_csrf" },
+  );
+  assertExists(upgraded.resolution.credential_to_set);
+  const still_authenticated = await service.resolve(
+    upgraded.resolution.credential_to_set.value,
+  );
+  assertEquals(still_authenticated.session, authenticated);
+});
+
+Deno.test("logout revokes authenticated access and establishes a fresh guest", async () => {
+  const { service } = make_fixture();
+  const guest = await service.resolve();
+  const upgraded = await service.upgrade(guest.session, "user-1");
+  assertEquals(upgraded.ok, true);
+  if (!upgraded.ok || upgraded.resolution.session.kind !== "authenticated") {
+    return;
+  }
+  assertExists(upgraded.resolution.credential_to_set);
+  const authenticated_bearer = upgraded.resolution.credential_to_set.value;
+
+  const logged_out = await service.logout(
+    upgraded.resolution.session,
+    upgraded.resolution.session.csrf_token,
+  );
+  assertEquals(logged_out.ok, true);
+  if (!logged_out.ok) return;
+  assertEquals(logged_out.resolution.session.kind, "guest");
+  assertNotEquals(
+    logged_out.resolution.session.session_id,
+    upgraded.resolution.session.session_id,
+  );
+  assertExists(logged_out.resolution.credential_to_set);
+  assertNotEquals(
+    logged_out.resolution.credential_to_set.value,
+    authenticated_bearer,
+  );
+
+  const old_resolution = await service.resolve(authenticated_bearer);
+  assertEquals(old_resolution.session.kind, "guest");
+  assertNotEquals(
+    old_resolution.session.session_id,
+    upgraded.resolution.session.session_id,
+  );
+  const fresh_resolution = await service.resolve(
+    logged_out.resolution.credential_to_set.value,
+  );
+  assertEquals(fresh_resolution.session, logged_out.resolution.session);
+});
+
+Deno.test("concurrent logout requests revoke an authenticated session once", async () => {
+  const { service } = make_fixture();
+  const guest = await service.resolve();
+  const upgraded = await service.upgrade(guest.session, "user-1");
+  assertEquals(upgraded.ok, true);
+  if (!upgraded.ok || upgraded.resolution.session.kind !== "authenticated") {
+    return;
+  }
+  const authenticated = upgraded.resolution.session;
+
+  const results = await Promise.all([
+    service.logout(authenticated, authenticated.csrf_token),
+    service.logout(authenticated, authenticated.csrf_token),
+  ]);
+  assertEquals(results.filter((result) => result.ok).length, 1);
+  assertEquals(
+    results.filter((result) => !result.ok && result.reason === "stale_session")
+      .length,
+    1,
+  );
 });
 
 Deno.test("credential rotation retries rather than retaining the old bearer", async () => {

@@ -7,13 +7,13 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phase 1, route-independent authentication orchestration, and the generic
-phase-2 start/callback HTTP boundary are complete. Thin Fresh routes now map
-bounded browser requests to provider-neutral orchestration, return safe no-store
-redirects/errors, omit secrets from diagnostics, and publish callback credential
-rotation centrally without duplicate cookies. No provider strategy is registered
-yet.
+Active. Phase 1 and the provider-neutral phase-2 authentication core are
+complete. Start/callback routes own bounded browser mapping and one-use state;
+authenticated upgrades rotate the bearer and issue a 256-bit synchronizer token.
+Bounded form-only logout validates repository state, atomically revokes access,
+and centrally publishes a distinct fresh guest session and credential. No
+provider strategy is registered yet.
 
-Next: add session-bound CSRF and `POST /auth/logout` with revocation and
-fresh-guest establishment from [[001.draft]]. Google/gauth and header/navigation
-work remain gated behind completed logout.
+Next: phase 3 from [[001.draft]] — pin gauth 0.4.1 and implement the Google
+strategy adapter with explicit local/original preset composition and tests.
+Mocked consent and header/navigation remain gated behind that provider work.

@@ -3,6 +3,8 @@ import type {
   RepositoryAuthenticationAttemptConsumeResult,
   RepositoryAuthenticationAttemptSave,
   RepositoryAuthenticationAttemptSaveResult,
+  RepositoryLogout,
+  RepositoryLogoutResult,
   RepositoryUpgradeResult,
   SessionRepository,
   SessionUpgrade,
@@ -178,6 +180,7 @@ export class MemorySessionRepository implements SessionRepository {
       authenticated_at: new Date(input.authenticated_at),
       absolute_expires_at: new Date(input.absolute_expires_at),
       idle_expires_at: new Date(input.idle_expires_at),
+      csrf_token: input.csrf_token,
       credential_hash: input.credential_hash,
       revoked_at: null,
       authentication_attempts: [],
@@ -188,6 +191,31 @@ export class MemorySessionRepository implements SessionRepository {
       upgraded.session_id,
     );
     return Promise.resolve({ ok: true, record: clone_record(upgraded) });
+  }
+
+  logout(input: RepositoryLogout): Promise<RepositoryLogoutResult> {
+    const current = this.#records.get(input.session_id);
+    if (
+      current === undefined || current.revoked_at !== null ||
+      current.session_version !== input.expected_version
+    ) {
+      return Promise.resolve({ ok: false, reason: "stale_session" });
+    }
+    if (current.kind !== "authenticated") {
+      return Promise.resolve({ ok: false, reason: "not_authenticated" });
+    }
+    if (!csrf_tokens_match(current.csrf_token, input.csrf_token)) {
+      return Promise.resolve({ ok: false, reason: "invalid_csrf" });
+    }
+
+    this.#credential_index.delete(current.credential_hash);
+    this.#records.set(input.session_id, {
+      ...current,
+      session_version: current.session_version + 1,
+      revoked_at: new Date(input.logged_out_at),
+      authentication_attempts: [],
+    });
+    return Promise.resolve({ ok: true });
   }
 
   revoke(
@@ -218,6 +246,16 @@ export class MemorySessionRepository implements SessionRepository {
   }
 }
 
+/** Fixed-length comparison avoids early exit on attacker-controlled input. */
+function csrf_tokens_match(expected: string, actual: string): boolean {
+  if (actual.length !== expected.length) return false;
+  let difference = 0;
+  for (let index = 0; index < expected.length; index++) {
+    difference |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
 function clone_record(record: SessionRecord): SessionRecord {
   const common = {
     session_id: record.session_id,
@@ -237,6 +275,7 @@ function clone_record(record: SessionRecord): SessionRecord {
     user_id: record.user_id,
     authenticated_at: new Date(record.authenticated_at),
     idle_expires_at: new Date(record.idle_expires_at),
+    csrf_token: record.csrf_token,
   };
 }
 

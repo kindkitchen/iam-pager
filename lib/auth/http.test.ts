@@ -1,5 +1,10 @@
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
-import type { AuthenticatedSession, Session } from "../session/model.ts";
+import type { SessionLogoutManager } from "../session/interfaces.ts";
+import type {
+  AuthenticatedSession,
+  Session,
+  SessionLogoutResult,
+} from "../session/model.ts";
 import type { AuthenticationOrchestrator } from "./interfaces.ts";
 import type {
   AuthenticationCallbackRequest,
@@ -30,6 +35,11 @@ const authenticated_session: AuthenticatedSession = {
   authenticated_at: now,
   idle_expires_at: new Date("2026-08-17T12:00:00.000Z"),
   absolute_expires_at: new Date("2026-10-16T12:00:00.000Z"),
+  csrf_token: "c".repeat(43),
+};
+const fresh_guest_session: Session = {
+  ...guest_session,
+  session_id: "session-2",
 };
 
 class FakeAuthentication implements AuthenticationOrchestrator {
@@ -84,6 +94,27 @@ class FakeAuthentication implements AuthenticationOrchestrator {
   }
 }
 
+class FakeSessions implements SessionLogoutManager {
+  readonly logout_inputs: Array<{ session: Session; csrf_token: string }> = [];
+  logout_result: SessionLogoutResult = {
+    ok: true,
+    resolution: {
+      session: fresh_guest_session,
+      credential_to_set: {
+        value: "G".repeat(43),
+        expires_at: fresh_guest_session.absolute_expires_at,
+      },
+    },
+  };
+  throw_on_logout = false;
+
+  logout(session: Session, csrf_token: string): Promise<SessionLogoutResult> {
+    this.logout_inputs.push({ session, csrf_token });
+    if (this.throw_on_logout) throw new Error("secret logout cause");
+    return Promise.resolve(this.logout_result);
+  }
+}
+
 class MemoryLogger implements AuthenticationHttpLogger {
   readonly events: AuthenticationHttpFailure[] = [];
 
@@ -94,13 +125,18 @@ class MemoryLogger implements AuthenticationHttpLogger {
 
 function make_fixture() {
   const authentication = new FakeAuthentication();
+  const sessions = new FakeSessions();
   const logger = new MemoryLogger();
-  const adapter = new AuthenticationHttpAdapter({ authentication, logger });
+  const adapter = new AuthenticationHttpAdapter({
+    authentication,
+    sessions,
+    logger,
+  });
   const context = {
     request_id: "request-1",
     session: guest_session,
   };
-  return { adapter, authentication, context, logger };
+  return { adapter, authentication, context, logger, sessions };
 }
 
 function state(character = "s"): string {
@@ -233,6 +269,75 @@ Deno.test("authentication HTTP boundary rejects ambiguous queries before orchest
   assertEquals(
     logger.events.map((event) => event.category),
     ["start_invalid_query", "callback_invalid_query"],
+  );
+});
+
+Deno.test("authentication HTTP logout publishes a fresh guest session", async () => {
+  const { adapter, context, logger, sessions } = make_fixture();
+  const result = await adapter.logout(
+    new Request("https://app.example/auth/logout", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `csrf_token=${authenticated_session.csrf_token}`,
+    }),
+    { ...context, session: authenticated_session },
+  );
+
+  assertEquals(result.response.status, 303);
+  assertEquals(result.response.headers.get("location"), "/");
+  assertEquals(result.response.headers.get("cache-control"), "no-store");
+  assertEquals(sessions.logout_inputs, [{
+    session: authenticated_session,
+    csrf_token: authenticated_session.csrf_token,
+  }]);
+  assertExists(result.session_resolution);
+  assertEquals(result.session_resolution.session, fresh_guest_session);
+  assertEquals(
+    result.session_resolution.credential_to_set?.value,
+    "G".repeat(43),
+  );
+  assertEquals(logger.events, []);
+});
+
+Deno.test("authentication HTTP logout rejects unsafe requests and hides CSRF data", async () => {
+  const { adapter, context, logger, sessions } = make_fixture();
+  const authenticated_context = { ...context, session: authenticated_session };
+
+  const wrong_method = await adapter.logout(
+    new Request("https://app.example/auth/logout"),
+    authenticated_context,
+  );
+  const ambiguous = await adapter.logout(
+    new Request("https://app.example/auth/logout", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `csrf_token=${authenticated_session.csrf_token}&csrf_token=secret`,
+    }),
+    authenticated_context,
+  );
+  sessions.logout_result = { ok: false, reason: "invalid_csrf" };
+  const invalid_csrf = await adapter.logout(
+    new Request("https://app.example/auth/logout", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "csrf_token=secret-submitted-token",
+    }),
+    authenticated_context,
+  );
+
+  assertEquals(wrong_method.response.status, 405);
+  assertEquals(wrong_method.response.headers.get("allow"), "POST");
+  assertEquals(ambiguous.response.status, 400);
+  assertEquals(invalid_csrf.response.status, 403);
+  assertEquals(sessions.logout_inputs.length, 1);
+  assertEquals(JSON.stringify(logger.events).includes("secret"), false);
+  assertEquals(
+    logger.events.map((event) => event.category),
+    [
+      "logout_invalid_request",
+      "logout_invalid_request",
+      "logout_invalid_csrf",
+    ],
   );
 });
 

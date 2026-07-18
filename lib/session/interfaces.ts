@@ -5,6 +5,7 @@ import type {
   SessionAuthenticationAttemptInput,
   SessionAuthenticationAttemptSaveResult,
   SessionCredential,
+  SessionLogoutResult,
   SessionRecord,
   SessionResolution,
   SessionUpgradeResult,
@@ -22,13 +23,22 @@ export interface CredentialGenerator {
   generate(): string;
 }
 
+export interface CsrfTokenGenerator {
+  generate(): string;
+}
+
 /** Read-only lifecycle surface needed while resolving application requests. */
 export interface SessionResolver {
   resolve(credential?: string | null): Promise<SessionResolution>;
 }
 
+/** Authenticated-session termination surface used by the HTTP boundary. */
+export interface SessionLogoutManager {
+  logout(session: Session, csrf_token: string): Promise<SessionLogoutResult>;
+}
+
 /** Full lifecycle surface used by request and authentication orchestration. */
-export interface SessionManager extends SessionResolver {
+export interface SessionManager extends SessionResolver, SessionLogoutManager {
   save_authentication_attempt(
     session: Session,
     input: SessionAuthenticationAttemptInput,
@@ -53,6 +63,7 @@ export interface SessionUpgrade {
   readonly session_id: string;
   readonly expected_version: number;
   readonly credential_hash: string;
+  readonly csrf_token: string;
   readonly user_id: string;
   readonly authenticated_at: Date;
   readonly absolute_expires_at: Date;
@@ -64,6 +75,20 @@ export type RepositoryUpgradeResult =
   | {
     readonly ok: false;
     readonly reason: "stale_session" | "credential_collision";
+  };
+
+export interface RepositoryLogout {
+  readonly session_id: string;
+  readonly expected_version: number;
+  readonly csrf_token: string;
+  readonly logged_out_at: Date;
+}
+
+export type RepositoryLogoutResult =
+  | { readonly ok: true }
+  | {
+    readonly ok: false;
+    readonly reason: "invalid_csrf" | "not_authenticated" | "stale_session";
   };
 
 export interface RepositoryAuthenticationAttemptSave {
@@ -118,6 +143,7 @@ export interface SessionRepository {
     input: RepositoryAuthenticationAttemptConsume,
   ): Promise<RepositoryAuthenticationAttemptConsumeResult>;
   upgrade(input: SessionUpgrade): Promise<RepositoryUpgradeResult>;
+  logout(input: RepositoryLogout): Promise<RepositoryLogoutResult>;
   revoke(
     session_id: string,
     expected_version: number,

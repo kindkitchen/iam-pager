@@ -1,6 +1,7 @@
 import type {
   Clock,
   CredentialGenerator,
+  CsrfTokenGenerator,
   IdGenerator,
   SessionManager,
   SessionRepository,
@@ -12,6 +13,7 @@ import {
   type SessionAuthenticationAttemptInput,
   type SessionAuthenticationAttemptSaveResult,
   type SessionCredential,
+  type SessionLogoutResult,
   type SessionRecord,
   type SessionResolution,
   type SessionUpgradeResult,
@@ -46,6 +48,7 @@ export interface SessionServiceOptions {
   readonly clock: Clock;
   readonly id_generator: IdGenerator;
   readonly credential_generator: CredentialGenerator;
+  readonly csrf_token_generator: CsrfTokenGenerator;
   readonly config?: SessionConfig;
 }
 
@@ -55,6 +58,7 @@ export class SessionService implements SessionManager {
   readonly #clock: Clock;
   readonly #id_generator: IdGenerator;
   readonly #credential_generator: CredentialGenerator;
+  readonly #csrf_token_generator: CsrfTokenGenerator;
   readonly #config: SessionConfig;
 
   constructor(options: SessionServiceOptions) {
@@ -62,6 +66,7 @@ export class SessionService implements SessionManager {
     this.#clock = options.clock;
     this.#id_generator = options.id_generator;
     this.#credential_generator = options.credential_generator;
+    this.#csrf_token_generator = options.csrf_token_generator;
     this.#config = options.config ?? default_session_config;
     validate_config(this.#config);
   }
@@ -228,6 +233,7 @@ export class SessionService implements SessionManager {
         session_id: session.session_id,
         expected_version: session.session_version,
         credential_hash: await hash_session_credential(credential),
+        csrf_token: this.#generate_csrf_token(),
         user_id,
         authenticated_at,
         absolute_expires_at,
@@ -256,6 +262,29 @@ export class SessionService implements SessionManager {
       session.session_version,
       this.#clock.now(),
     );
+  }
+
+  /** Revoke authenticated access before issuing an unrelated guest bearer. */
+  async logout(
+    session: Session,
+    csrf_token: string,
+  ): Promise<SessionLogoutResult> {
+    if (session.kind !== "authenticated") {
+      return { ok: false, reason: "not_authenticated" };
+    }
+    if (!CREDENTIAL_PATTERN.test(csrf_token)) {
+      return { ok: false, reason: "invalid_csrf" };
+    }
+
+    const logged_out_at = this.#clock.now();
+    const result = await this.#repository.logout({
+      session_id: session.session_id,
+      expected_version: session.session_version,
+      csrf_token,
+      logged_out_at,
+    });
+    if (!result.ok) return result;
+    return { ok: true, resolution: await this.#create_guest(logged_out_at) };
   }
 
   async #create_guest(at = this.#clock.now()): Promise<SessionResolution> {
@@ -294,6 +323,14 @@ export class SessionService implements SessionManager {
       throw new Error("credential generator must return 256-bit base64url");
     }
     return credential;
+  }
+
+  #generate_csrf_token(): string {
+    const csrf_token = this.#csrf_token_generator.generate();
+    if (!CREDENTIAL_PATTERN.test(csrf_token)) {
+      throw new Error("CSRF token generator must return 256-bit base64url");
+    }
+    return csrf_token;
   }
 }
 
@@ -343,6 +380,7 @@ function public_session(record: SessionRecord): Session {
     user_id: record.user_id,
     authenticated_at: new Date(record.authenticated_at),
     idle_expires_at: new Date(record.idle_expires_at),
+    csrf_token: record.csrf_token,
   };
 }
 

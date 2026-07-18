@@ -2,6 +2,13 @@
 
 ## 2026-07-18
 
+- Completed the provider-neutral authentication core with a bounded, form-only
+  `POST /auth/logout`. Authentication now issues a 256-bit session-bound
+  synchronizer token; logout validates it against repository state, atomically
+  revokes the authenticated bearer, and publishes a distinct fresh guest session
+  and credential. Added 5 lifecycle/HTTP tests (149 total); no provider strategy
+  is registered yet.
+
 - Added provider-neutral `GET /auth/:strategy/start` and callback HTTP
   boundaries with bounded query handling, one-use invalid-callback state,
   no-store redirects, browser-safe error mapping, secret-free diagnostics, and

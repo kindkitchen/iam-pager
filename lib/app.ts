@@ -97,6 +97,7 @@ export function create_app_services(
     clock,
     id_generator: new CryptoIdGenerator(),
     credential_generator: new CryptoCredentialGenerator(),
+    csrf_token_generator: new CryptoCredentialGenerator(),
   });
   const session_transport = new CookieSessionStrategy(
     session_cookie_config(options.session_cookie_mode ?? "production"),
@@ -119,6 +120,7 @@ export function create_app_services(
   });
   const authentication_http = new AuthenticationHttpAdapter({
     authentication,
+    sessions: session,
     logger: new ConsoleAuthenticationHttpLogger(),
   });
   return {

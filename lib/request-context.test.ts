@@ -48,6 +48,9 @@ function make_fixture() {
     credential_generator: new SequenceGenerator(
       "ABCDEF".split("").map((character) => character.repeat(43)),
     ),
+    csrf_token_generator: new SequenceGenerator(
+      "uvwxyz".split("").map((character) => character.repeat(43)),
+    ),
   });
   const middleware = new RequestContextMiddleware({
     session_resolver: session,
@@ -208,6 +211,7 @@ Deno.test("route session transitions supersede initially staged credentials", as
           user_id: "user-1",
           authenticated_at: new Date("2026-07-18T12:00:00.000Z"),
           idle_expires_at: new Date("2026-08-17T12:00:00.000Z"),
+          csrf_token: "z".repeat(43),
         },
         credential_to_set: {
           value: "Z".repeat(43),

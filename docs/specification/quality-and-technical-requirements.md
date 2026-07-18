@@ -155,10 +155,13 @@ credential. Generic browser start/callback routes use the provider-neutral
 orchestrator, bounded query values, one-use state, validated local returns,
 no-store responses, and diagnostics that omit callback values and raw provider
 causes. Successful callback rotation is published by the central request
-boundary so it supersedes a concurrently staged renewal cookie. No provider is
-registered yet, and CSRF-protected logout remains the next authentication
-boundary. The current in-memory repository is process-local and invalidates
-sessions on restart. See
+boundary so it supersedes a concurrently staged renewal cookie. Authentication
+also issues a 256-bit synchronizer token outside the cookie. Bounded form-only
+`POST /auth/logout` validates that token against the current repository record,
+atomically revokes the authenticated bearer, and centrally publishes a distinct
+fresh guest session and credential; stale, cross-session, and replayed requests
+cannot revoke authenticated access. No provider is registered yet. The current
+in-memory repository is process-local and invalidates sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication

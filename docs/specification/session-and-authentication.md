@@ -9,7 +9,7 @@ keeping the logic independent from Fresh routes:
 - `SessionService` resolves a bearer credential to exactly one discriminated
   `guest` or `authenticated` session;
 - `SessionRepository` owns atomic creation, bounded renewal, credential rotation
-  during upgrade, and revocation;
+  during upgrade, CSRF-bound authenticated logout, and revocation;
 - `MemorySessionRepository` is the first implementation;
 - clock, logical-ID, request-ID, and credential generation are injectable
   interfaces; production generators use UUID IDs and 256-bit random base64url
@@ -28,7 +28,7 @@ keeping the logic independent from Fresh routes:
   strategy selection, safe local returns, one-use attempt consumption, verified
   identity persistence, logical-session upgrade, and bearer rotation;
 - `AuthenticationHttpAdapter` maps generic browser requests and outcomes without
-  depending on Fresh, while thin dynamic routes select the strategy by ID;
+  depending on Fresh, while thin routes select strategies or publish logout;
 - `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
   rotation centrally, superseding any credential renewal staged at resolution.
 
@@ -107,21 +107,30 @@ cannot upgrade a session.
 Callback handling consumes the matching attempt atomically before provider
 exchange. A malformed code or provider failure therefore leaves the session as
 guest without retaining reusable state. Success find-or-creates the identity by
-stable provider subject, preserves the logical session ID, and rotates the
-bearer so the old credential stops resolving it. Caller-provided return paths
-must start with one `/`; absolute, protocol-relative, backslash, control-byte,
-and recursively encoded external forms are rejected.
+stable provider subject, preserves the logical session ID, rotates the bearer so
+the old credential stops resolving it, and issues a new 256-bit synchronizer
+token. That token is persisted with the authenticated session and exposed only
+to trusted application code for state-changing forms; it is not placed in the
+cookie or a response header. Caller-provided return paths must start with one
+`/`; absolute, protocol-relative, backslash, control-byte, and recursively
+encoded external forms are rejected.
 
-The generic browser boundary exposes `GET /auth/:strategy/start` and
-`GET /auth/:strategy/callback`. Start derives the exact callback path on the
-request origin and returns a `303` to the selected strategy authorization URL.
-Callback requires one route-safe state value, bounds provider codes before they
-reach a strategy, consumes recognizable state even when the code is missing,
-duplicated, or oversized, and returns a `303` only to the local path saved at
-start. Responses are `no-store` with `Referrer-Policy: no-referrer`; errors use
-generic text/status mappings and restrictive content headers. Diagnostics carry
-only request ID, validated strategy ID (or an `invalid` marker), and an internal
-category. Raw query values, cookies, tokens, and provider causes are absent.
+The generic browser boundary exposes `GET /auth/:strategy/start`,
+`GET /auth/:strategy/callback`, and `POST /auth/logout`. Start derives the exact
+callback path on the request origin and returns a `303` to the selected strategy
+authorization URL. Callback requires one route-safe state value, bounds provider
+codes before they reach a strategy, consumes recognizable state even when the
+code is missing, duplicated, or oversized, and returns a `303` only to the local
+path saved at start. Logout accepts only a bounded URL-encoded form with one
+`csrf_token`; the repository compares it against the current authenticated
+record while atomically revoking that record. Success creates a distinct guest
+logical session and bearer, stages it through the central request boundary, and
+returns `303 /`. Duplicate, missing, stale, cross-session, and replayed logout
+tokens cannot revoke authenticated access. Responses are `no-store` with
+`Referrer-Policy: no-referrer`; errors use generic text/status mappings and
+restrictive content headers. Diagnostics carry only request ID, optional
+validated strategy ID, and an internal category. Raw query/form values, cookies,
+tokens, and provider causes are absent.
 
 The composition root wires these routes but currently registers no provider
 adapter, so valid strategy paths return `404` until a strategy is configured.
@@ -137,8 +146,7 @@ storage.
 
 ## Next boundary
 
-Complete phase 2 with session-bound CSRF protection and `POST /auth/logout`.
-Logout must revoke authenticated access, replace the bearer, and immediately
-establish a fresh guest session. Google/gauth adaptation remains phase 3; header
-and authenticated navigation work stays gated behind the complete authentication
-core.
+Phase 2 is complete. Next, implement the Google strategy through pinned gauth
+0.4.1 with explicit local/original preset composition and adapter tests. The
+mocked local consent flow follows in phase 4; header and authenticated
+navigation work stays gated behind that verified provider flow.

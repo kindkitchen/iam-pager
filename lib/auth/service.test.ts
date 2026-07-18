@@ -111,6 +111,12 @@ function make_fixture() {
       token("C"),
       token("D"),
     ]),
+    csrf_token_generator: new SequenceGenerator([
+      token("w"),
+      token("x"),
+      token("y"),
+      token("z"),
+    ]),
   });
   const google = new FakeStrategy("google");
   const other = new FakeStrategy("other");

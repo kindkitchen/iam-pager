@@ -16,6 +16,8 @@ export interface AuthenticatedSession extends BaseSession {
   readonly user_id: string;
   readonly authenticated_at: Date;
   readonly idle_expires_at: Date;
+  /** Synchronizer token exposed only to trusted application UI. */
+  readonly csrf_token: string;
 }
 
 export type Session = GuestSession | AuthenticatedSession;
@@ -76,6 +78,13 @@ export interface SessionResolution {
 export type SessionUpgradeResult =
   | { readonly ok: true; readonly resolution: SessionResolution }
   | { readonly ok: false; readonly reason: "stale_session" };
+
+export type SessionLogoutResult =
+  | { readonly ok: true; readonly resolution: SessionResolution }
+  | {
+    readonly ok: false;
+    readonly reason: "invalid_csrf" | "not_authenticated" | "stale_session";
+  };
 
 export function session_expiry(session: Session): Date {
   if (session.kind === "guest") return session.absolute_expires_at;
