@@ -7,13 +7,14 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phase 1 and the first phase-2 slice are complete. The interface-first
-session lifecycle uses independent opaque-cookie transport and process-local
-storage; typed middleware preserves routed response semantics. Provider-neutral
-identity/strategy contracts, atomic process-local identity persistence keyed by
-stable provider subject, and a duplicate-safe multi-strategy registry are now
-wired at composition.
+Active. Phase 1 and the route-independent phase-2 core are complete. The
+interface-first session lifecycle, typed request middleware, provider-neutral
+identity/strategy contracts, atomic process-local repositories, and
+multi-strategy registry are wired at composition. Guest sessions now own
+bounded, expiring attempts with hashed one-use state, and the authentication
+orchestrator consumes callbacks before provider exchange, saves stable identity,
+and upgrades the logical session with bearer rotation.
 
-Next: add bounded, session-owned OAuth attempts and the authentication service,
-then generic start/callback/logout routes from [[001.draft]]. Google/gauth and
-header/navigation work remain gated behind that core.
+Next: add generic start/callback HTTP adapters and CSRF-protected logout with
+fresh-guest establishment from [[001.draft]]. Google/gauth and header/navigation
+work remain gated behind those routes.

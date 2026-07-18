@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+- Added session-owned OAuth attempts and provider-neutral authentication
+  orchestration. Guest sessions now retain at most five 10-minute attempts with
+  hashed one-use state and server-only provider context; callbacks consume state
+  atomically before provider exchange, reject unsafe local returns, persist the
+  stable external identity, and upgrade the logical session with bearer
+  rotation. Wired the service at composition and added 7 attempt/orchestration
+  tests (138 total).
+
 - Added the first phase-2 authentication core: provider-neutral identity and
   strategy interfaces, an atomic process-local identity repository keyed by
   stable provider subject rather than email, and a multi-strategy registry with

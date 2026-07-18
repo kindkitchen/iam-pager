@@ -1,5 +1,9 @@
 import type {
   Session,
+  SessionAuthenticationAttempt,
+  SessionAuthenticationAttemptConsumeResult,
+  SessionAuthenticationAttemptInput,
+  SessionAuthenticationAttemptSaveResult,
   SessionCredential,
   SessionRecord,
   SessionResolution,
@@ -25,6 +29,15 @@ export interface SessionResolver {
 
 /** Full lifecycle surface used by request and authentication orchestration. */
 export interface SessionManager extends SessionResolver {
+  save_authentication_attempt(
+    session: Session,
+    input: SessionAuthenticationAttemptInput,
+  ): Promise<SessionAuthenticationAttemptSaveResult>;
+  consume_authentication_attempt(
+    session: Session,
+    strategy_id: string,
+    state: string,
+  ): Promise<SessionAuthenticationAttemptConsumeResult>;
   upgrade(session: Session, user_id: string): Promise<SessionUpgradeResult>;
   revoke(session: Session): Promise<boolean>;
 }
@@ -53,9 +66,39 @@ export type RepositoryUpgradeResult =
     readonly reason: "stale_session" | "credential_collision";
   };
 
+export interface RepositoryAuthenticationAttemptSave {
+  readonly session_id: string;
+  readonly expected_version: number;
+  readonly attempt: SessionAuthenticationAttempt;
+  readonly max_pending_attempts: number;
+}
+
+export type RepositoryAuthenticationAttemptSaveResult =
+  | { readonly ok: true }
+  | {
+    readonly ok: false;
+    readonly reason: "stale_session" | "state_collision" | "not_guest";
+  };
+
+export interface RepositoryAuthenticationAttemptConsume {
+  readonly session_id: string;
+  readonly expected_version: number;
+  readonly strategy_id: string;
+  readonly state_hash: string;
+  readonly consumed_at: Date;
+}
+
+export type RepositoryAuthenticationAttemptConsumeResult =
+  | { readonly ok: true; readonly attempt: SessionAuthenticationAttempt }
+  | {
+    readonly ok: false;
+    readonly reason: "not_found" | "stale_session" | "not_guest";
+  };
+
 /**
  * Session persistence is independent from HTTP transport. Implementations must
- * make create, renewal, upgrade/rotation, and revocation atomic.
+ * make create, attempt save/consume, renewal, upgrade/rotation, and revocation
+ * atomic.
  */
 export interface SessionRepository {
   find_by_credential_hash(
@@ -68,6 +111,12 @@ export interface SessionRepository {
     last_seen_at: Date,
     idle_expires_at?: Date,
   ): Promise<SessionRecord | null>;
+  save_authentication_attempt(
+    input: RepositoryAuthenticationAttemptSave,
+  ): Promise<RepositoryAuthenticationAttemptSaveResult>;
+  consume_authentication_attempt(
+    input: RepositoryAuthenticationAttemptConsume,
+  ): Promise<RepositoryAuthenticationAttemptConsumeResult>;
   upgrade(input: SessionUpgrade): Promise<RepositoryUpgradeResult>;
   revoke(
     session_id: string,

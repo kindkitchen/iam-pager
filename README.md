@@ -102,8 +102,11 @@ The first publishing slice currently provides:
   cookie without changing direct-content response bodies or isolation headers;
 - provider-neutral authentication contracts, an interface-backed process-local
   identity repository keyed by stable `(strategy_id, provider_subject)`, and a
-  multi-strategy registry that rejects duplicate IDs; provider adapters and
-  browser authentication routes are not wired yet;
+  multi-strategy registry that rejects duplicate IDs; bounded, expiring OAuth
+  attempts are owned by guest sessions with hashed one-use state, while the
+  route-independent authentication service selects strategies, saves identity,
+  upgrades the logical session, and rotates its bearer credential; provider
+  adapters and browser authentication routes are not wired yet;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,

@@ -1,4 +1,6 @@
 import {
+  type AuthenticationOrchestrator,
+  AuthenticationService,
   AuthenticationStrategyRegistry,
   type AuthenticationStrategyResolver,
   type IdentityRepository,
@@ -50,6 +52,7 @@ export interface AppServices {
   request_context: RequestContextHandler;
   identity_repository: IdentityRepository;
   authentication_strategies: AuthenticationStrategyResolver;
+  authentication: AuthenticationOrchestrator;
 }
 
 export interface AppServiceOptions {
@@ -83,10 +86,11 @@ export function create_app_services(
     repository,
     handlers: [new MdPageHandler()],
   });
+  const clock = new SystemClock();
   const session_repository = new MemorySessionRepository();
   const session = new SessionService({
     repository: session_repository,
-    clock: new SystemClock(),
+    clock,
     id_generator: new CryptoIdGenerator(),
     credential_generator: new CryptoCredentialGenerator(),
   });
@@ -102,6 +106,13 @@ export function create_app_services(
     new CryptoIdGenerator(),
   );
   const authentication_strategies = new AuthenticationStrategyRegistry([]);
+  const authentication = new AuthenticationService({
+    strategies: authentication_strategies,
+    sessions: session,
+    identities: identity_repository,
+    state_generator: new CryptoCredentialGenerator(),
+    clock,
+  });
   return {
     engine,
     repository,
@@ -111,6 +122,7 @@ export function create_app_services(
     request_context,
     identity_repository,
     authentication_strategies,
+    authentication,
   };
 }
 

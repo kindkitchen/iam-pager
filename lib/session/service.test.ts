@@ -3,6 +3,7 @@ import type { Clock, CredentialGenerator, IdGenerator } from "./interfaces.ts";
 import { MemorySessionRepository } from "./memory-repository.ts";
 import {
   default_session_config,
+  hash_authentication_state,
   hash_session_credential,
   type SessionConfig,
   SessionService,
@@ -141,6 +142,139 @@ Deno.test("renewal is bounded by the threshold instead of writing every request"
   clock.advance(1);
   const not_repeated = await service.resolve(bearer);
   assertEquals(not_repeated.credential_to_set, undefined);
+});
+
+Deno.test("authentication attempts persist only hashed state and consume once", async () => {
+  const { repository, service } = make_fixture();
+  const guest = await service.resolve();
+  assertExists(guest.credential_to_set);
+  const state = credential("s");
+
+  assertEquals(
+    await service.save_authentication_attempt(guest.session, {
+      strategy_id: "google",
+      state,
+      callback_url: "https://app.example/auth/google/callback",
+      return_to: "/site/account",
+      attempt_context: "pkce-verifier",
+    }),
+    { ok: true },
+  );
+
+  const record = await repository.find_by_credential_hash(
+    await hash_session_credential(guest.credential_to_set.value),
+  );
+  assertExists(record);
+  assertEquals(record.authentication_attempts.length, 1);
+  assertEquals(
+    record.authentication_attempts[0].state_hash,
+    await hash_authentication_state(state),
+  );
+  assertEquals(JSON.stringify(record).includes(state), false);
+
+  assertEquals(
+    await service.consume_authentication_attempt(
+      guest.session,
+      "other",
+      state,
+    ),
+    { ok: false, reason: "invalid_attempt" },
+  );
+  const consumed = await service.consume_authentication_attempt(
+    guest.session,
+    "google",
+    state,
+  );
+  assertEquals(consumed.ok, true);
+  if (!consumed.ok) return;
+  assertEquals(consumed.attempt.return_to, "/site/account");
+  assertEquals(consumed.attempt.attempt_context, "pkce-verifier");
+  assertEquals(
+    await service.consume_authentication_attempt(
+      guest.session,
+      "google",
+      state,
+    ),
+    { ok: false, reason: "invalid_attempt" },
+  );
+});
+
+Deno.test("authentication attempts are session-owned, expiring, and bounded", async () => {
+  const { clock, service } = make_fixture({
+    max_pending_authentication_attempts: 2,
+  });
+  const first_guest = await service.resolve();
+  const other_guest = await service.resolve();
+  const save = (state: string) =>
+    service.save_authentication_attempt(first_guest.session, {
+      strategy_id: "google",
+      state,
+      callback_url: "https://app.example/auth/google/callback",
+      return_to: "/",
+    });
+
+  await save(credential("a"));
+  assertEquals(
+    await service.consume_authentication_attempt(
+      other_guest.session,
+      "google",
+      credential("a"),
+    ),
+    { ok: false, reason: "invalid_attempt" },
+  );
+  await save(credential("b"));
+  await save(credential("c"));
+  assertEquals(
+    await service.consume_authentication_attempt(
+      first_guest.session,
+      "google",
+      credential("a"),
+    ),
+    { ok: false, reason: "invalid_attempt" },
+  );
+  assertEquals(
+    (await service.consume_authentication_attempt(
+      first_guest.session,
+      "google",
+      credential("b"),
+    )).ok,
+    true,
+  );
+
+  await save(credential("d"));
+  clock.advance(default_session_config.authentication_attempt_lifetime_ms);
+  assertEquals(
+    await service.consume_authentication_attempt(
+      first_guest.session,
+      "google",
+      credential("d"),
+    ),
+    { ok: false, reason: "invalid_attempt" },
+  );
+});
+
+Deno.test("concurrent authentication callbacks consume one attempt only", async () => {
+  const { service } = make_fixture();
+  const guest = await service.resolve();
+  const state = credential("s");
+  await service.save_authentication_attempt(guest.session, {
+    strategy_id: "google",
+    state,
+    callback_url: "https://app.example/auth/google/callback",
+    return_to: "/",
+  });
+
+  const results = await Promise.all([
+    service.consume_authentication_attempt(guest.session, "google", state),
+    service.consume_authentication_attempt(guest.session, "google", state),
+  ]);
+  assertEquals(results.filter((result) => result.ok).length, 1);
+  assertEquals(
+    results.filter((result) =>
+      !result.ok && result.reason === "invalid_attempt"
+    ).length,
+    1,
+  );
 });
 
 Deno.test("authentication preserves the logical session and rotates its credential", async () => {

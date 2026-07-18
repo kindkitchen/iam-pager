@@ -22,7 +22,10 @@ keeping the logic independent from Fresh routes:
   first implementation;
 - `AuthenticationStrategy` provides provider-neutral begin/complete operations,
   while `AuthenticationStrategyResolver` keeps orchestration independent from
-  the default `AuthenticationStrategyRegistry` implementation.
+  the default `AuthenticationStrategyRegistry` implementation;
+- `AuthenticationService` owns route-independent start/callback orchestration:
+  strategy selection, safe local returns, one-use attempt consumption, verified
+  identity persistence, logical-session upgrade, and bearer rotation.
 
 ## Security and lifecycle invariants
 
@@ -43,7 +46,9 @@ Default lifetimes are:
 - guest absolute lifetime: 7 days;
 - authenticated idle lifetime: 30 days;
 - authenticated absolute lifetime: 90 days;
-- renewal threshold: 1 day.
+- renewal threshold: 1 day;
+- authentication-attempt lifetime: 10 minutes;
+- pending authentication attempts per guest session: 5.
 
 These values are centralized in `default_session_config` and can be replaced
 explicitly at composition time.
@@ -83,9 +88,25 @@ fails at composition time, and an unknown ID resolves to no strategy so the HTTP
 adapter can return `404` without provider conditionals.
 
 The strategy contract accepts application-owned state and returns an opaque
-attempt context that must remain server-side. The composition root currently
-registers no provider adapter; Google is added only after attempt orchestration
-exists.
+attempt context that remains server-side. `AuthenticationService` generates 256
+bits of state, while session persistence stores only its SHA-256 hash together
+with the selected strategy, exact callback URL, validated local return, provider
+context, and timestamps. Attempts belong only to the guest session that started
+them, expire after 10 minutes, and are capped at five; a sixth start evicts the
+oldest live attempt. Mismatched, expired, cross-session, and replayed state
+cannot upgrade a session.
+
+Callback handling consumes the matching attempt atomically before provider
+exchange. A malformed code or provider failure therefore leaves the session as
+guest without retaining reusable state. Success find-or-creates the identity by
+stable provider subject, preserves the logical session ID, and rotates the
+bearer so the old credential stops resolving it. Caller-provided return paths
+must start with one `/`; absolute, protocol-relative, backslash, control-byte,
+and recursively encoded external forms are rejected.
+
+The composition root wires the authentication orchestrator but currently
+registers no provider adapter; provider-specific code and browser routes remain
+outside this slice.
 
 ## Storage limitation
 
@@ -98,8 +119,8 @@ storage.
 
 ## Next boundary
 
-Phase 2 continues with bounded OAuth-attempt ownership and replay protection,
-the authentication service, generic start/callback routes, safe local returns,
-session upgrade/credential rotation, and CSRF-protected logout. Google/gauth
-adaptation remains phase 3; header and authenticated navigation work stays gated
-behind the complete authentication core.
+Phase 2 continues with generic start/callback HTTP adapters, browser-safe error
+mapping, upgraded-cookie attachment, and CSRF-protected logout that immediately
+establishes a fresh guest session. Google/gauth adaptation remains phase 3;
+header and authenticated navigation work stays gated behind the complete
+authentication core.

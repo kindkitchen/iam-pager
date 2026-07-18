@@ -2,8 +2,12 @@ import type {
   ApplicationUser,
   AuthenticationBeginInput,
   AuthenticationBeginOutput,
+  AuthenticationCallbackRequest,
+  AuthenticationCallbackResult,
   AuthenticationCompleteInput,
   AuthenticationIdentity,
+  AuthenticationStartRequest,
+  AuthenticationStartResult,
   AuthenticationStrategyResult,
   ExternalIdentity,
   ExternalIdentityObservation,
@@ -12,6 +16,11 @@ import type {
 
 /** User ID source used by the first identity repository implementation. */
 export interface UserIdGenerator {
+  generate(): string;
+}
+
+/** Cryptographically random OAuth-state source used by orchestration. */
+export interface AuthenticationStateGenerator {
   generate(): string;
 }
 
@@ -45,4 +54,12 @@ export interface AuthenticationStrategy {
 /** Read-only strategy selection surface used by authentication orchestration. */
 export interface AuthenticationStrategyResolver {
   resolve(strategy_id: string): AuthenticationStrategy | null;
+}
+
+/** Route-independent authentication use cases. */
+export interface AuthenticationOrchestrator {
+  start(input: AuthenticationStartRequest): Promise<AuthenticationStartResult>;
+  complete(
+    input: AuthenticationCallbackRequest,
+  ): Promise<AuthenticationCallbackResult>;
 }
