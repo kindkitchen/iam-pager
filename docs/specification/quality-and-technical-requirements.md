@@ -142,12 +142,16 @@ still unimplemented.
   and creator-supplied page content.
 
 The session foundation keeps transport and storage separate. A browser bearer
-credential is opaque; only its hash is stored. Every application request will
-resolve to a guest or authenticated server-side session, never a caller-selected
-identity or a nullable state. Authentication preserves the logical session but
-atomically rotates its credential. The current in-memory repository is
-process-local and invalidates sessions on restart; cookie transport and request
-middleware remain the next implementation boundary. See
+credential is opaque; only its hash is stored. Every request reaching
+application routing now resolves to a guest or authenticated server-side
+session, never a caller-selected identity or a nullable state, and receives a
+new server-owned request ID. Production uses an explicit secure host-only
+cookie; localhost uses a distinct configuration selected by the development
+command. Middleware adds only the request-ID and pending cookie headers,
+preserving direct-content status, body, length, and CSP isolation.
+Authentication preserves the logical session but atomically rotates its
+credential. The current in-memory repository is process-local and invalidates
+sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication

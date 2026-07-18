@@ -3,7 +3,10 @@ export type {
   CredentialGenerator,
   IdGenerator,
   RepositoryUpgradeResult,
+  SessionManager,
   SessionRepository,
+  SessionResolver,
+  SessionTransport,
   SessionUpgrade,
 } from "./interfaces.ts";
 export type {
@@ -22,6 +25,12 @@ export {
   SystemClock,
 } from "./generators.ts";
 export { MemorySessionRepository } from "./memory-repository.ts";
+export {
+  CookieSessionStrategy,
+  session_cookie_config,
+  type SessionCookieConfig,
+  type SessionCookieMode,
+} from "./cookie-strategy.ts";
 export {
   default_session_config,
   hash_session_credential,

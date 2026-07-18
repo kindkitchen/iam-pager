@@ -95,10 +95,11 @@ The first publishing slice currently provides:
 
 - a path locator where the first segment is the namespace and the remaining
   segments are the optional page name; `site`, `api`, and `auth` are reserved;
-- an interface-first, process-local session core with guest/authenticated state,
-  hashed bearer lookup, bounded renewal, atomic credential rotation, and
-  revocation; cookie transport and Fresh request middleware are not wired yet,
-  so the web app does not issue session cookies;
+- an interface-first, process-local session lifecycle with guest/authenticated
+  state, hashed bearer lookup, bounded renewal, atomic credential rotation, and
+  revocation; root application middleware now gives every routed request a
+  server-generated request ID and typed session, using an opaque host-only
+  cookie without changing direct-content response bodies or isolation headers;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -125,7 +126,13 @@ traffic.
 
 Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
 the live preview, publish the page, and use the resulting link to open its
-direct URL. Markdown can be edited as raw source or as guided sections; both
+direct URL. The development task explicitly sets
+`IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
+`iam_pager_session_local` cookie for localhost. Every other entry point defaults
+to the production `__Host-iam_pager_session` cookie with `Secure`; do not set
+local mode in a deployed environment. Static/framework assets served before
+Fresh application routing intentionally receive neither session state nor a
+request ID. Markdown can be edited as raw source or as guided sections; both
 modes update the same draft. The deterministic section adapter groups a fenced
 code block into one editable unit while retaining unfamiliar Markdown as safe
 one-line raw sections instead of approximating a full Markdown AST. Collapsed

@@ -2,21 +2,21 @@
 
 ## Current implementation boundary
 
-The first authentication milestone implements the transport-independent session
-lifecycle under `lib/session/`. It is application logic, not Fresh route logic:
+Phase 1 implements the session lifecycle and its HTTP request boundary while
+keeping the logic independent from Fresh routes:
 
 - `SessionService` resolves a bearer credential to exactly one discriminated
   `guest` or `authenticated` session;
 - `SessionRepository` owns atomic creation, bounded renewal, credential rotation
   during upgrade, and revocation;
 - `MemorySessionRepository` is the first implementation;
-- clock, logical-ID, and credential generation are injectable interfaces;
-- the production generators use UUID logical IDs and 256-bit random base64url
-  credentials.
-
-Cookie transport and root request middleware are the next milestone. Until they
-are wired, the web app does not issue session cookies or add session state to
-Fresh requests.
+- clock, logical-ID, request-ID, and credential generation are injectable
+  interfaces; production generators use UUID IDs and 256-bit random base64url
+  credentials;
+- `CookieSessionStrategy` is the first `SessionTransport`, independent from
+  storage and containing only the opaque bearer;
+- `RequestContextMiddleware` resolves the session and populates typed
+  `AppRequestContext` before a Fresh route runs.
 
 ## Security and lifecycle invariants
 
@@ -42,6 +42,30 @@ Default lifetimes are:
 These values are centralized in `default_session_config` and can be replaced
 explicitly at composition time.
 
+## Cookie and request boundary
+
+Production defaults to the host-only `__Host-iam_pager_session` cookie with
+`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, an explicit expiry, and no
+`Domain`. Localhost must be selected explicitly with
+`IAM_PAGER_SESSION_COOKIE_MODE=local`; apart from using the distinct
+`iam_pager_session_local` name, it omits only `Secure`. Invalid mode values fail
+at composition time rather than weakening the production cookie. The
+`deno task dev` command makes this local selection explicitly.
+
+Every request reaching application file routing receives a new server-owned
+request ID in `AppRequestContext` and `x-request-id`, regardless of any inbound
+header. Missing or unusable cookies receive a new guest session and replacement
+cookie; a valid credential resolves the same logical session, and bounded
+renewal refreshes the existing bearer cookie only at the lifecycle threshold.
+Static and framework assets handled before file routing are outside this
+semantic boundary.
+
+The middleware calls the selected route once and changes only response headers.
+Success, redirect, returned or framework-generated error, API, missing-page, and
+direct-content responses retain their status, status text, body stream, declared
+`Content-Length`, existing cookies, disposition, and CSP/isolation headers.
+Session IDs are never exposed as response headers or cookie contents.
+
 ## Storage limitation
 
 `MemorySessionRepository` is process-local. Restarting the process invalidates
@@ -52,8 +76,8 @@ chosen storage implementation.
 
 ## Next boundary
 
-The next phase adds an explicit production/local cookie strategy and root Fresh
-middleware. Every request reaching application routing will then receive a new
-server-generated request ID and resolved session, while static/framework assets
-served before application routing remain outside that guarantee. The middleware
-must preserve direct-content bodies, lengths, and isolation headers.
+Phase 2 adds provider-neutral identity persistence, strategy registration,
+OAuth-attempt ownership and replay protection, generic start/callback routes,
+safe local returns, session upgrade/credential rotation, and CSRF-protected
+logout. Google/gauth adaptation remains phase 3; header and authenticated
+navigation work stays gated behind the complete authentication core.

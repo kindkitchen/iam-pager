@@ -2,6 +2,7 @@ import type {
   Clock,
   CredentialGenerator,
   IdGenerator,
+  SessionManager,
   SessionRepository,
 } from "./interfaces.ts";
 import {
@@ -40,7 +41,7 @@ export interface SessionServiceOptions {
 }
 
 /** Owns session lifecycle; HTTP cookie behavior remains a transport concern. */
-export class SessionService {
+export class SessionService implements SessionManager {
   readonly #repository: SessionRepository;
   readonly #clock: Clock;
   readonly #id_generator: IdGenerator;

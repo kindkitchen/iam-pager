@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-18
+
+- Completed the session HTTP boundary with explicit production/local host-only
+  cookie strategies, typed request context, unique server-owned request IDs, and
+  root Fresh middleware. Routed success, redirect, API/error, missing, and
+  direct-content responses receive pending cookies and diagnostics without
+  changing status, body, length, existing cookies, or CSP isolation. Added 9
+  cookie/composition/request-preservation tests (121 total).
+
 ## 2026-07-17
 
 - Activated user authentication and implemented its transport-independent
