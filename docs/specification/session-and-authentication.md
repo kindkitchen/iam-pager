@@ -170,6 +170,16 @@ two localhost URLs. Other startup commands must provide
 `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID` and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET` for
 original mode.
 
+The production SSR build externalizes gauth and Effect together. The selected
+package preset therefore loads through the runtime module graph instead of a
+bundle chunk that circularly waits on the composition root's startup validation.
+The process runner validates optional `PORT` through an environment-source
+interface before loading the built server; a valid value is passed to
+`Deno.serve`, while omission leaves Deno's native port-8000 default intact. Deno
+Deploy instead runs the generated `_fresh/server.js` fetch entrypoint after
+`deno task build`; every deployment context must still provide valid
+original-mode configuration before warm-up can succeed.
+
 Local mode serves `GET /auth/google/mock-consent` through gauth's package
 renderer. The boundary requires exactly the generated 256-bit state,
 `openid email profile` scope, and configured callback URI before rendering; it

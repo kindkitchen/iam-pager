@@ -207,6 +207,28 @@ publishing. Keep the development server running because guest pages are stored
 only in that process. Site styling is loaded by the site shell only; it is not
 injected into direct page responses.
 
+## Production startup and deployment
+
+Build first, then start the generated server with a production environment file:
+
+```sh
+deno task build
+deno task --env-file=.env.production.local start
+```
+
+`PORT` is optional. When set, it must be an integer from 0 through 65535; when
+omitted, `Deno.serve` retains its port-8000 default. A deployed instance
+requires original Google mode and its callback URL, client ID, and client secret
+variables listed above.
+
+For Deno Deploy, use `deno task build` as the build command and
+`_fresh/server.js` as the application entrypoint. Configure the original-mode
+Google variables for every deployment context that must warm successfully. The
+callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
+used by that context. The SSR build deliberately leaves gauth and Effect as
+runtime imports so loading the selected preset cannot deadlock through circular
+bundle chunks.
+
 ## Technical stack
 
 - TypeScript with strict checks
