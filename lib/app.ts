@@ -1,8 +1,11 @@
 import {
+  AuthenticationHttpAdapter,
+  type AuthenticationHttpHandler,
   type AuthenticationOrchestrator,
   AuthenticationService,
   AuthenticationStrategyRegistry,
   type AuthenticationStrategyResolver,
+  ConsoleAuthenticationHttpLogger,
   type IdentityRepository,
   MemoryIdentityRepository,
 } from "./auth/mod.ts";
@@ -53,6 +56,7 @@ export interface AppServices {
   identity_repository: IdentityRepository;
   authentication_strategies: AuthenticationStrategyResolver;
   authentication: AuthenticationOrchestrator;
+  authentication_http: AuthenticationHttpHandler;
 }
 
 export interface AppServiceOptions {
@@ -113,6 +117,10 @@ export function create_app_services(
     state_generator: new CryptoCredentialGenerator(),
     clock,
   });
+  const authentication_http = new AuthenticationHttpAdapter({
+    authentication,
+    logger: new ConsoleAuthenticationHttpLogger(),
+  });
   return {
     engine,
     repository,
@@ -123,6 +131,7 @@ export function create_app_services(
     identity_repository,
     authentication_strategies,
     authentication,
+    authentication_http,
   };
 }
 

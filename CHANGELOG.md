@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Added provider-neutral `GET /auth/:strategy/start` and callback HTTP
+  boundaries with bounded query handling, one-use invalid-callback state,
+  no-store redirects, browser-safe error mapping, secret-free diagnostics, and
+  centralized rotated-cookie publication. Added 6 adapter/session-transition
+  tests (144 total); no provider strategy is registered yet.
+
 - Added session-owned OAuth attempts and provider-neutral authentication
   orchestration. Guest sessions now retain at most five 10-minute attempts with
   hashed one-use state and server-only provider context; callbacks consume state

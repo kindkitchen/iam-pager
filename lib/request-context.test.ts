@@ -15,6 +15,7 @@ import {
   type IdGenerator,
   MemorySessionRepository,
   session_cookie_config,
+  type SessionResolution,
   SessionService,
   SystemClock,
 } from "./session/mod.ts";
@@ -190,6 +191,47 @@ Deno.test("request middleware preserves every returned response surface", async 
     assertEquals(response.headers.get("x-request-id"), `request-${index + 1}`);
     assertEquals(response.headers.getSetCookie().length, 1);
   }
+});
+
+Deno.test("route session transitions supersede initially staged credentials", async () => {
+  const { middleware } = make_fixture();
+  let replacement: SessionResolution | undefined;
+  const context = pipeline_context(
+    new Request("http://localhost/auth/google/callback"),
+    (state) => {
+      const guest = state.request_context.session;
+      replacement = {
+        session: {
+          ...guest,
+          kind: "authenticated",
+          session_version: guest.session_version + 1,
+          user_id: "user-1",
+          authenticated_at: new Date("2026-07-18T12:00:00.000Z"),
+          idle_expires_at: new Date("2026-08-17T12:00:00.000Z"),
+        },
+        credential_to_set: {
+          value: "Z".repeat(43),
+          expires_at: new Date("2026-08-17T12:00:00.000Z"),
+        },
+      };
+      middleware.apply_session_resolution(state, replacement);
+      return new Response(null, { status: 303, headers: { location: "/" } });
+    },
+  );
+
+  const response = await middleware.handle(context);
+
+  assertExists(replacement);
+  assertEquals(context.state.request_context.session, replacement.session);
+  assertEquals(response.headers.getSetCookie().length, 1);
+  assertEquals(
+    response.headers.getSetCookie()[0].includes("Z".repeat(43)),
+    true,
+  );
+  assertEquals(
+    response.headers.getSetCookie()[0].includes("A".repeat(43)),
+    false,
+  );
 });
 
 Deno.test("framework error boundaries can decorate a response after a route throws", async () => {

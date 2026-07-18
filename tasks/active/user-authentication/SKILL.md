@@ -7,14 +7,13 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phase 1 and the route-independent phase-2 core are complete. The
-interface-first session lifecycle, typed request middleware, provider-neutral
-identity/strategy contracts, atomic process-local repositories, and
-multi-strategy registry are wired at composition. Guest sessions now own
-bounded, expiring attempts with hashed one-use state, and the authentication
-orchestrator consumes callbacks before provider exchange, saves stable identity,
-and upgrades the logical session with bearer rotation.
+Active. Phase 1, route-independent authentication orchestration, and the generic
+phase-2 start/callback HTTP boundary are complete. Thin Fresh routes now map
+bounded browser requests to provider-neutral orchestration, return safe no-store
+redirects/errors, omit secrets from diagnostics, and publish callback credential
+rotation centrally without duplicate cookies. No provider strategy is registered
+yet.
 
-Next: add generic start/callback HTTP adapters and CSRF-protected logout with
+Next: add session-bound CSRF and `POST /auth/logout` with revocation and
 fresh-guest establishment from [[001.draft]]. Google/gauth and header/navigation
-work remain gated behind those routes.
+work remain gated behind completed logout.

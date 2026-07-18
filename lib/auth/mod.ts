@@ -27,6 +27,17 @@ export {
   is_authentication_strategy_id,
   normalize_authentication_return_to,
 } from "./model.ts";
+export {
+  AuthenticationHttpAdapter,
+  type AuthenticationHttpAdapterOptions,
+  type AuthenticationHttpFailure,
+  type AuthenticationHttpFailureCategory,
+  type AuthenticationHttpHandler,
+  type AuthenticationHttpLogger,
+  type AuthenticationHttpRequestContext,
+  type AuthenticationHttpResult,
+  ConsoleAuthenticationHttpLogger,
+} from "./http.ts";
 export { MemoryIdentityRepository } from "./memory-identity-repository.ts";
 export { AuthenticationStrategyRegistry } from "./strategy-registry.ts";
 export {

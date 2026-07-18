@@ -46,11 +46,12 @@ those choices should not require rewriting the corresponding product rules.
 - Content updates must not expose a new payload with stale metadata or the
   reverse.
 
-The current prototype maps `/` and `/site/*` to the site, reserves `site` and
-`api` as namespaces, and maps every other unclaimed path through the path-slug
-locator strategy. Replaceable guest content uses `no-store` until validators
-exist. Active HTML and SVG delivery must receive an origin-less sandbox and a
-restrictive content security policy in addition to content sanitization.
+The current prototype maps `/` and `/site/*` to the site, reserves `site`,
+`api`, and `auth` as namespaces, and maps every other unclaimed path through the
+path-slug locator strategy. Replaceable guest content uses `no-store` until
+validators exist. Active HTML and SVG delivery must receive an origin-less
+sandbox and a restrictive content security policy in addition to content
+sanitization.
 
 ## QT-CONTENT — Content handling
 
@@ -150,7 +151,13 @@ cookie; localhost uses a distinct configuration selected by the development
 command. Middleware adds only the request-ID and pending cookie headers,
 preserving direct-content status, body, length, and CSP isolation.
 Authentication preserves the logical session but atomically rotates its
-credential. The current in-memory repository is process-local and invalidates
+credential. Generic browser start/callback routes use the provider-neutral
+orchestrator, bounded query values, one-use state, validated local returns,
+no-store responses, and diagnostics that omit callback values and raw provider
+causes. Successful callback rotation is published by the central request
+boundary so it supersedes a concurrently staged renewal cookie. No provider is
+registered yet, and CSRF-protected logout remains the next authentication
+boundary. The current in-memory repository is process-local and invalidates
 sessions on restart. See
 [session-and-authentication.md](session-and-authentication.md).
 

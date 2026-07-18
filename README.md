@@ -106,7 +106,10 @@ The first publishing slice currently provides:
   attempts are owned by guest sessions with hashed one-use state, while the
   route-independent authentication service selects strategies, saves identity,
   upgrades the logical session, and rotates its bearer credential; provider
-  adapters and browser authentication routes are not wired yet;
+  adapters are not registered yet; generic browser start/callback routes now
+  provide bounded query handling, browser-safe failures, no-store redirects,
+  secret-free diagnostics, and centralized publication of the rotated session
+  cookie, while logout is not wired yet;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,

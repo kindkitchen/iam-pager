@@ -2,7 +2,8 @@
 
 ## Current implementation boundary
 
-Phase 1 implements the session lifecycle and its HTTP request boundary while
+The implemented foundation covers the session lifecycle, request boundary,
+authentication orchestration, and generic browser start/callback adapters while
 keeping the logic independent from Fresh routes:
 
 - `SessionService` resolves a bearer credential to exactly one discriminated
@@ -25,7 +26,11 @@ keeping the logic independent from Fresh routes:
   the default `AuthenticationStrategyRegistry` implementation;
 - `AuthenticationService` owns route-independent start/callback orchestration:
   strategy selection, safe local returns, one-use attempt consumption, verified
-  identity persistence, logical-session upgrade, and bearer rotation.
+  identity persistence, logical-session upgrade, and bearer rotation;
+- `AuthenticationHttpAdapter` maps generic browser requests and outcomes without
+  depending on Fresh, while thin dynamic routes select the strategy by ID;
+- `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
+  rotation centrally, superseding any credential renewal staged at resolution.
 
 ## Security and lifecycle invariants
 
@@ -74,8 +79,11 @@ semantic boundary.
 The middleware calls the selected route once and changes only response headers.
 Success, redirect, returned or framework-generated error, API, missing-page, and
 direct-content responses retain their status, status text, body stream, declared
-`Content-Length`, existing cookies, disposition, and CSP/isolation headers.
-Session IDs are never exposed as response headers or cookie contents.
+`Content-Length`, existing cookies, disposition, and CSP/isolation headers. A
+successful callback stages its upgraded session and rotated credential through
+the same middleware boundary; that credential supersedes any renewal selected
+when the request began, so conflicting session cookies are not emitted. Session
+IDs are never exposed as response headers or cookie contents.
 
 ## Identity and strategy boundary
 
@@ -104,9 +112,19 @@ bearer so the old credential stops resolving it. Caller-provided return paths
 must start with one `/`; absolute, protocol-relative, backslash, control-byte,
 and recursively encoded external forms are rejected.
 
-The composition root wires the authentication orchestrator but currently
-registers no provider adapter; provider-specific code and browser routes remain
-outside this slice.
+The generic browser boundary exposes `GET /auth/:strategy/start` and
+`GET /auth/:strategy/callback`. Start derives the exact callback path on the
+request origin and returns a `303` to the selected strategy authorization URL.
+Callback requires one route-safe state value, bounds provider codes before they
+reach a strategy, consumes recognizable state even when the code is missing,
+duplicated, or oversized, and returns a `303` only to the local path saved at
+start. Responses are `no-store` with `Referrer-Policy: no-referrer`; errors use
+generic text/status mappings and restrictive content headers. Diagnostics carry
+only request ID, validated strategy ID (or an `invalid` marker), and an internal
+category. Raw query values, cookies, tokens, and provider causes are absent.
+
+The composition root wires these routes but currently registers no provider
+adapter, so valid strategy paths return `404` until a strategy is configured.
 
 ## Storage limitation
 
@@ -119,8 +137,8 @@ storage.
 
 ## Next boundary
 
-Phase 2 continues with generic start/callback HTTP adapters, browser-safe error
-mapping, upgraded-cookie attachment, and CSRF-protected logout that immediately
-establishes a fresh guest session. Google/gauth adaptation remains phase 3;
-header and authenticated navigation work stays gated behind the complete
-authentication core.
+Complete phase 2 with session-bound CSRF protection and `POST /auth/logout`.
+Logout must revoke authenticated access, replace the bearer, and immediately
+establish a fresh guest session. Google/gauth adaptation remains phase 3; header
+and authenticated navigation work stays gated behind the complete authentication
+core.

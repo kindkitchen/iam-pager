@@ -2,6 +2,7 @@ import type {
   IdGenerator,
   Session,
   SessionCredential,
+  SessionResolution,
   SessionResolver,
   SessionTransport,
 } from "./session/mod.ts";
@@ -33,6 +34,10 @@ export interface RequestPipelineContext {
 
 export interface RequestContextHandler {
   handle(context: RequestPipelineContext): Promise<Response>;
+  apply_session_resolution(
+    state: AppRequestState,
+    resolution: SessionResolution,
+  ): void;
   decorate(state: AppRequestState, response: Response): Response;
 }
 
@@ -77,6 +82,23 @@ export class RequestContextMiddleware implements RequestContextHandler {
   }
 
   /**
+   * Publish a route-owned lifecycle transition and supersede any credential
+   * renewal staged while the request was first resolved.
+   */
+  apply_session_resolution(
+    state: AppRequestState,
+    resolution: SessionResolution,
+  ): void {
+    state.request_context = {
+      ...state.request_context,
+      session: resolution.session,
+    };
+    state[response_context_key] = {
+      credential_to_set: resolution.credential_to_set,
+    };
+  }
+
+  /**
    * Change only the response envelope. This is shared with the Fresh error
    * boundary so framework-generated failures receive the same diagnostics.
    */
@@ -91,8 +113,8 @@ export class RequestContextMiddleware implements RequestContextHandler {
         decorated,
         response_context.credential_to_set,
       );
-      delete state[response_context_key];
     }
+    delete state[response_context_key];
     return decorated;
   }
 }
