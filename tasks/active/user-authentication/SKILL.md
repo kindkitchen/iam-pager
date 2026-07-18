@@ -7,13 +7,13 @@ tags: [authentication, sessions, backend, frontend]
 relates: []
 ---
 
-Active. Phase 1 is complete: the session lifecycle, process-local repository,
-explicit production/local opaque cookie transport, typed request context, and
-root Fresh middleware are implemented. Every application-routed request now has
-a unique server-owned request ID and guest/authenticated session; response
-status/body/length and direct-content isolation remain intact.
+Active. Phase 1 and the first phase-2 slice are complete. The interface-first
+session lifecycle uses independent opaque-cookie transport and process-local
+storage; typed middleware preserves routed response semantics. Provider-neutral
+identity/strategy contracts, atomic process-local identity persistence keyed by
+stable provider subject, and a duplicate-safe multi-strategy registry are now
+wired at composition.
 
-Next: begin phase 2 with provider-neutral identity models, an interface-backed
-memory repository, and the multi-strategy registry. Then add bounded OAuth
-attempt orchestration and generic auth routes in [[001.draft]] before Google or
-header/navigation work.
+Next: add bounded, session-owned OAuth attempts and the authentication service,
+then generic start/callback/logout routes from [[001.draft]]. Google/gauth and
+header/navigation work remain gated behind that core.

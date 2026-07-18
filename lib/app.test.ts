@@ -35,6 +35,20 @@ Deno.test("composition root forbids platform route namespaces", async () => {
   }
 });
 
+Deno.test("composition root wires interface-backed identity services", async () => {
+  const services = create_app_services();
+  assertEquals(services.authentication_strategies.resolve("google"), null);
+
+  const identity = await services.identity_repository.find_or_create({
+    strategy_id: "fake",
+    provider_subject: "subject-1",
+    email: "person@example.com",
+    observed_at: new Date("2026-07-18T12:00:00.000Z"),
+  });
+  assertEquals(identity.created, true);
+  assertEquals(identity.identity.user_id, identity.user.user_id);
+});
+
 Deno.test("composition root defaults secure and requires explicit local cookies", () => {
   const credential = {
     value: "A".repeat(43),

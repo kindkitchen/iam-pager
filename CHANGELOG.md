@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Added the first phase-2 authentication core: provider-neutral identity and
+  strategy interfaces, an atomic process-local identity repository keyed by
+  stable provider subject rather than email, and a multi-strategy registry with
+  route-safe IDs and duplicate rejection. Wired the defaults at composition and
+  added 10 identity/registry tests (131 total).
+
 - Completed the session HTTP boundary with explicit production/local host-only
   cookie strategies, typed request context, unique server-owned request IDs, and
   root Fresh middleware. Routed success, redirect, API/error, missing, and

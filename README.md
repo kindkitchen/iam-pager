@@ -100,6 +100,10 @@ The first publishing slice currently provides:
   revocation; root application middleware now gives every routed request a
   server-generated request ID and typed session, using an opaque host-only
   cookie without changing direct-content response bodies or isolation headers;
+- provider-neutral authentication contracts, an interface-backed process-local
+  identity repository keyed by stable `(strategy_id, provider_subject)`, and a
+  multi-strategy registry that rejects duplicate IDs; provider adapters and
+  browser authentication routes are not wired yet;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -117,10 +121,10 @@ The first publishing slice currently provides:
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages are currently process-local and replaceable by anyone. Total page
-capacity, publishing frequency, expiry, namespace reservation, and durable
-storage are not implemented; this endpoint is not ready for untrusted public
-traffic.
+Guest pages, sessions, users, and external identities are currently
+process-local. Guest pages remain replaceable by anyone. Total page capacity,
+publishing frequency, expiry, namespace reservation, and durable/shared storage
+are not implemented; this endpoint is not ready for untrusted public traffic.
 
 ## Local development
 

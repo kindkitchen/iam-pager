@@ -1,3 +1,9 @@
+import {
+  AuthenticationStrategyRegistry,
+  type AuthenticationStrategyResolver,
+  type IdentityRepository,
+  MemoryIdentityRepository,
+} from "./auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import {
   type ContentRepository,
@@ -42,6 +48,8 @@ export interface AppServices {
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
+  identity_repository: IdentityRepository;
+  authentication_strategies: AuthenticationStrategyResolver;
 }
 
 export interface AppServiceOptions {
@@ -90,6 +98,10 @@ export function create_app_services(
     session_transport,
     request_id_generator: new CryptoIdGenerator(),
   });
+  const identity_repository = new MemoryIdentityRepository(
+    new CryptoIdGenerator(),
+  );
+  const authentication_strategies = new AuthenticationStrategyRegistry([]);
   return {
     engine,
     repository,
@@ -97,6 +109,8 @@ export function create_app_services(
     session,
     session_transport,
     request_context,
+    identity_repository,
+    authentication_strategies,
   };
 }
 
