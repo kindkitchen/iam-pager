@@ -2,6 +2,14 @@
 
 ## 2026-07-18
 
+- Completed authentication acceptance. The configured local integration now
+  covers sign-in, authenticated resolution, logout to a distinct fresh guest,
+  and stale-bearer rejection; callback failures render a provider-neutral safe
+  retry without reusable state or leaked values. Settled Google-first account
+  entry/recovery separately from namespace authority, recorded a headless
+  Chromium sign-in/logout smoke, and passed check, 165 tests, and production
+  build.
+
 - Reopened the authentication task after validating its original acceptance
   criteria. Its final step now covers the integrated logout-to-fresh-guest flow,
   safe callback retry presentation, settled authentication specification, local

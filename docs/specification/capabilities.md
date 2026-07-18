@@ -43,15 +43,20 @@ The app can show an eligible public page inside a thin wrapper that provides:
 
 ## CP-NAMESPACE — Authentication and namespace management
 
-An authenticated creator can:
+Account entry and namespace authority are separate capabilities. The implemented
+Google-first authentication foundation can establish an application user,
+upgrade a guest session, and end an authenticated session by rotating to a fresh
+guest. Provider-account recovery remains with Google; no namespace is reserved
+merely because a user is authenticated.
 
-- establish and end a session;
-- reserve an available unique namespace;
+The subsequent namespace-ownership capability must let an authenticated creator:
+
+- reserve an available unique namespace with concurrency-safe uniqueness;
 - see the namespaces attached to the account;
 - keep guests and other creators from mutating pages in reserved namespaces;
 - reserve additional namespaces later.
 
-Account recovery can follow the first protected publishing flow.
+Namespace persistence and publishing authorization are not implemented yet.
 
 ## CP-MANAGE — Authenticated page management
 

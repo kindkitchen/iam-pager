@@ -16,6 +16,22 @@ Guest publishing is a limited form of normal publishing, not a separate product
 direction. A guest has stricter limits and does not reserve the namespace;
 overwrite behavior is accepted as described by `DA-NAMESPACE`.
 
+### OQ-AUTH — Account entry and recovery
+
+The first account-entry flow is Google-first sign-in: a verified Google subject
+atomically finds or creates one application user and external identity, so there
+is no separate registration form or application password. The guest logical
+session is upgraded in place to preserve attributable guest activity while its
+bearer rotates; matching email never links another provider identity.
+
+Account recovery for this flow belongs to Google. The application provides no
+password reset or provider-account recovery, and its current process-local
+identity storage is not durable account persistence. Logout revokes the
+currently authenticated session and establishes an unrelated fresh guest; it
+does not delete the application user or provider identity. Namespace reservation
+and concurrent uniqueness are a subsequent authorization capability, not an
+effect of authentication itself.
+
 ## OQ-OPEN — MVP decisions still needed
 
 ### OQ-CONTENT — Supported content
@@ -46,12 +62,6 @@ Choose the smallest programmatic publishing and direct-retrieval request and
 response contracts. Authenticated management should extend the same application
 behavior rather than creating separate rules for the UI and API. Concrete API
 routing remains an integration choice.
-
-### OQ-AUTH — Account entry and recovery
-
-Choose the first user-visible registration, sign-in, session, and recovery flow.
-The implementation can remain authentication-provider agnostic, while namespace
-reservation must still be unique during concurrent attempts.
 
 ### OQ-EXPLORE — Public exploration
 

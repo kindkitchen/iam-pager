@@ -16,6 +16,7 @@ import {
   AuthenticationHttpAdapter,
   type AuthenticationHttpFailure,
   type AuthenticationHttpLogger,
+  SiteAuthenticationCallbackFailurePresenter,
 } from "./http.ts";
 
 const now = new Date("2026-07-18T12:00:00.000Z");
@@ -131,6 +132,8 @@ function make_fixture() {
     authentication,
     sessions,
     logger,
+    callback_failure_presenter:
+      new SiteAuthenticationCallbackFailurePresenter(),
   });
   const context = {
     request_id: "request-1",
@@ -369,7 +372,15 @@ Deno.test("authentication HTTP failures use safe status, body, and diagnostics",
   assertEquals(unknown.response.status, 404);
   assertEquals(provider_failure.response.status, 502);
   assertEquals(internal.response.status, 500);
-  assertStringIncludes(await provider_failure.response.text(), "could not");
+  assertEquals(
+    provider_failure.response.headers.get("content-type"),
+    "text/html; charset=utf-8",
+  );
+  const failure_html = await provider_failure.response.text();
+  assertStringIncludes(failure_html, "Sign-in could not be completed");
+  assertStringIncludes(failure_html, 'href="/auth/google/start"');
+  assertEquals(failure_html.includes("secret-code"), false);
+  assertEquals(failure_html.includes(state()), false);
   assertEquals(
     JSON.stringify(logger.events).includes("secret"),
     false,

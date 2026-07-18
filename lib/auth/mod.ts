@@ -28,6 +28,8 @@ export {
   normalize_authentication_return_to,
 } from "./model.ts";
 export {
+  type AuthenticationCallbackFailurePresenter,
+  type AuthenticationCallbackFailureView,
   AuthenticationHttpAdapter,
   type AuthenticationHttpAdapterOptions,
   type AuthenticationHttpFailure,
@@ -37,6 +39,7 @@ export {
   type AuthenticationHttpRequestContext,
   type AuthenticationHttpResult,
   ConsoleAuthenticationHttpLogger,
+  SiteAuthenticationCallbackFailurePresenter,
 } from "./http.ts";
 export {
   compose_google_gauth,

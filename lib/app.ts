@@ -16,6 +16,7 @@ import {
   type IdentityRepository,
   MemoryIdentityRepository,
   parse_google_auth_config,
+  SiteAuthenticationCallbackFailurePresenter,
 } from "./auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import {
@@ -137,6 +138,8 @@ export function create_app_services(
     authentication,
     sessions: session,
     logger: new ConsoleAuthenticationHttpLogger(),
+    callback_failure_presenter:
+      new SiteAuthenticationCallbackFailurePresenter(),
   });
   const google_mock_consent_http = new GoogleMockConsentHttpAdapter({
     screen: options.google_mock_consent_screen ?? null,

@@ -107,21 +107,23 @@ The first publishing slice currently provides:
   route-independent authentication service selects strategies, saves identity,
   upgrades the logical session, rotates its bearer credential, and issues a
   256-bit synchronizer token to trusted application UI; generic browser
-  start/callback routes provide bounded query handling, browser-safe failures,
-  no-store redirects, secret-free diagnostics, and centralized publication of
-  the rotated session cookie; bounded form-only `POST /auth/logout` validates
-  its CSRF token against repository state, atomically revokes authenticated
-  access, and publishes a distinct fresh guest session and bearer; the pinned
-  gauth 0.4.1 Google adapter maps exact authorization inputs, server-only PKCE
-  context, and verified profile output without retaining provider tokens or
-  exposing provider failures; startup configuration explicitly selects and
-  composes the package's loopback-only local or original preset and registers
-  Google; local mode also serves gauth's package-rendered mock consent screen
-  behind exact authorization-query validation, while original mode keeps that
-  route unavailable; a server-owned site-navigation presenter maps the typed
-  session to either Google sign-in with a validated local return or a
-  CSRF-protected logout form, and components render that complete model without
-  receiving session IDs or making authorization decisions;
+  start/callback routes provide bounded query handling, no-store redirects,
+  secret-free diagnostics, centralized publication of the rotated session
+  cookie, and a provider-neutral site-owned callback failure page whose safe
+  retry link retains no callback values; bounded form-only `POST /auth/logout`
+  validates its CSRF token against repository state, atomically revokes
+  authenticated access, and publishes a distinct fresh guest session and bearer;
+  the pinned gauth 0.4.1 Google adapter maps exact authorization inputs,
+  server-only PKCE context, and verified profile output without retaining
+  provider tokens or exposing provider failures; startup configuration
+  explicitly selects and composes the package's loopback-only local or original
+  preset and registers Google; local mode also serves gauth's package-rendered
+  mock consent screen behind exact authorization-query validation, while
+  original mode keeps that route unavailable; a server-owned site-navigation
+  presenter maps the typed session to either Google sign-in with a validated
+  local return or a CSRF-protected logout form, and components render that
+  complete model without receiving session IDs or making authorization
+  decisions;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -155,9 +157,12 @@ local gauth preset with the localhost Google callback and mock-consent URLs.
 
 The site's `Sign in with Google` header action starts the local sign-in flow,
 and the package-rendered consent screen returns through the callback to the
-current local site URL with an upgraded browser session. An authenticated header
-shows only signed-in state and the CSRF-protected `Sign out` action;
-authenticated publishing and management are not implemented yet.
+current local site URL with an upgraded browser session. A failed callback shows
+a site-owned retry page without preserving reusable callback state. An
+authenticated header shows only signed-in state and the CSRF-protected
+`Sign out` action; signing out revokes that authenticated bearer and immediately
+rotates the browser to a distinct guest session. Authenticated publishing,
+namespace ownership, and management are not implemented yet.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set either local mode in a deployed environment.

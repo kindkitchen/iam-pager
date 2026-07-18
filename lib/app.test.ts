@@ -213,6 +213,175 @@ Deno.test("configured local Google browser flow renders consent and upgrades the
     stale.state.request_context.session.session_id === original_session_id,
     false,
   );
+
+  const authenticated_session = callback.state.request_context.session;
+  if (authenticated_session.kind !== "authenticated") return;
+  const logout_request = new Request(
+    "http://localhost:5173/auth/logout",
+    {
+      method: "POST",
+      headers: {
+        cookie: authenticated_cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        csrf_token: authenticated_session.csrf_token,
+      }),
+    },
+  );
+  const logged_out = await run_application_request(
+    services,
+    logout_request,
+    async (request_state) => {
+      const result = await services.authentication_http.logout(
+        logout_request,
+        request_state.request_context,
+      );
+      if (result.session_resolution !== undefined) {
+        services.request_context.apply_session_resolution(
+          request_state,
+          result.session_resolution,
+        );
+      }
+      return result.response;
+    },
+  );
+  assertEquals(logged_out.response.status, 303);
+  assertEquals(logged_out.response.headers.get("location"), "/");
+  assertEquals(logged_out.state.request_context.session.kind, "guest");
+  assertEquals(
+    logged_out.state.request_context.session.session_id === original_session_id,
+    false,
+  );
+  const fresh_guest_session_id =
+    logged_out.state.request_context.session.session_id;
+  const fresh_guest_cookie = response_cookie_header(logged_out.response);
+  assertEquals(fresh_guest_cookie === authenticated_cookie, false);
+
+  const fresh_guest_request = new Request("http://localhost:5173/", {
+    headers: { cookie: fresh_guest_cookie },
+  });
+  const fresh_guest = await run_application_request(
+    services,
+    fresh_guest_request,
+    () => new Response(null, { status: 204 }),
+  );
+  assertEquals(fresh_guest.state.request_context.session.kind, "guest");
+  assertEquals(
+    fresh_guest.state.request_context.session.session_id,
+    fresh_guest_session_id,
+  );
+
+  const stale_authenticated_request = new Request("http://localhost:5173/", {
+    headers: { cookie: authenticated_cookie },
+  });
+  const stale_authenticated = await run_application_request(
+    services,
+    stale_authenticated_request,
+    () => new Response(null, { status: 204 }),
+  );
+  assertEquals(
+    stale_authenticated.state.request_context.session.kind,
+    "guest",
+  );
+  assertEquals(
+    stale_authenticated.state.request_context.session.session_id ===
+      original_session_id,
+    false,
+  );
+  assertEquals(
+    stale_authenticated.state.request_context.session.session_id ===
+      fresh_guest_session_id,
+    false,
+  );
+});
+
+Deno.test("configured local callback failure is recoverable and preserves its guest", async () => {
+  const values: Readonly<Record<string, string>> = {
+    [SESSION_COOKIE_MODE_ENV]: "local",
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+  };
+  const services = await create_configured_app_services({
+    get: (name) => values[name],
+  });
+  const start_request = new Request(
+    "http://localhost:5173/auth/google/start?return_to=%2Fsite%2Fdraft",
+  );
+  const started = await run_application_request(
+    services,
+    start_request,
+    async (request_state) =>
+      (await services.authentication_http.start(
+        start_request,
+        "google",
+        request_state.request_context,
+      )).response,
+  );
+  const guest_cookie = response_cookie_header(started.response);
+  const original_session_id = started.state.request_context.session.session_id;
+  const consent_location = started.response.headers.get("location");
+  assertExists(consent_location);
+  const callback_state = new URL(consent_location).searchParams.get("state");
+  assertExists(callback_state);
+  const callback_url =
+    `http://localhost:5173/auth/google/callback?${new URLSearchParams({
+      code: "invalid-local-provider-code",
+      state: callback_state,
+    })}`;
+
+  const fail_callback = async () => {
+    const callback_request = new Request(callback_url, {
+      headers: { cookie: guest_cookie },
+    });
+    return await run_application_request(
+      services,
+      callback_request,
+      async (request_state) => {
+        const result = await services.authentication_http.callback(
+          callback_request,
+          "google",
+          request_state.request_context,
+        );
+        return result.response;
+      },
+    );
+  };
+
+  const failed = await fail_callback();
+  assertEquals(failed.response.status, 502);
+  assertEquals(
+    failed.state.request_context.session.session_id,
+    original_session_id,
+  );
+  const failure_html = await failed.response.text();
+  assertStringIncludes(failure_html, 'href="/auth/google/start"');
+  assertEquals(failure_html.includes("invalid-local-provider-code"), false);
+  assertEquals(failure_html.includes(callback_state), false);
+
+  const replayed = await fail_callback();
+  assertEquals(replayed.response.status, 400);
+  assertStringIncludes(
+    await replayed.response.text(),
+    'href="/auth/google/start"',
+  );
+
+  const surviving_request = new Request("http://localhost:5173/site/draft", {
+    headers: { cookie: guest_cookie },
+  });
+  const surviving = await run_application_request(
+    services,
+    surviving_request,
+    () => new Response(null, { status: 204 }),
+  );
+  assertEquals(surviving.state.request_context.session.kind, "guest");
+  assertEquals(
+    surviving.state.request_context.session.session_id,
+    original_session_id,
+  );
 });
 
 Deno.test("composition root defaults secure and requires explicit local cookies", () => {

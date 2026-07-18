@@ -28,7 +28,9 @@ keeping the logic independent from Fresh routes:
   strategy selection, safe local returns, one-use attempt consumption, verified
   identity persistence, logical-session upgrade, and bearer rotation;
 - `AuthenticationHttpAdapter` maps generic browser requests and outcomes without
-  depending on Fresh, while thin routes select strategies or publish logout;
+  depending on Fresh, while an `AuthenticationCallbackFailurePresenter` supplies
+  the provider-neutral recovery model and thin routes select strategies or
+  publish logout;
 - `GoogleGAuthStrategy` is the first provider adapter, pinned to gauth 0.4.1 and
   depending only on its exported interface; validated startup configuration
   explicitly composes the package's selected local or original preset before
@@ -136,10 +138,12 @@ record while atomically revoking that record. Success creates a distinct guest
 logical session and bearer, stages it through the central request boundary, and
 returns `303 /`. Duplicate, missing, stale, cross-session, and replayed logout
 tokens cannot revoke authenticated access. Responses are `no-store` with
-`Referrer-Policy: no-referrer`; errors use generic text/status mappings and
-restrictive content headers. Diagnostics carry only request ID, optional
-validated strategy ID, and an internal category. Raw query/form values, cookies,
-tokens, and provider causes are absent.
+`Referrer-Policy: no-referrer`; start/logout errors use generic text/status
+mappings, while callback errors use restrictive site-owned HTML with a validated
+local retry link. Callback values and provider causes never enter its
+presentation model. Diagnostics carry only request ID, optional validated
+strategy ID, and an internal category. Raw query/form values, cookies, tokens,
+and provider causes are absent.
 
 The gauth adapter supplies the exact `openid email profile` scope,
 application-owned state, and callback URI. It persists only the returned PKCE
@@ -172,8 +176,15 @@ renderer. The boundary requires exactly the generated 256-bit state,
 is unavailable in original mode. Its response is no-store and no-referrer, and
 its CSP permits only the package's inline script/style and same-origin callback
 form. The verified browser flow preserves the guest logical session, upgrades it
-to authenticated, publishes a rotated bearer, and rejects the stale guest bearer
-without provider network access or credentials.
+to authenticated, publishes a rotated bearer, then logs out by revoking that
+bearer and publishing a distinct fresh guest. Both stale guest and stale
+authenticated bearers fail to resolve the upgraded session. The callback-failure
+integration proves a provider failure consumes its attempt, renders a safe
+retry, and leaves unrelated guest session state intact. These flows require no
+provider network access or credentials. A 2026-07-18 headless Chromium smoke
+against `deno task dev` exercised guest entry, package-rendered local consent,
+authenticated navigation, form logout, and the second bearer rotation to a fresh
+guest.
 
 The site header consumes only the output of `SiteNavigationPresenter`, not the
 session itself. For a guest, the presenter validates the current path and query
@@ -195,10 +206,12 @@ storage.
 
 ## Next boundary
 
-One final authentication acceptance step remains: extend the configured local
-integration through logout and fresh-guest rotation, add a provider-neutral
-callback failure presentation with a safe retry link, settle `OQ-AUTH`, record
-the local browser smoke, and rerun all verification gates. Profile/account
-navigation may remain follow-up UI work. After this step closes authentication,
-persistent namespace ownership and authenticated publishing authority begin a
-separate task.
+The authentication foundation is accepted through the configured local browser
+sign-in, callback recovery, logout-to-fresh-guest lifecycle, and full
+verification gates. `OQ-AUTH` is settled around Google-first account creation,
+provider-owned recovery, in-place guest upgrade, and logout revocation.
+Authentication does not itself confer namespace or publishing authority.
+
+Persistent namespace ownership and authenticated publishing authorization are
+the next product boundary. Profile/account/settings navigation remains optional
+follow-up UI work and must not substitute for that server-owned authority.

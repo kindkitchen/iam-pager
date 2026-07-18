@@ -10,6 +10,7 @@ import {
   type AuthenticationCallbackResult,
   type AuthenticationStartResult,
   is_authentication_strategy_id,
+  normalize_authentication_return_to,
 } from "./model.ts";
 
 const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -49,6 +50,40 @@ export interface AuthenticationHttpLogger {
   failure(event: AuthenticationHttpFailure): void;
 }
 
+export interface AuthenticationCallbackFailureView {
+  readonly title: string;
+  readonly heading: string;
+  readonly message: string;
+  readonly retry_href: string;
+  readonly retry_label: string;
+  readonly return_href: string;
+  readonly return_label: string;
+}
+
+/** Provider-neutral model for the site-owned callback recovery page. */
+export interface AuthenticationCallbackFailurePresenter {
+  present(strategy_id: string): AuthenticationCallbackFailureView;
+}
+
+export class SiteAuthenticationCallbackFailurePresenter
+  implements AuthenticationCallbackFailurePresenter {
+  present(strategy_id: string): AuthenticationCallbackFailureView {
+    if (!is_authentication_strategy_id(strategy_id)) {
+      throw new TypeError("callback retry requires a valid strategy ID");
+    }
+    return {
+      title: "Sign-in failed | iam-pager",
+      heading: "Sign-in failed",
+      message:
+        "Sign-in could not be completed. Your current session is unchanged.",
+      retry_href: `/auth/${strategy_id}/start`,
+      retry_label: "Try sign-in again",
+      return_href: "/",
+      return_label: "Return to iam-pager",
+    };
+  }
+}
+
 /** Fresh-independent browser start/callback boundary. */
 export interface AuthenticationHttpHandler {
   start(
@@ -71,17 +106,20 @@ export interface AuthenticationHttpAdapterOptions {
   readonly authentication: AuthenticationOrchestrator;
   readonly sessions: SessionLogoutManager;
   readonly logger: AuthenticationHttpLogger;
+  readonly callback_failure_presenter: AuthenticationCallbackFailurePresenter;
 }
 
 export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
   readonly #authentication: AuthenticationOrchestrator;
   readonly #sessions: SessionLogoutManager;
   readonly #logger: AuthenticationHttpLogger;
+  readonly #callback_failure_presenter: AuthenticationCallbackFailurePresenter;
 
   constructor(options: AuthenticationHttpAdapterOptions) {
     this.#authentication = options.authentication;
     this.#sessions = options.sessions;
     this.#logger = options.logger;
+    this.#callback_failure_presenter = options.callback_failure_presenter;
   }
 
   async start(
@@ -156,12 +194,11 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
     if (
       state_values.length !== 1 || !STATE_PATTERN.test(state_values[0])
     ) {
-      return this.#failure(
+      return this.#callback_presentation_failure(
         context,
         strategy_id,
         "callback_invalid_query",
         400,
-        "invalid authentication callback",
       );
     }
 
@@ -182,12 +219,11 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
         state: state_values[0],
       });
     } catch {
-      return this.#failure(
+      return this.#callback_presentation_failure(
         context,
         strategy_id,
         "callback_internal_failure",
         500,
-        "authentication could not be completed",
       );
     }
 
@@ -300,21 +336,46 @@ export class AuthenticationHttpAdapter implements AuthenticationHttpHandler {
     strategy_id: string,
     result: Exclude<AuthenticationCallbackResult, { ok: true }>,
   ): AuthenticationHttpResult {
-    const mapping = result.reason === "unknown_strategy"
-      ? { status: 404, message: "authentication strategy not found" }
-      : result.reason === "provider_failure"
-      ? { status: 502, message: "authentication could not be completed" }
+    if (result.reason === "unknown_strategy") {
+      return this.#failure(
+        context,
+        strategy_id,
+        "callback_unknown_strategy",
+        404,
+        "authentication strategy not found",
+      );
+    }
+    const status = result.reason === "provider_failure"
+      ? 502
       : result.reason === "invalid_attempt" ||
           result.reason === "invalid_callback"
-      ? { status: 400, message: "invalid authentication callback" }
-      : { status: 409, message: "authentication session is no longer valid" };
-    return this.#failure(
+      ? 400
+      : 409;
+    return this.#callback_presentation_failure(
       context,
       strategy_id,
       `callback_${result.reason}`,
-      mapping.status,
-      mapping.message,
+      status,
     );
+  }
+
+  #callback_presentation_failure(
+    context: AuthenticationHttpRequestContext,
+    strategy_id: string,
+    category: AuthenticationHttpFailureCategory,
+    status: number,
+  ): AuthenticationHttpResult {
+    this.#logger.failure({
+      request_id: context.request_id,
+      strategy_id,
+      category,
+    });
+    return {
+      response: callback_failure_response(
+        status,
+        this.#callback_failure_presenter.present(strategy_id),
+      ),
+    };
   }
 
   #logout_failure(
@@ -366,12 +427,60 @@ function redirect_response(location: string): Response {
 function text_response(status: number, message: string): Response {
   return new Response(`${message}\n`, {
     status,
-    headers: response_headers({
-      "content-type": "text/plain; charset=utf-8",
-      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-      "x-content-type-options": "nosniff",
-    }),
+    headers: restrictive_content_headers("text/plain; charset=utf-8"),
   });
+}
+
+function callback_failure_response(
+  status: number,
+  view: AuthenticationCallbackFailureView,
+): Response {
+  const retry_href = safe_local_href(view.retry_href);
+  const return_href = safe_local_href(view.return_href);
+  const body = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escape_html(view.title)}</title>
+</head>
+<body>
+  <main>
+    <h1>${escape_html(view.heading)}</h1>
+    <p>${escape_html(view.message)}</p>
+    <p><a href="${escape_html(retry_href)}">${
+    escape_html(view.retry_label)
+  }</a></p>
+    <p><a href="${escape_html(return_href)}">${
+    escape_html(view.return_label)
+  }</a></p>
+  </main>
+</body>
+</html>
+`;
+  return new Response(body, {
+    status,
+    headers: restrictive_content_headers("text/html; charset=utf-8"),
+  });
+}
+
+function restrictive_content_headers(content_type: string): Headers {
+  return response_headers({
+    "content-type": content_type,
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+    "x-content-type-options": "nosniff",
+  });
+}
+
+function safe_local_href(value: string): string {
+  return normalize_authentication_return_to(value) ?? "/";
+}
+
+function escape_html(value: string): string {
+  return value.replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function is_form_media_type(content_type: string | null): boolean {
