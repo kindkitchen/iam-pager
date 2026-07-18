@@ -2,6 +2,11 @@
 
 ## 2026-07-18
 
+- Recorded the spec-priority development policy on the `namespace-reservation`
+  task: implementation proposals diverging from the specification are rejected
+  early; direction changes update the specification first, then implementation
+  continues against it.
+
 - Planned the next delivery step: activated the `namespace-reservation` task
   (DS-PROTECT core - namespace ownership and publishing authorization) with a
   seven-part sub-task plan, and queued the `durable-storage` backlog task

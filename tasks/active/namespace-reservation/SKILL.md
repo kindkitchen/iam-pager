@@ -16,6 +16,8 @@ Start with S1 (domain model and interfaces).
 Persistence is intentionally in-memory behind repository interfaces; durable
 backends are the queued `durable-storage` task, not this one.
 
-The plan is a working assumption: the final implementation may change in
-process, and when it does the specification changes with it in the same change
-set (S7 owns that reconciliation).
+Spec-priority policy ([[003.decision]], superseding the divergence wording in
+[[002.plan]]): the specification is the authority. Implementation proposals
+that diverge from it are rejected early; when development inspires a direction
+change, the specification is updated first, then implementation continues
+against it. S7 is a conformance check, not spec reconciliation.
