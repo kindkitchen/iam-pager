@@ -36,7 +36,10 @@ keeping the logic independent from Fresh routes:
 - `GoogleMockConsentHttpAdapter` serves gauth's package-rendered consent screen
   only for the loopback local preset, behind a Fresh-independent interface;
 - `RequestContextMiddleware.apply_session_resolution` publishes a route-owned
-  rotation centrally, superseding any credential renewal staged at resolution.
+  rotation centrally, superseding any credential renewal staged at resolution;
+- `SiteNavigationPresenter` maps typed server session state to a complete
+  presentation model: safe Google sign-in for guests or the fixed CSRF-protected
+  logout form for authenticated sessions.
 
 ## Security and lifecycle invariants
 
@@ -172,6 +175,15 @@ form. The verified browser flow preserves the guest logical session, upgrades it
 to authenticated, publishes a rotated bearer, and rejects the stale guest bearer
 without provider network access or credentials.
 
+The site header consumes only the output of `SiteNavigationPresenter`, not the
+session itself. For a guest, the presenter validates the current path and query
+as a local return and generates the Google start link. For an authenticated
+session, it emits signed-in state and a fixed `POST /auth/logout` form
+containing the server-owned synchronizer token. The model does not expose the
+logical session ID or user ID, and the UI component does not decide which
+actions are authorized. No account/profile or authenticated publishing behavior
+is implied by this header state.
+
 ## Storage limitation
 
 `MemorySessionRepository` and `MemoryIdentityRepository` are process-local.
@@ -183,7 +195,6 @@ storage.
 
 ## Next boundary
 
-Phase 3 is complete through validated preset composition, Google registration,
-and the verified local consent/browser flow. Next, expose guest sign-in and
-trusted authenticated session actions in the site header/navigation without
-making UI code the source of session or authorization logic.
+The authentication foundation is complete through trusted site navigation. Next,
+introduce persistent namespace ownership and apply authenticated authority to
+publishing before exposing creator management controls.

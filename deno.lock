@@ -1670,6 +1670,7 @@
       "npm:@types/babel__core@^7.20.5",
       "npm:effect@^4.0.0-beta.91",
       "npm:marked@^17.0.6",
+      "npm:preact-render-to-string@^6.7.0",
       "npm:preact@^10.29.1",
       "npm:vite@^7.1.3"
     ]

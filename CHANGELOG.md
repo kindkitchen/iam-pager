@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Added server-rendered site session navigation backed by an interface-first
+  presenter. Guests can start Google sign-in and return to the validated current
+  site URL; authenticated sessions expose signed-in state and a CSRF-protected
+  logout form without passing identity or authorization decisions into UI
+  components. Added 3 presenter/rendering tests (164 total).
+
 - Added the development-only `/auth/google/mock-consent` boundary using gauth's
   package-rendered screen. It accepts only the exact local authorization query,
   stays unavailable in original mode, and applies no-store, restrictive CSP, and

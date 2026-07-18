@@ -118,7 +118,10 @@ The first publishing slice currently provides:
   composes the package's loopback-only local or original preset and registers
   Google; local mode also serves gauth's package-rendered mock consent screen
   behind exact authorization-query validation, while original mode keeps that
-  route unavailable;
+  route unavailable; a server-owned site-navigation presenter maps the typed
+  session to either Google sign-in with a validated local return or a
+  CSRF-protected logout form, and components render that complete model without
+  receiving session IDs or making authorization decisions;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -149,9 +152,13 @@ direct URL. The development task explicitly sets
 `IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
 `iam_pager_session_local` cookie for localhost. It also explicitly selects the
 local gauth preset with the localhost Google callback and mock-consent URLs.
-Until authenticated navigation is added, the complete development flow can be
-started manually at `/auth/google/start?return_to=/`; the package-rendered
-consent screen returns through the callback and upgrades the browser session.
+
+The site's `Sign in with Google` header action starts the complete development
+flow, and the package-rendered consent screen returns through the callback to
+the current local site URL with an upgraded browser session. An authenticated
+header shows only signed-in state and the CSRF-protected `Sign out` action;
+authenticated publishing and management are not implemented yet.
+
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set either local mode in a deployed environment.
 Original Google authentication requires `IAM_PAGER_GOOGLE_AUTH_MODE=original`,

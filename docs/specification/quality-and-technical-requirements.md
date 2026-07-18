@@ -170,9 +170,13 @@ requires client credentials and HTTPS outside loopback. The development-only
 local route validates the exact authorization query before serving gauth's
 package-rendered consent screen and remains unavailable in original mode. The
 complete local browser flow is covered through logical-session upgrade, bearer
-rotation, and stale-bearer rejection. The current in-memory repository is
-process-local and invalidates sessions on restart. See
-[session-and-authentication.md](session-and-authentication.md).
+rotation, and stale-bearer rejection. The site header receives a complete model
+from an interface-backed server presenter: guests get a Google start link with a
+validated local return, while authenticated sessions get only signed-in state
+and the fixed CSRF-protected logout form. UI components receive neither
+session/user IDs nor responsibility for deciding the available action. The
+current in-memory repository is process-local and invalidates sessions on
+restart. See [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication
 routes cannot collide with direct page locators.
