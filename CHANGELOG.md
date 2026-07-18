@@ -2,13 +2,24 @@
 
 ## 2026-07-18
 
+- Delivered namespace-reservation step 1 (DS-PROTECT contracts): new
+  `lib/namespace/` with the `NamespaceReservation` model, a
+  `NamespaceRepository` contract documenting atomic reserve (exactly one winner
+  under concurrent attempts, typed `taken` for losers) and case-insensitive
+  identity derived through the locator key so reservation and locator rules
+  cannot diverge, an in-memory implementation, and an implementation-agnostic
+  conformance suite that durable backends reuse unchanged (9 tests, 186 total).
+  Completed `namespace-reservation-contracts`; queued
+  `namespace-reservation-service` (step 2: reservation service + publishing
+  authorization).
+
 - Planned the next delivery step as two focused tasks: activated
   `namespace-reservation-contracts`, step 1 of the four-step DS-PROTECT
   namespace direction (spec-priority policy: divergent implementation is
   rejected, direction changes update the spec first), and queued the
-  `durable-storage` backlog task on purpose - interface-pattern persistence
-  with switchable backends (Postgres, MongoDB, Deno KV, ...) while in-memory
-  remains the first legitimate implementation.
+  `durable-storage` backlog task on purpose - interface-pattern persistence with
+  switchable backends (Postgres, MongoDB, Deno KV, ...) while in-memory remains
+  the first legitimate implementation.
 
 - Simplified dynamic local Google authentication configuration: a configured
   request-host pattern now takes precedence immediately, so request-derived
