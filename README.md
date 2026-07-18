@@ -117,13 +117,15 @@ The first publishing slice currently provides:
   server-only PKCE context, and verified profile output without retaining
   provider tokens or exposing provider failures; startup configuration
   explicitly selects and composes the package's loopback-only local or original
-  preset and registers Google; local mode also serves gauth's package-rendered
-  mock consent screen behind exact authorization-query validation, while
-  original mode keeps that route unavailable; a server-owned site-navigation
-  presenter maps the typed session to either Google sign-in with a validated
-  local return or a CSRF-protected logout form, and components render that
-  complete model without receiving session IDs or making authorization
-  decisions;
+  preset and registers Google; both modes keep their configured callback by
+  default and can opt into full-regex-allowlisted HTTPS request hosts for
+  dynamic preview callbacks; local mode derives its mock-consent endpoint from
+  that same trusted origin and serves gauth's package-rendered mock consent
+  screen behind exact authorization-query validation, while original mode keeps
+  that route unavailable; a server-owned site-navigation presenter maps the
+  typed session to either Google sign-in with a validated local return or a
+  CSRF-protected logout form, and components render that complete model without
+  receiving session IDs or making authorization decisions;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -165,13 +167,37 @@ rotates the browser to a distinct guest session. Authenticated publishing,
 namespace ownership, and management are not implemented yet.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
-cookie with `Secure`; do not set either local mode in a deployed environment.
-Original Google authentication requires `IAM_PAGER_GOOGLE_AUTH_MODE=original`,
-`IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and
-`IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`; configuration is validated before the
-shared application services are created. Static/framework assets served before
-Fresh application routing intentionally receive neither session state nor a
-request ID. Markdown can be edited as raw source or as guided sections; both
+cookie with `Secure`; do not set local session-cookie mode in a deployed
+environment. Google local mode may be used only in explicitly designated preview
+environments because it grants fake authentication to anyone who can reach a
+matched host. Original Google authentication requires
+`IAM_PAGER_GOOGLE_AUTH_MODE=original`, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`,
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`;
+configuration is validated before the shared application services are created. A
+preview environment in local or original mode may also set
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN` to a narrow project-specific
+regular expression such as `iam-pager-pr-[a-z0-9-]+\.example\.com`. When unset
+or empty, the configured redirect URI remains authoritative. When set, the
+complete case-insensitive request host (including a non-default port) must match
+and the request URL must use HTTPS; then `/auth/google/callback` is built
+against that request origin with the URL API. Local mode also builds
+`/auth/google/mock-consent` against the same origin and validates that its
+requested callback is same-origin. In dynamic local mode the two static URL
+variables are optional because neither endpoint needs a configured origin:
+
+```env
+IAM_PAGER_SESSION_COOKIE_MODE=production
+IAM_PAGER_GOOGLE_AUTH_MODE=local
+IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
+```
+
+A mismatch is rejected rather than falling back or redirecting. The application
+deliberately uses `Request.url`, not optional or caller-controlled
+`Origin`/`Referer` headers. In original mode, Google still requires every
+resulting redirect URI to be authorized for the OAuth client; this application
+regex does not create wildcard support at Google. Static/framework assets served
+before Fresh application routing intentionally receive neither session state nor
+a request ID. Markdown can be edited as raw source or as guided sections; both
 modes update the same draft. The deterministic section adapter groups a fenced
 code block into one editable unit while retaining unfamiliar Markdown as safe
 one-line raw sections instead of approximating a full Markdown AST. Collapsed
@@ -225,9 +251,15 @@ For Deno Deploy, use `deno task build` as the build command and
 `_fresh/server.js` as the application entrypoint. Configure the original-mode
 Google variables for every deployment context that must warm successfully. The
 callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
-used by that context. The SSR build deliberately leaves gauth and Effect as
-runtime imports so loading the selected preset cannot deadlock through circular
-bundle chunks.
+used by that context. Dynamic preview contexts using local mock authentication
+can set `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact
+Google, but every matched host intentionally permits fake sign-in and must not
+be treated as a production environment. If original mode uses the pattern, every
+selected callback must still satisfy Google's redirect-URI registration rules.
+Original preview hosts that cannot be registered individually require a stable
+callback broker rather than a broader application regex. The SSR build
+deliberately leaves gauth and Effect as runtime imports so loading the selected
+preset cannot deadlock through circular bundle chunks.
 
 ## Technical stack
 

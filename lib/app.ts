@@ -1,4 +1,5 @@
 import {
+  type AuthenticationCallbackUrlResolver,
   AuthenticationHttpAdapter,
   type AuthenticationHttpHandler,
   type AuthenticationOrchestrator,
@@ -7,6 +8,7 @@ import {
   AuthenticationStrategyRegistry,
   type AuthenticationStrategyResolver,
   compose_google_gauth,
+  ConfiguredAuthenticationCallbackUrlResolver,
   ConsoleAuthenticationHttpLogger,
   type EnvironmentSource,
   GoogleGAuthStrategy,
@@ -74,6 +76,9 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Provider implementations are supplied at the composition boundary. */
   readonly authentication_strategies?: readonly AuthenticationStrategy[];
+  /** Selects static or explicitly allowlisted request-derived callbacks. */
+  readonly authentication_callback_url_resolver?:
+    AuthenticationCallbackUrlResolver;
   /** Present only with the loopback-only local Google preset. */
   readonly google_mock_consent_screen?: GoogleMockConsentScreen;
 }
@@ -140,6 +145,7 @@ export function create_app_services(
     logger: new ConsoleAuthenticationHttpLogger(),
     callback_failure_presenter:
       new SiteAuthenticationCallbackFailurePresenter(),
+    callback_url_resolver: options.authentication_callback_url_resolver,
   });
   const google_mock_consent_http = new GoogleMockConsentHttpAdapter({
     screen: options.google_mock_consent_screen ?? null,
@@ -169,7 +175,21 @@ export async function create_configured_app_services(
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),
-    authentication_strategies: [new GoogleGAuthStrategy(google_gauth.service)],
+    authentication_strategies: [
+      new GoogleGAuthStrategy(
+        google_gauth.service,
+        google_gauth.service_resolver,
+      ),
+    ],
+    authentication_callback_url_resolver:
+      new ConfiguredAuthenticationCallbackUrlResolver({
+        ...(google_auth_config.redirect_uri === undefined
+          ? {}
+          : { configured_callback_url: google_auth_config.redirect_uri }),
+        ...(google_auth_config.request_host_pattern === undefined
+          ? {}
+          : { request_host_pattern: google_auth_config.request_host_pattern }),
+      }),
     ...(google_gauth.mock_consent_screen === null
       ? {}
       : { google_mock_consent_screen: google_gauth.mock_consent_screen }),

@@ -127,17 +127,20 @@ cookie or a response header. Caller-provided return paths must start with one
 encoded external forms are rejected.
 
 The generic browser boundary exposes `GET /auth/:strategy/start`,
-`GET /auth/:strategy/callback`, and `POST /auth/logout`. Start derives the exact
-callback path on the request origin and returns a `303` to the selected strategy
-authorization URL. Callback requires one route-safe state value, bounds provider
-codes before they reach a strategy, consumes recognizable state even when the
-code is missing, duplicated, or oversized, and returns a `303` only to the local
-path saved at start. Logout accepts only a bounded URL-encoded form with one
-`csrf_token`; the repository compares it against the current authenticated
-record while atomically revoking that record. Success creates a distinct guest
-logical session and bearer, stages it through the central request boundary, and
-returns `303 /`. Duplicate, missing, stale, cross-session, and replayed logout
-tokens cannot revoke authenticated access. Responses are `no-store` with
+`GET /auth/:strategy/callback`, and `POST /auth/logout`. Start obtains the exact
+callback from an interface-backed URL resolver and returns a `303` to the
+selected strategy authorization URL. Explicit/test composition retains the
+request-origin resolver; environment-configured Google composition uses its
+configured callback unless dynamic request-host selection is explicitly enabled.
+Callback requires one route-safe state value, bounds provider codes before they
+reach a strategy, consumes recognizable state even when the code is missing,
+duplicated, or oversized, and returns a `303` only to the local path saved at
+start. Logout accepts only a bounded URL-encoded form with one `csrf_token`; the
+repository compares it against the current authenticated record while atomically
+revoking that record. Success creates a distinct guest logical session and
+bearer, stages it through the central request boundary, and returns `303 /`.
+Duplicate, missing, stale, cross-session, and replayed logout tokens cannot
+revoke authenticated access. Responses are `no-store` with
 `Referrer-Policy: no-referrer`; start/logout errors use generic text/status
 mappings, while callback errors use restrictive site-owned HTML with a validated
 local retry link. Callback values and provider causes never enter its
@@ -154,21 +157,41 @@ result; raw `GAuthErr` causes do not cross the adapter boundary.
 
 The configured composition root requires an explicit `local` or `original`
 Google mode, loads only that gauth preset, constructs the adapter, and registers
-the `google` strategy. Both modes require the exact absolute
-`/auth/google/callback` URL without credentials, query, or fragment. Local mode
-also requires a same-origin `/auth/google/mock-consent` URL and is restricted to
-loopback hosts so fake authentication cannot be configured for a deployment.
-Original mode requires the Google client ID and secret and rejects non-HTTPS
-callbacks outside loopback development. Missing, whitespace-padded, oversized,
+the `google` strategy. Original mode requires the exact absolute
+`/auth/google/callback` URL without credentials, query, or fragment plus the
+Google client ID and secret, and it rejects non-HTTPS callbacks outside loopback
+development. Local mode without a request-host pattern requires both that
+callback URL and a same-origin `/auth/google/mock-consent` URL, restricted to
+loopback. Either mode may optionally accept
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`, a bounded startup-compiled regular
+expression. If absent or empty, the configured callback stays authoritative. If
+present, the complete case-insensitive `Request.url` host, including a
+non-default port, must match and the request must be HTTPS; then the callback
+endpoint is built on that request origin through the URL API. In local mode the
+static callback and mock-consent URL variables become optional because both
+endpoints are request-derived; if supplied as compatibility fallbacks, they must
+be supplied together and retain the loopback constraints. The dynamic
+mock-consent endpoint is built on the matched origin, and its HTTP boundary
+requires the selected callback to be same-origin and allowlisted before
+rendering. No match fails closed before orchestration or fake consent. `Origin`
+and `Referer` headers are never callback authorities. The same selected callback
+URI configures the gauth service used at authorization and token exchange,
+without an unbounded per-host cache. A local-mode match deliberately exposes
+fake sign-in on that preview host, so patterns must be narrow and must never
+cover a production host. Missing, whitespace-padded, oversized, invalid-regex,
 or mode-inconsistent values fail before shared application services are created;
 diagnostics name variables but never values.
 
 `deno task dev` explicitly supplies the local session and Google modes plus the
 two localhost URLs. Other startup commands must provide
-`IAM_PAGER_GOOGLE_AUTH_MODE`, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, and either
-`IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL` for local mode or
-`IAM_PAGER_GOOGLE_AUTH_CLIENT_ID` and `IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET` for
-original mode.
+`IAM_PAGER_GOOGLE_AUTH_MODE`. Original mode additionally requires
+`IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`, `IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`, and
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET`. Local mode requires either its callback
+and mock-consent URL pair or `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`.
+Pattern-based local mode uses the matched origin for both fake consent and
+callback without static URL variables; original-mode callback URIs must still be
+authorized by Google, whose redirect-URI policy is not widened by this
+application-side regex.
 
 The production SSR build externalizes gauth and Effect together. The selected
 package preset therefore loads through the runtime module graph instead of a
@@ -177,24 +200,25 @@ The process runner validates optional `PORT` through an environment-source
 interface before loading the built server; a valid value is passed to
 `Deno.serve`, while omission leaves Deno's native port-8000 default intact. Deno
 Deploy instead runs the generated `_fresh/server.js` fetch entrypoint after
-`deno task build`; every deployment context must still provide valid
-original-mode configuration before warm-up can succeed.
+`deno task build`; production contexts must provide valid original-mode
+configuration, while explicitly designated fake-auth preview contexts may use
+local mode with a narrow request-host pattern.
 
 Local mode serves `GET /auth/google/mock-consent` through gauth's package
 renderer. The boundary requires exactly the generated 256-bit state,
-`openid email profile` scope, and configured callback URI before rendering; it
-is unavailable in original mode. Its response is no-store and no-referrer, and
-its CSP permits only the package's inline script/style and same-origin callback
-form. The verified browser flow preserves the guest logical session, upgrades it
-to authenticated, publishes a rotated bearer, then logs out by revoking that
-bearer and publishing a distinct fresh guest. Both stale guest and stale
-authenticated bearers fail to resolve the upgraded session. The callback-failure
-integration proves a provider failure consumes its attempt, renders a safe
-retry, and leaves unrelated guest session state intact. These flows require no
-provider network access or credentials. A 2026-07-18 headless Chromium smoke
-against `deno task dev` exercised guest entry, package-rendered local consent,
-authenticated navigation, form logout, and the second bearer rotation to a fresh
-guest.
+`openid email profile` scope, and selected static or allowlisted same-origin
+callback URI before rendering; it is unavailable in original mode. Its response
+is no-store and no-referrer, and its CSP permits only the package's inline
+script/style and same-origin callback form. The verified browser flow preserves
+the guest logical session, upgrades it to authenticated, publishes a rotated
+bearer, then logs out by revoking that bearer and publishing a distinct fresh
+guest. Both stale guest and stale authenticated bearers fail to resolve the
+upgraded session. The callback-failure integration proves a provider failure
+consumes its attempt, renders a safe retry, and leaves unrelated guest session
+state intact. These flows require no provider network access or credentials. A
+2026-07-18 headless Chromium smoke against `deno task dev` exercised guest
+entry, package-rendered local consent, authenticated navigation, form logout,
+and the second bearer rotation to a fresh guest.
 
 The site header consumes only the output of `SiteNavigationPresenter`, not the
 session itself. For a guest, the presenter validates the current path and query

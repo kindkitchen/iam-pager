@@ -8,9 +8,17 @@ const valid_state = "s".repeat(43);
 class FakeGoogleMockConsentScreen implements GoogleMockConsentScreen {
   readonly callback_url = callback_url;
   readonly states: string[] = [];
+  readonly callback_urls: string[] = [];
 
-  render(state: string): string {
+  allows(request_url: URL, requested_callback_url: string): boolean {
+    return request_url.origin === "http://localhost:5173" &&
+      request_url.pathname === "/auth/google/mock-consent" &&
+      requested_callback_url === callback_url;
+  }
+
+  render(state: string, requested_callback_url = callback_url): string {
     this.states.push(state);
+    this.callback_urls.push(requested_callback_url);
     return `<html>package screen for ${state}</html>`;
   }
 }
@@ -47,6 +55,7 @@ Deno.test("local Google mock consent serves the configured package renderer", as
     `<html>package screen for ${valid_state}</html>`,
   );
   assertEquals(screen.states, [valid_state]);
+  assertEquals(screen.callback_urls, [callback_url]);
 });
 
 Deno.test("local Google mock consent rejects altered authorization queries", () => {
@@ -56,13 +65,14 @@ Deno.test("local Google mock consent rejects altered authorization queries", () 
     consent_url({ state: "short" }),
     consent_url({ scope: "openid email" }),
     consent_url({ redirect_uri: "http://localhost:5173/other" }),
+    consent_url().replace("localhost", "attacker.example"),
     `${consent_url()}&state=${valid_state}`,
     `${consent_url()}&extra=value`,
   ];
 
   assertEquals(
     requests.map((url) => handler.handle(new Request(url)).status),
-    [400, 400, 400, 400, 400],
+    [400, 400, 400, 400, 400, 400],
   );
   assertEquals(screen.states, []);
 });
