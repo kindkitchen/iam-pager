@@ -127,6 +127,13 @@ The first publishing slice currently provides:
   local return or a CSRF-protected logout form, and components render that
   complete model without receiving session IDs or making authorization
   decisions;
+- namespace reservation business logic: an interface-backed reservation service
+  that validates candidate namespaces through the locator engine (typed
+  rejections for forbidden and malformed names) and atomically claims them
+  case-insensitively for one owner, plus publishing authorization that rejects
+  guest and cross-user writes into reserved namespaces while the owner and all
+  unreserved namespaces keep current behavior (no HTTP surface yet; reservations
+  are process-local);
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - in-memory create-or-replace storage (content is lost when the process stops);
 - the site shell and mobile-first guest publishing form at `/` and `/site/*`,
@@ -144,10 +151,11 @@ The first publishing slice currently provides:
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages, sessions, users, and external identities are currently
-process-local. Guest pages remain replaceable by anyone. Total page capacity,
-publishing frequency, expiry, namespace reservation, and durable/shared storage
-are not implemented; this endpoint is not ready for untrusted public traffic.
+Guest pages, sessions, users, external identities, and namespace reservations
+are currently process-local. Guest pages in unreserved namespaces remain
+replaceable by anyone. Total page capacity, publishing frequency, expiry, a
+reservation HTTP/UI surface, and durable/shared storage are not implemented;
+this endpoint is not ready for untrusted public traffic.
 
 ## Local development
 

@@ -27,10 +27,17 @@ import {
   MemoryContentRepository,
 } from "./content/mod.ts";
 import {
+  NamespacePublishingAuthorizer,
   type PageDeliverer,
   type PagePublisher,
   PublishingService,
 } from "./publishing/mod.ts";
+import {
+  MemoryNamespaceRepository,
+  type NamespaceRepository,
+  type NamespaceReservationManager,
+  NamespaceReservationService,
+} from "./namespace/mod.ts";
 import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
@@ -60,6 +67,8 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 export interface AppServices {
   engine: LocatorEngine;
   repository: ContentRepository;
+  namespace_repository: NamespaceRepository;
+  namespaces: NamespaceReservationManager;
   publishing: PagePublisher & PageDeliverer;
   session: SessionManager;
   session_transport: SessionTransport;
@@ -104,10 +113,16 @@ export function create_app_services(
     forbidden_namespaces,
   });
   const repository = new MemoryContentRepository();
+  const namespace_repository = new MemoryNamespaceRepository();
+  const namespaces = new NamespaceReservationService({
+    engine,
+    repository: namespace_repository,
+  });
   const publishing = new PublishingService({
     engine,
     repository,
     handlers: [new MdPageHandler()],
+    authorizer: new NamespacePublishingAuthorizer(namespace_repository),
   });
   const clock = new SystemClock();
   const session_repository = new MemorySessionRepository();
@@ -153,6 +168,8 @@ export function create_app_services(
   return {
     engine,
     repository,
+    namespace_repository,
+    namespaces,
     publishing,
     session,
     session_transport,

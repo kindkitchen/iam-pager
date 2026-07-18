@@ -40,3 +40,28 @@ export interface NamespaceRepository {
   /** Every reservation owned by the user; order is unspecified. */
   list_by_owner(owner_user_id: string): Promise<NamespaceReservation[]>;
 }
+
+export type ReserveNamespaceResult =
+  | { ok: true; reservation: NamespaceReservation }
+  /** The namespace cannot be addressed by any locator (malformed). */
+  | { ok: false; reason: "invalid_namespace" }
+  /** The namespace is reserved for site or platform routes. */
+  | { ok: false; reason: "forbidden_namespace" }
+  /** Another creator already owns the namespace (case-insensitively). */
+  | { ok: false; reason: "taken" };
+
+/**
+ * Business contract for namespace ownership (DA-NAMESPACE, CP-NAMESPACE).
+ *
+ * Unlike the storage contract above, `reserve` here validates the namespace
+ * through the locator engine before claiming it, so only namespaces that a
+ * locator can actually address are ever reserved and reservation validity
+ * can never diverge from publishing/lookup validity. Results are typed so an
+ * API layer maps them without string parsing.
+ */
+export interface NamespaceReservationManager {
+  /** Validate via the locator engine, then atomically claim the namespace. */
+  reserve(request: ReserveRequest): Promise<ReserveNamespaceResult>;
+  /** Every reservation owned by the user; order is unspecified. */
+  list_owned(owner_user_id: string): Promise<NamespaceReservation[]>;
+}

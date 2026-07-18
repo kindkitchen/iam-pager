@@ -112,6 +112,26 @@ Deno.test("guest API rejects reserved and invalid locators", async () => {
   assertEquals((await invalid.json()).error, "invalid_locator");
 });
 
+Deno.test("guest API rejects publishing into a creator-reserved namespace", async () => {
+  const { publishing, namespaces } = create_app_services();
+  const reserved = await namespaces.reserve({
+    namespace: "Claimed",
+    owner_user_id: "owner-1",
+  });
+  assertEquals(reserved.ok, true);
+
+  const response = await publish_guest_md_page_request(
+    json_request({ namespace: "claimed", md: "# Takeover" }),
+    publishing,
+  );
+  assertEquals(response.status, 403);
+  assertEquals(await response.json(), {
+    ok: false,
+    error: "namespace_reserved",
+    detail: "namespace is reserved by a creator",
+  });
+});
+
 Deno.test("guest API surfaces MdPage validation", async () => {
   const { publishing } = create_app_services();
   const response = await publish_guest_md_page_request(

@@ -4,6 +4,8 @@ import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MdPageHandler } from "../content/md-page.ts";
 import type { MdPageData } from "../content/md-page.ts";
 import { MemoryContentRepository } from "../content/memory-repository.ts";
+import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
+import { NamespacePublishingAuthorizer } from "./namespace-authorizer.ts";
 import { PublishingService } from "./service.ts";
 
 function make_service(now?: () => Date) {
@@ -16,6 +18,26 @@ function make_service(now?: () => Date) {
     repository,
     handlers: [new MdPageHandler()],
     now,
+  });
+  return { service, repository };
+}
+
+async function make_protected_service() {
+  const repository = new MemoryContentRepository();
+  const namespace_repository = new MemoryNamespaceRepository();
+  const reserved = await namespace_repository.reserve({
+    namespace: "Claimed",
+    owner_user_id: "owner-1",
+  });
+  if (!reserved.ok) throw new Error("test setup: reserve failed");
+  const service = new PublishingService({
+    engine: new LocatorEngine({
+      strategies: [new PathSlugStrategy()],
+      forbidden_namespaces: ["site"],
+    }),
+    repository,
+    handlers: [new MdPageHandler()],
+    authorizer: new NamespacePublishingAuthorizer(namespace_repository),
   });
   return { service, repository };
 }
@@ -140,6 +162,64 @@ Deno.test("republish keeps created_at and refreshes updated_at", async () => {
     first.page.content.created_at,
   );
   assert(second.page.content.updated_at > first.page.content.updated_at);
+});
+
+Deno.test("publish rejects a guest write into a reserved namespace", async () => {
+  const { service, repository } = await make_protected_service();
+  for (const namespace of ["Claimed", "claimed", "CLAIMED"]) {
+    const result = await service.publish({
+      locator: { namespace, page_name: "x" },
+      content_type: "md-page",
+      input: { md: "# Takeover" },
+    });
+    assertEquals(result, { ok: false, reason: "namespace_reserved" });
+  }
+  assertEquals(
+    await repository.get({ namespace: "claimed", page_name: "x" }),
+    null,
+  );
+});
+
+Deno.test("publish rejects another user's write into a reserved namespace", async () => {
+  const { service, repository } = await make_protected_service();
+  const result = await service.publish({
+    locator: { namespace: "Claimed" },
+    content_type: "md-page",
+    input: { md: "# Takeover" },
+    actor: { kind: "user", user_id: "intruder" },
+  });
+  assertEquals(result, { ok: false, reason: "namespace_reserved" });
+  assertEquals(await repository.get({ namespace: "claimed" }), null);
+});
+
+Deno.test("publish allows the owner to write into their reserved namespace", async () => {
+  const { service } = await make_protected_service();
+  const result = await service.publish({
+    locator: { namespace: "claimed", page_name: "notes" },
+    content_type: "md-page",
+    input: { md: "# Mine" },
+    actor: { kind: "user", user_id: "owner-1" },
+  });
+  assert(result.ok);
+  assertEquals(result.path, "/claimed/notes");
+});
+
+Deno.test("publish keeps unreserved namespaces open to every actor", async () => {
+  const { service } = await make_protected_service();
+  const guest = await service.publish({
+    locator: { namespace: "free", page_name: "guest" },
+    content_type: "md-page",
+    input: { md: "# Guest" },
+    actor: { kind: "guest" },
+  });
+  const other_user = await service.publish({
+    locator: { namespace: "free", page_name: "user" },
+    content_type: "md-page",
+    input: { md: "# User" },
+    actor: { kind: "user", user_id: "someone" },
+  });
+  assert(guest.ok);
+  assert(other_user.ok);
 });
 
 Deno.test("deliver returns the rendered payload for a stored page", async () => {

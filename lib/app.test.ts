@@ -55,6 +55,39 @@ Deno.test("composition root forbids platform route namespaces", async () => {
   }
 });
 
+Deno.test("composition root enforces namespace reservations on publishing", async () => {
+  const { publishing, namespaces } = create_app_services();
+  const reserved = await namespaces.reserve({
+    namespace: "Claimed",
+    owner_user_id: "owner-1",
+  });
+  assertEquals(reserved.ok, true);
+
+  const guest_write = await publishing.publish({
+    locator: { namespace: "claimed" },
+    content_type: "md-page",
+    input: { md: "# Takeover" },
+  });
+  assertEquals(guest_write, { ok: false, reason: "namespace_reserved" });
+
+  const owner_write = await publishing.publish({
+    locator: { namespace: "Claimed" },
+    content_type: "md-page",
+    input: { md: "# Mine" },
+    actor: { kind: "user", user_id: "owner-1" },
+  });
+  assertEquals(owner_write.ok, true);
+
+  assertEquals(
+    await namespaces.reserve({ namespace: "api", owner_user_id: "owner-1" }),
+    { ok: false, reason: "forbidden_namespace" },
+  );
+  assertEquals(
+    (await namespaces.list_owned("owner-1")).map((r) => r.namespace),
+    ["Claimed"],
+  );
+});
+
 Deno.test("composition root wires interface-backed identity services", async () => {
   const services = create_app_services();
   assertEquals(services.authentication_strategies.resolve("google"), null);

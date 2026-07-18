@@ -75,6 +75,7 @@ export async function publish_guest_md_page_request(
     input: decoded.value.css === undefined
       ? { md: decoded.value.md }
       : { md: decoded.value.md, css: decoded.value.css },
+    actor: { kind: "guest" },
   });
   return publish_result_response(request.url, result);
 }
@@ -128,6 +129,12 @@ function publish_result_response(
         403,
         result.reason,
         "namespace is reserved by the platform",
+      );
+    case "namespace_reserved":
+      return error_response(
+        403,
+        result.reason,
+        "namespace is reserved by a creator",
       );
     case "invalid_locator":
       return error_response(
