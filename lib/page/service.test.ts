@@ -628,6 +628,77 @@ Deno.test("PageService public listing validates namespace and maps visitor-safe 
   );
 });
 
+Deno.test("PageService explores normalized name queries with visitor-safe results", async () => {
+  const { service, repository } = await make_fixture();
+  for (
+    const [page_id, namespace, page_name, access] of [
+      ["alice-default", "Alice", undefined, "public"],
+      ["alice-notes", "Alice", "Notes", "public"],
+      ["alicia-notebook", "Alicia", "Notebook", "public"],
+      ["hidden", "Alice", "Secret notes", "private"],
+    ] as const
+  ) {
+    const seeded = await repository.create_managed({
+      page_id,
+      locator: page_name === undefined
+        ? { namespace }
+        : { namespace, page_name },
+      owner_user_id: "seed-owner",
+      access,
+      content: make_page_content(page_id),
+      now: t1,
+    });
+    assert(seeded.ok);
+  }
+  await repository.put_trial({
+    page_id: "guest-notes",
+    locator: { namespace: "Alice", page_name: "Guest notes" },
+    content: make_page_content("guest"),
+    now: t1,
+  });
+
+  const explored = await service.explore_public({
+    namespace_query: "  ALI ",
+    page_name_query: " NOTE ",
+    limit: 10,
+  });
+  assert(explored.ok);
+  assertEquals(
+    explored.pages.map((page) => page.path),
+    ["/Alice/Notes", "/Alicia/Notebook"],
+  );
+  assert(
+    explored.pages.every((page) =>
+      page.stewardship === "managed" &&
+      !("page_id" in page) && !("revision" in page) && !("access" in page)
+    ),
+  );
+
+  const browsed = await service.explore_public({
+    namespace_query: "   ",
+    limit: 1,
+  });
+  assert(browsed.ok && browsed.next_cursor !== null);
+  const continued = await service.explore_public({
+    limit: 10,
+    cursor: browsed.next_cursor,
+  });
+  assert(continued.ok);
+  assertEquals(continued.pages.length, 2);
+
+  assertEquals(
+    await service.explore_public({
+      namespace_query: "x".repeat(101),
+      limit: 10,
+    }),
+    { ok: false, reason: "invalid_query" },
+  );
+  assertEquals(
+    await service.explore_public({ limit: 10, cursor: "!" }),
+    { ok: false, reason: "invalid_cursor" },
+  );
+});
+
 Deno.test("PageService retries generated id collisions and reports bounded exhaustion", async () => {
   const { service, repository } = await make_fixture({
     ids: ["collision", "fresh-id"],

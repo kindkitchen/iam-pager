@@ -199,6 +199,72 @@ h2 {
   font-size: clamp(1.1rem, 4.5vw, 1.45rem);
 }
 
+.public-exploration {
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: 3rem;
+  border-top: 1px solid #b7b9b2;
+  padding-top: 2rem;
+}
+
+.public-exploration-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 58rem;
+}
+
+.public-exploration-form-actions,
+.public-exploration-result nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.public-exploration-form-actions a,
+.public-exploration-result a,
+.public-exploration-more {
+  color: #1c5333;
+  font-weight: 700;
+}
+
+.public-exploration-empty {
+  color: #59635c;
+}
+
+.public-exploration-results {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-exploration-result {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid #b7b9b2;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: rgb(255 254 250 / 60%);
+}
+
+.public-exploration-title {
+  font-size: 1.1rem;
+}
+
+.public-exploration-namespace,
+.public-exploration-meta {
+  margin: 0;
+  color: #59635c;
+  font-size: 0.85rem;
+}
+
+.public-exploration-more {
+  justify-self: start;
+}
+
 .publish-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1085,6 +1151,19 @@ h2 {
 
   .publish-panel {
     padding-top: clamp(2.5rem, 5vw, 3.5rem);
+  }
+
+  .public-exploration-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .public-exploration-form-actions {
+    grid-column: 1 / -1;
+  }
+
+  .public-exploration-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .locator-fields {

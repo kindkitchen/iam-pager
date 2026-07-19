@@ -1,9 +1,12 @@
 import { type Locator } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_page_exploration_cursor,
   encode_page_list_cursor,
   page_sort_key,
+  type PageExplorationCursorScope,
   type PageSortKey,
 } from "./cursor.ts";
 import type {
@@ -11,6 +14,8 @@ import type {
   CreateManagedResult,
   DeleteManagedRequest,
   DeleteManagedResult,
+  ExplorePublicRequest,
+  ExplorePublicResult,
   ListManagedRequest,
   ListManagedResult,
   ListPublicRequest,
@@ -96,6 +101,39 @@ function invariant_violation(): never {
 
 function is_valid_time(value: Date): boolean {
   return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function require_normalized_exploration_request(
+  request: ExplorePublicRequest,
+): void {
+  require(
+    Number.isSafeInteger(request.limit) && request.limit >= 1,
+    "limit must be a positive safe integer",
+  );
+  for (
+    const [name, query] of [
+      ["namespace_query", request.namespace_query],
+      ["page_name_query", request.page_name_query],
+    ] as const
+  ) {
+    require(
+      query === undefined ||
+        (query !== "" && query === query.trim() &&
+          query === query.toLowerCase()),
+      `${name} must be a normalized lowercase substring when present`,
+    );
+  }
+}
+
+function matches_exploration(
+  key: PageSortKey,
+  scope: PageExplorationCursorScope,
+): boolean {
+  return (scope.namespace_query === null ||
+    key.namespace_key.includes(scope.namespace_query)) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query)));
 }
 
 function normalized_locator(locator: Locator): {
@@ -804,6 +842,71 @@ export class DenoKvPageRepository implements PageRepository {
         ? encode_page_list_cursor(
           page_sort_key(pages[pages.length - 1]),
           filter,
+        )
+        : null,
+    };
+  }
+
+  async explore_public(
+    request: ExplorePublicRequest,
+  ): Promise<ExplorePublicResult> {
+    require_normalized_exploration_request(request);
+    const scope: PageExplorationCursorScope = {
+      namespace_query: request.namespace_query ?? null,
+      page_name_query: request.page_name_query ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_exploration_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const prefix = by_locator_prefix;
+    const start: Deno.KvKey | undefined = after === null ? undefined : [
+      ...prefix,
+      after.namespace_key,
+      after.default_rank,
+      after.page_name_key,
+    ];
+    const pages: PageRecord[] = [];
+    let has_more = false;
+    for await (
+      const entry of this.#kv.list<unknown>(
+        start === undefined ? { prefix } : { prefix, start },
+      )
+    ) {
+      if (start !== undefined && key_equals(entry.key, start)) continue;
+      const index = deserialize_locator_index(entry.value);
+      const page = await this.find_by_id(index.page_id);
+      if (
+        page === null || !key_equals(locator_key(page.locator), entry.key)
+      ) {
+        const current = await this.#kv.get<unknown>(entry.key);
+        if (current.versionstamp !== entry.versionstamp) continue;
+        invariant_violation();
+      }
+      const key = page_sort_key(page);
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) {
+        invariant_violation();
+      }
+      if (
+        page.stewardship.kind !== "managed" || page.access !== "public" ||
+        !matches_exploration(key, scope)
+      ) {
+        continue;
+      }
+      if (pages.length === request.limit) {
+        has_more = true;
+        break;
+      }
+      pages.push(page);
+    }
+    return {
+      ok: true,
+      pages,
+      next_cursor: has_more
+        ? encode_page_exploration_cursor(
+          page_sort_key(pages[pages.length - 1]),
+          scope,
         )
         : null,
     };

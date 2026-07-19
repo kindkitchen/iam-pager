@@ -165,6 +165,13 @@ The first publishing slice currently provides:
   bounded links to other public managed pages; trial pages remain known-locator
   only and private or missing pages share a real 404; `site`, `api`, and `auth`
   remain reserved as namespaces;
+- public exploration on `/` and `/site`: an HTTP-independent
+  `PublicPageExplorer` browses current public managed pages or applies
+  case-insensitive namespace/page-name substring filters separately or with AND
+  semantics. Results are deterministically cursor-paginated and open the public
+  wrapper or direct content; memory and Deno KV satisfy the same exclusion and
+  cursor conformance, so private and guest pages never cross the contract. Tags
+  and text-content search remain later work;
 - `GET`/`POST /api/pages` and `GET`/`PATCH`/`DELETE /api/pages/:page_id` for
   trial creation and authenticated page management, including pagination,
   owner-safe source inspection, CSRF, and revision ETags;
@@ -180,19 +187,19 @@ process-local by default. Deno KV can persist linked ownership records, while
 sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
 replaceable by anyone. Total page capacity, publishing frequency, guest expiry,
-rename/duplicate/bulk operations, cross-namespace exploration/search, and
-backend migration are not implemented; these endpoints are not ready for
+rename/duplicate/bulk operations, exploration tags/content indexing/relevance,
+and backend migration are not implemented; these endpoints are not ready for
 untrusted public traffic.
 
 ## Local development
 
-Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
-the live preview, publish the page, and use the resulting link to open its
-direct URL. Prefix that locator with `/site` to open the wrapped public view.
-The development task explicitly sets `IAM_PAGER_SESSION_COOKIE_MODE=local`,
-selecting the non-secure `iam_pager_session_local` cookie for localhost. It also
-explicitly selects the local gauth preset with the localhost Google callback and
-mock-consent URLs.
+Run `deno task dev`, open `http://localhost:5173`, browse or search current
+public creator pages, draft Markdown and CSS with the live preview, publish the
+page, and use the resulting link to open its direct URL. Prefix that locator
+with `/site` to open the wrapped public view. The development task explicitly
+sets `IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
+`iam_pager_session_local` cookie for localhost. It also explicitly selects the
+local gauth preset with the localhost Google callback and mock-consent URLs.
 
 The site's `Sign in with Google` header action starts the local sign-in flow,
 and the package-rendered consent screen returns through the callback to the

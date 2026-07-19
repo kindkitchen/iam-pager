@@ -56,9 +56,9 @@ a basic publishing surface, clear public or private behavior, and enough site UI
 to inspect and manage pages.
 
 Guest publishing is a limited variation of the publishing flow, not the purpose
-of the product. Public exploration can begin with names and tags before text
-extraction is implemented. Advanced management can follow basic create, update,
-and delete behavior.
+of the product. Public exploration begins with namespace and page-name browsing
+and search; tags follow expanded management, while text extraction remains
+later. Advanced management can follow basic create, update, and delete behavior.
 
 External storage providers are later scope. They are valuable because page
 formats and sizes vary, but first-party content must establish the page and

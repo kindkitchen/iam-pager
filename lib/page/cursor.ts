@@ -155,3 +155,97 @@ export function decode_page_list_cursor(
     page_id,
   };
 }
+
+/** Query scope carried by a DS-EXPLORE continuation cursor. */
+export interface PageExplorationCursorScope {
+  namespace_query: string | null;
+  page_name_query: string | null;
+}
+
+/** Encode an exploration position bound to both normalized search fields. */
+export function encode_page_exploration_cursor(
+  last: PageSortKey,
+  scope: PageExplorationCursorScope,
+): string {
+  return encode_base64url(JSON.stringify({
+    kind: "explore-v1",
+    namespace_key: last.namespace_key,
+    default_rank: last.default_rank,
+    page_name_key: last.page_name_key,
+    page_id: last.page_id,
+    namespace_query: scope.namespace_query,
+    page_name_query: scope.page_name_query,
+  }));
+}
+
+/**
+ * Strictly decode an exploration cursor. List cursors, malformed payloads, and
+ * cursors issued for different query values are rejected.
+ */
+export function decode_page_exploration_cursor(
+  raw: string,
+  scope: PageExplorationCursorScope,
+): PageSortKey | null {
+  if (
+    raw === "" ||
+    raw.length > max_page_list_cursor_length ||
+    !cursor_charset.test(raw)
+  ) {
+    return null;
+  }
+  const text = decode_base64url(raw);
+  if (text === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  const expected_keys = [
+    "kind",
+    "namespace_key",
+    "default_rank",
+    "page_name_key",
+    "page_id",
+    "namespace_query",
+    "page_name_query",
+  ];
+  const keys = Object.keys(record);
+  if (
+    keys.length !== expected_keys.length ||
+    !expected_keys.every((key) => keys.includes(key)) ||
+    record.kind !== "explore-v1" ||
+    record.namespace_query !== scope.namespace_query ||
+    record.page_name_query !== scope.page_name_query
+  ) {
+    return null;
+  }
+  const { namespace_key, default_rank, page_name_key, page_id } = record;
+  if (
+    typeof namespace_key !== "string" ||
+    namespace_key === "" ||
+    namespace_key !== namespace_key.toLowerCase()
+  ) {
+    return null;
+  }
+  if (default_rank !== 0 && default_rank !== 1) return null;
+  if (typeof page_name_key !== "string") return null;
+  if (default_rank === 0 && page_name_key !== "") return null;
+  if (
+    default_rank === 1 &&
+    (page_name_key === "" || page_name_key !== page_name_key.toLowerCase())
+  ) {
+    return null;
+  }
+  if (typeof page_id !== "string" || !is_valid_page_id(page_id)) return null;
+  return {
+    namespace_key,
+    default_rank,
+    page_name_key,
+    page_id,
+  };
+}

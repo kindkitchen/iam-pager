@@ -42,10 +42,23 @@ content updates. Direct delivery observes the committed representation
 immediately. A private page is available only to its stored creator's current
 session and is ordinary missing to guests, logged-out creators, and other users.
 The site-mediated view applies the same non-disclosure: private pages are
-ordinary missing. Namespace public listings are cursor-bounded and exclude both
-private and trial pages; trial pages remain reachable only by a known direct or
-site-view locator. Cross-namespace exploration remains later scope and must use
-the same visibility rule.
+ordinary missing. Namespace public listings and cross-namespace exploration are
+cursor-bounded and exclude both private and trial pages from current storage
+state; trial pages remain reachable only by a known direct or site-view locator.
+
+### OQ-EXPLORE — Public exploration
+
+The first exploration version is settled as deterministic browse plus
+case-insensitive substring search over author namespaces and page names. Either
+field can be used alone; together they use AND semantics. Default pages have no
+page-name value and therefore match browsing or namespace search only. Private
+and guest pages are excluded from current storage state before results cross the
+public contract.
+
+Tags join when expanded management supplies them. Text-content extraction and
+indexing, relevance ranking, and view-count sorting are not part of this MVP
+slice. The `PublicPageExplorer` boundary permits a later index without changing
+locators, site-view links, or visitor-safe result summaries.
 
 ### OQ-API — API surface
 
@@ -73,12 +86,6 @@ Choose initial limits for content size, total stored size, page count, and
 frequency. Guest publishing uses stricter limits and no namespace guarantee. The
 original guest-capacity phrase "removes the latest" still needs one concrete
 meaning: remove an existing item, expire items, or reject the new item.
-
-### OQ-EXPLORE — Public exploration
-
-Decide whether the first exploration version includes only page names,
-namespaces, and tags, or also text-content matches. View-count sorting is not
-required unless reliable counts become useful to the MVP.
 
 ### OQ-RETENTION — Retention
 

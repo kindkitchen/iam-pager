@@ -2,6 +2,15 @@
 
 ## 2026-07-19
 
+- Completed the first DS-EXPLORE slice and settled OQ-EXPLORE as deterministic
+  browse plus case-insensitive namespace/page-name substring search (separate or
+  AND-combined), with tags and text indexing deferred. The HTTP-independent
+  `PublicPageExplorer` returns visitor-safe, query-bound cursor pages; memory
+  and Deno KV pass the same browse/filter/exclusion/pagination conformance,
+  keeping private and guest pages out from current storage state. `/` and
+  `/site` now render a GET search surface whose results open the DS-VIEW wrapper
+  or direct content. The suite grew to 384 tests.
+
 - Completed DS-VIEW with HTTP-independent public page viewing and bounded,
   cursor-paginated namespace listings over both memory and Deno KV. Public
   summaries omit management identity; creator listings exclude private and guest

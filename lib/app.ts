@@ -30,6 +30,7 @@ import {
   type PageHttpHandler,
   type PageRepository,
   PageService,
+  type PublicPageExplorer,
   type PublicPageLister,
   type PublicPageViewer,
   RepositoryNamespaceAuthorityResolver,
@@ -50,6 +51,10 @@ import {
   CreatorPageManagementPresenter,
   type PageManagementPanelPresenter,
 } from "./ui/page-management.ts";
+import {
+  type PublicExplorationPresenter,
+  SitePublicExplorationPresenter,
+} from "./ui/public-exploration.ts";
 import {
   CreatorPublicPageViewPresenter,
   type PublicPageViewPresenter,
@@ -100,9 +105,11 @@ export interface AppServices {
     & PageHttpApplication
     & PageDeliverer
     & PublicPageViewer
-    & PublicPageLister;
+    & PublicPageLister
+    & PublicPageExplorer;
   pages_http: PageHttpHandler;
   public_page_view: PublicPageViewPresenter;
+  public_exploration: PublicExplorationPresenter;
   namespace_repository: NamespaceRepository;
   namespaces: NamespaceReservationManager;
   namespaces_http: NamespaceHttpHandler;
@@ -193,6 +200,7 @@ export function create_app_services(
   });
   const pages_http = new PageHttpAdapter({ pages });
   const public_page_view = new CreatorPublicPageViewPresenter({ pages });
+  const public_exploration = new SitePublicExplorationPresenter({ pages });
   const page_management_panel = new CreatorPageManagementPresenter({ pages });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
@@ -239,6 +247,7 @@ export function create_app_services(
     pages,
     pages_http,
     public_page_view,
+    public_exploration,
     namespace_repository,
     namespaces,
     namespaces_http,

@@ -72,6 +72,43 @@ Deno.test("composition root exposes page HTTP creation and direct delivery over 
   assertStringIncludes(await delivered.text(), "Hi there");
 });
 
+Deno.test("composition root exposes public exploration over the shared page service", async () => {
+  const services = create_app_services();
+  await services.namespaces.reserve({
+    namespace: "Alice",
+    owner_user_id: "owner-1",
+  });
+  const public_page = await services.pages.create_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    locator: { namespace: "Alice", page_name: "Notes" },
+    access: "public",
+    content: { content_type: "md-page", input: { md: "# Public" } },
+  });
+  const private_page = await services.pages.create_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    locator: { namespace: "Alice", page_name: "Secret" },
+    access: "private",
+    content: { content_type: "md-page", input: { md: "# Private" } },
+  });
+  const trial_page = await services.pages.publish_trial({
+    actor: { kind: "guest" },
+    locator: { namespace: "Free", page_name: "Notes" },
+    access: "public",
+    content: { content_type: "md-page", input: { md: "# Trial" } },
+  });
+  assertEquals(public_page.ok, true);
+  assertEquals(private_page.ok, true);
+  assertEquals(trial_page.ok, true);
+
+  const exploration = await services.public_exploration.present({
+    page_name_query: "notes",
+  });
+  assertEquals(
+    exploration.pages.map((page) => page.site_path),
+    ["/site/Alice/Notes"],
+  );
+});
+
 Deno.test("composition root forbids platform route namespaces", async () => {
   const { pages } = create_app_services();
   for (const namespace of ["site", "API", "Auth"]) {

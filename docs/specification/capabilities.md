@@ -102,20 +102,26 @@ Rename, duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
 
 ## CP-EXPLORE — Public exploration
 
-The app can browse or search public pages by:
+The first exploration version can browse all eligible pages or search by
+case-insensitive namespace and page-name substrings, independently or together.
+When both fields are present a result must match both; default pages have no
+page name and therefore match only browsing or a namespace query. Results are
+ordered deterministically and cursor-paginated. They open the site-mediated
+view, which links onward to direct content, the creator's default page when it
+exists, and other public pages.
 
-- page name;
-- author namespace;
-- tags;
-- textual content when the format can be represented and indexed as text.
+The capability is implemented through the HTTP-independent `PublicPageExplorer`
+interface over `PageService`. Memory and Deno KV repositories satisfy the same
+cross-namespace exploration conformance tests, and opaque continuations are
+bound to both normalized query values. Visitor summaries expose no page ID,
+revision, access field, or owner identity. Eligibility is read from current page
+state, so private pages and guest trials never enter browsing or search and a
+public-to-private change disappears immediately. The site projects the model as
+a bounded GET search form and result list.
 
-Results can lead to the site-mediated page, direct content, the creator's
-default page, and other public pages. Private content is excluded. Guest pages
-are also excluded from exploration; they are locatable only by their direct URL
-for raw preview.
-
-Names and tags are enough for an initial search implementation; content search
-can be added without changing page URLs.
+Tags join after page management supplies them. Text-content extraction,
+indexing, relevance, and view-count sorting remain later work and can be added
+without changing page URLs or the visitor-facing contract.
 
 ## CP-EXTERNAL — External content storage
 

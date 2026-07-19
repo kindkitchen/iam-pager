@@ -1,9 +1,12 @@
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_page_exploration_cursor,
   encode_page_list_cursor,
   page_sort_key,
+  type PageExplorationCursorScope,
   type PageSortKey,
 } from "./cursor.ts";
 import type {
@@ -11,6 +14,8 @@ import type {
   CreateManagedResult,
   DeleteManagedRequest,
   DeleteManagedResult,
+  ExplorePublicRequest,
+  ExplorePublicResult,
   ListManagedRequest,
   ListManagedResult,
   ListPublicRequest,
@@ -334,8 +339,78 @@ export class MemoryPageRepository implements PageRepository {
     };
   }
 
+  // deno-lint-ignore require-await
+  async explore_public(
+    request: ExplorePublicRequest,
+  ): Promise<ExplorePublicResult> {
+    require_normalized_exploration_request(request);
+    const scope: PageExplorationCursorScope = {
+      namespace_query: request.namespace_query ?? null,
+      page_name_query: request.page_name_query ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_exploration_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
+    for (const record of this.#by_id.values()) {
+      if (record.stewardship.kind !== "managed") continue;
+      if (record.access !== "public") continue;
+      const key = page_sort_key(record);
+      if (!matches_exploration(key, scope)) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, record });
+    }
+    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
+    const selected = candidates.slice(0, request.limit);
+    return {
+      ok: true,
+      pages: selected.map((entry) => clone(entry.record)),
+      next_cursor: candidates.length > request.limit
+        ? encode_page_exploration_cursor(
+          selected[selected.length - 1].key,
+          scope,
+        )
+        : null,
+    };
+  }
+
   #assert_valid(page: PageRecord): void {
     const violation = page_record_violation(page);
     if (violation !== null) throw new Error(`page repository: ${violation}`);
   }
+}
+
+function require_normalized_exploration_request(
+  request: ExplorePublicRequest,
+): void {
+  require(
+    Number.isSafeInteger(request.limit) && request.limit >= 1,
+    "limit must be a positive safe integer",
+  );
+  for (
+    const [name, query] of [
+      ["namespace_query", request.namespace_query],
+      ["page_name_query", request.page_name_query],
+    ] as const
+  ) {
+    require(
+      query === undefined ||
+        (query !== "" && query === query.trim() &&
+          query === query.toLowerCase()),
+      `${name} must be a normalized lowercase substring when present`,
+    );
+  }
+}
+
+function matches_exploration(
+  key: PageSortKey,
+  scope: PageExplorationCursorScope,
+): boolean {
+  return (scope.namespace_query === null ||
+    key.namespace_key.includes(scope.namespace_query)) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query)));
 }

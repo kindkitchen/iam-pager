@@ -33,17 +33,21 @@ creator listing; private and missing pages receive the same real 404.
 
 ## EX-EXPLORE — Explorer finds public pages
 
-The site can expose public pages through search and browsing. Search is intended
-to cover:
+The site exposes a bounded browse list of public creator-backed pages. An
+explorer can narrow it by a case-insensitive namespace substring, a page-name
+substring, or both; two supplied fields use AND semantics. Results preserve the
+creator's locator casing and open the thin site view, from which direct content,
+the creator's default page when present, and other public pages remain
+available. Opaque continuation keeps the active search fields attached to the
+next result page.
 
-- page names and author namespaces, together or separately;
-- tags;
-- content matches when supported content can be represented and indexed as text.
+Private pages and guest trials are excluded by the page capability and both
+storage implementations, not by the web component. A current public-to-private
+change removes a page from subsequent browse and search results immediately.
+Guest pages remain reachable only by known direct or site-view locators.
 
-Search must not expose private pages.
-
-Guest pages are not searchable or browsable from the site. They can be reached
-only by their direct URL for raw preview.
+Tags follow the page-management tag capability. Text-content extraction and
+indexing remain later scope.
 
 ## EX-PUBLISH — Publisher creates a page
 

@@ -73,6 +73,25 @@ export type ListPublicResult =
   | { ok: false; reason: "invalid_cursor" };
 
 /**
+ * Cross-namespace public exploration storage request (DS-EXPLORE). Query
+ * values are optional normalized lowercase substrings; when both are present,
+ * a page must match both. A page-name query never matches a default page.
+ * Private and trial pages never appear.
+ */
+export interface ExplorePublicRequest {
+  namespace_query?: string;
+  page_name_query?: string;
+  /** Maximum records to return; a positive safe integer. */
+  limit: number;
+  /** Opaque continuation bound to both active query values. */
+  cursor?: string;
+}
+
+export type ExplorePublicResult =
+  | { ok: true; pages: PageRecord[]; next_cursor: string | null }
+  | { ok: false; reason: "invalid_cursor" };
+
+/**
  * Trial create-or-replace. Atomically creates at an absent locator (using the
  * generated `page_id`) or replaces an existing trial page, preserving its id
  * and creation time and incrementing its revision. Never touches a managed
@@ -157,6 +176,7 @@ export interface PageRepository {
   find_by_id(page_id: PageId): Promise<PageRecord | null>;
   list_managed(request: ListManagedRequest): Promise<ListManagedResult>;
   list_public(request: ListPublicRequest): Promise<ListPublicResult>;
+  explore_public(request: ExplorePublicRequest): Promise<ExplorePublicResult>;
   put_trial(request: PutTrialRequest): Promise<PutTrialResult>;
   create_managed(request: CreateManagedRequest): Promise<CreateManagedResult>;
   replace_managed(
@@ -342,6 +362,20 @@ export type ListPublicPagesResult =
     reason: "forbidden_namespace" | "invalid_namespace" | "invalid_cursor";
   };
 
+/** Maximum trimmed query length accepted by public exploration. */
+export const max_public_exploration_query_length = 100;
+
+export interface ExplorePublicPagesRequest {
+  namespace_query?: string;
+  page_name_query?: string;
+  limit: number;
+  cursor?: string;
+}
+
+export type ExplorePublicPagesResult =
+  | { ok: true; pages: PublicPageSummary[]; next_cursor: string | null }
+  | { ok: false; reason: "invalid_query" | "invalid_cursor" };
+
 export type DeliverPageResult =
   | { ok: true; page: PageRecord; payload: DeliveryPayload }
   | {
@@ -405,4 +439,15 @@ export interface PublicPageLister {
   list_public(
     request: ListPublicPagesRequest,
   ): Promise<ListPublicPagesResult>;
+}
+
+/**
+ * Browses and searches public managed pages across namespaces (CP-EXPLORE).
+ * Search is case-insensitive substring matching; supplying both query fields
+ * applies AND semantics. Results remain visitor-safe and cursor-bounded.
+ */
+export interface PublicPageExplorer {
+  explore_public(
+    request: ExplorePublicPagesRequest,
+  ): Promise<ExplorePublicPagesResult>;
 }

@@ -2,11 +2,14 @@ import type { ContentTypeHandler } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
+import { max_public_exploration_query_length } from "./interfaces.ts";
 import type {
   CreateManagedPageRequest,
   CreateManagedPageResult,
   DeleteManagedPageRequest,
   DeleteManagedPageResult,
+  ExplorePublicPagesRequest,
+  ExplorePublicPagesResult,
   InspectManagedPageRequest,
   InspectManagedPageResult,
   ListManagedPagesRequest,
@@ -26,6 +29,7 @@ import type {
   PageIdGenerator,
   PageRepository,
   PageSummary,
+  PublicPageExplorer,
   PublicPageLister,
   PublicPageSummary,
   PublicPageViewer,
@@ -80,6 +84,7 @@ export class PageService
     ManagedPageDeleter,
     PublicPageViewer,
     PublicPageLister,
+    PublicPageExplorer,
     PageDeliverer {
   readonly #engine: LocatorEngine;
   readonly #repository: PageRepository;
@@ -375,6 +380,32 @@ export class PageService
     };
   }
 
+  async explore_public(
+    request: ExplorePublicPagesRequest,
+  ): Promise<ExplorePublicPagesResult> {
+    const namespace_query = normalize_exploration_query(
+      request.namespace_query,
+    );
+    const page_name_query = normalize_exploration_query(
+      request.page_name_query,
+    );
+    if (namespace_query === null || page_name_query === null) {
+      return { ok: false, reason: "invalid_query" };
+    }
+    const explored = await this.#repository.explore_public({
+      ...(namespace_query === undefined ? {} : { namespace_query }),
+      ...(page_name_query === undefined ? {} : { page_name_query }),
+      limit: request.limit,
+      cursor: request.cursor,
+    });
+    if (!explored.ok) return explored;
+    return {
+      ok: true,
+      pages: explored.pages.map((page) => this.#public_summary(page)),
+      next_cursor: explored.next_cursor,
+    };
+  }
+
   async deliver(
     locator: Locator,
     actor: { kind: "guest" } | UserPageActor,
@@ -525,6 +556,16 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function normalize_exploration_query(
+  value: string | undefined,
+): string | undefined | null {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "") return undefined;
+  if (normalized.length > max_public_exploration_query_length) return null;
+  return normalized;
 }
 
 /** Delivery metadata derived from the deterministic rendered representation. */

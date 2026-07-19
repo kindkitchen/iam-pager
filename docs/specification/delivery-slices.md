@@ -51,10 +51,17 @@ share a real 404 response.
 
 ## DS-EXPLORE — Explore public pages
 
-Exploration begins with page names, namespaces, and tags. Text-content search
-can join this slice or follow it when supported extraction is ready. Private
-pages never enter results, and neither do guest pages, which remain reachable
-only by direct URL.
+The first exploration slice is composed on the site: visitors can browse public
+managed pages or search by case-insensitive namespace and page-name substrings,
+independently or with AND semantics. Results are deterministic, bounded, and
+continued by an opaque cursor bound to both query fields; each opens the DS-VIEW
+wrapper and its direct/default/other-page links.
+
+`PublicPageExplorer` keeps this behavior outside Fresh. Memory and Deno KV scan
+their current locator state behind the same repository contract and conformance
+suite, excluding private and guest pages before any result is returned. Tags
+join when DS-MANAGE supplies them. Text-content search, indexing, relevance, and
+view-count sorting remain later work.
 
 ## DS-MANAGE — Expand authenticated management
 
