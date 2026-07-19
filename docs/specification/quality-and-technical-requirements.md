@@ -285,16 +285,6 @@ buttons. The current overwriteable guest flow has no locator availability
 endpoint, so numeric fallback only avoids a combination already generated in the
 local UI.
 
-The publishing API is `POST /api/pages` with an `application/json` body:
-`namespace` and `md` are required strings; `page_name` and `css` are optional
-strings. A guest request remains unowned; an authenticated request derives its
-creator actor from the resolved server session and can write into that creator's
-reserved namespace. Success returns `201`, a relative `Location` header, and
-JSON containing `path` and absolute `url`. Malformed requests return `400`,
-oversized request bodies `413`, unsupported media types `415`, reserved
-namespaces `403`, and locator or content validation failures `422`. Responses
-use `no-store`.
-
 Authenticated namespace ownership uses `GET /api/namespaces` to list the
 caller's claims and `POST /api/namespaces` with required string `namespace` and
 `csrf_token` fields to claim one. The synchronizer token must match the resolved
@@ -340,4 +330,16 @@ Tests should cover the behavior that defines the product:
 - publishing limits and capacity behavior;
 - route conflicts and missing-page responses;
 - page updates without mixed content and metadata;
+- revision conflicts for concurrent update/delete intent;
+- strict HTTP schemas, CSRF, pagination, and ETag preconditions;
+- owner-only private delivery with an ordinary missing response for everyone
+  else;
+- the same identity, index, concurrency, and binary/large-content repository
+  contract against memory and Deno KV;
 - exclusion of private and guest pages from exploration.
+
+The page-management suites cover these domain, repository, HTTP, composition,
+and direct-delivery boundaries. Final acceptance also exercises the composed
+local server through guest trial publication, local authentication and namespace
+reservation, managed takeover, private delivery, access PATCH, stale ETag,
+deletion, and logout.

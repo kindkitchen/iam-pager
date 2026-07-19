@@ -20,8 +20,17 @@ A page associates one locator with one current piece of content and the metadata
 needed to deliver and manage it.
 
 A page can be named or can be the namespace's default page. Its content can
-change without requiring a new locator. For protected pages, changing the page
-name must not collide with another page in the same namespace.
+change without requiring a new locator. Managed pages have an opaque stable
+management ID that is separate from locator identity; it is not part of the
+direct URL and remains stable across content or access changes. For protected
+pages, changing the page name must not collide with another page in the same
+namespace.
+
+A page is either a public, unowned trial or a managed page whose creator is
+recorded only by server-owned storage. Managed pages may be public or private.
+Their current representation has a positive revision, and content/access changes
+or deletion must match that revision so concurrent intent cannot be silently
+overwritten.
 
 ## DA-LOCATOR — Locator
 

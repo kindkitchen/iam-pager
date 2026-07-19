@@ -231,7 +231,8 @@ export class PageHttpAdapter implements PageHttpHandler {
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
     if (!precondition.ok) return precondition.response;
-    if (request.body !== null) {
+    const body = await read_bounded_request_text(request, 0);
+    if (!body.ok || body.text !== "") {
       return error_response(
         400,
         "invalid_request",

@@ -513,10 +513,13 @@ Deno.test("page HTTP DELETE is revision-bound, bodyless, and final", async () =>
   );
   assertEquals(with_body.status, 400);
 
+  // Deno's live HTTP transport can expose a zero-byte body stream even when
+  // the client sent no payload. Treat that as bodyless while rejecting bytes.
   const deleted = await adapter.item(
     request("/api/pages/page-1", {
       method: "DELETE",
       headers: { "x-csrf-token": csrf_token, "if-match": etag },
+      body: "",
     }),
     context(owner_session),
   );

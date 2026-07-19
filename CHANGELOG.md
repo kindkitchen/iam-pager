@@ -2,6 +2,13 @@
 
 ## 2026-07-19
 
+- Accepted and completed `page-management-api`: aligned the page/access/API/
+  retention specification with the implemented contracts, made bodyless DELETE
+  tolerate Deno's zero-byte transport stream while still rejecting payloads, and
+  covered that behavior in the HTTP suite. All 345 tests, check, build, the
+  composed local API/auth lifecycle smoke, and browser draft-retention smoke
+  pass.
+
 - Removed the superseded locator-only publishing stack: legacy publishing
   services and HTTP adapters, `ContentRepository` memory/Deno KV
   implementations, conformance suites, obsolete page record types, and their
