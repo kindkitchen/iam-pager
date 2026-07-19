@@ -66,8 +66,10 @@ The first concrete page API is settled as `POST`/`GET /api/pages` and
 `GET`/`PATCH`/`DELETE /api/pages/:page_id`, with strict nested JSON, browser
 session authentication, synchronizer-token CSRF for authenticated mutations,
 opaque pagination, and strong revision ETags. Direct retrieval remains the
-locator URL. External bearer credentials and expanded management operations are
-later scope; see [`docs/api/pages.md`](../api/pages.md).
+locator URL. Revision-bound rename and generated-name duplicate now exist in the
+HTTP-independent core, but their HTTP shapes and all other expanded management
+operations remain later scope. External bearer credentials are also later; see
+[`docs/api/pages.md`](../api/pages.md).
 
 ## OQ-OPEN — MVP decisions still needed
 

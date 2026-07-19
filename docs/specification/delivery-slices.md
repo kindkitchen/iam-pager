@@ -71,6 +71,15 @@ generated name, apply selected bulk changes, and reserve additional namespaces.
 Date and view filters are added only when the corresponding metadata is useful
 and trustworthy.
 
+The first HTTP-independent DS-MANAGE foundation is implemented: revision-bound
+rename atomically moves a stable page identity inside its namespace, rejects a
+managed destination, and may retire a pre-reservation trial; duplication uses
+the shared four-word generator, retries occupied names and ID collisions within
+bounds, and copies one exact source revision into a fresh identity. Memory and
+Deno KV pass the same locator/index/concurrency conformance. These operations
+are not yet exposed by the page API or creator panel. Tags, managed filters, and
+bulk operations remain the next core work.
+
 ## DS-EXTERNAL — Evaluate external storage
 
 After first-party publishing is stable, one external provider can test whether a

@@ -142,15 +142,20 @@ The first publishing slice currently provides:
   repository contract with deterministic owner pagination, memory and Deno KV
   backends passing the same conformance suite, and an HTTP-independent
   `PageService` for trial publish plus managed create, list, source inspection,
-  content/access update, deletion, owner-only private delivery, public wrapped
-  viewing, and bounded namespace-public listing. Public summaries omit page IDs,
-  revisions, and owner identity; private and guest pages never enter creator
-  listings. The durable adapter uses coherent ID/locator/owner indexes and
-  immutable binary-safe content chunks in a fresh keyspace. The composition root
-  selects one page repository and exposes this service plus its strict HTTP
-  adapter to thin Fresh collection, item, direct-delivery, and wrapped-view
-  routes. The current publishing form sends the nested explicit public-create
-  request and creator CSRF token without losing draft state on API errors; see
+  content/access update, deletion, revision-bound same-namespace rename,
+  generated-name duplication, owner-only private delivery, public wrapped
+  viewing, and bounded namespace-public listing. Rename preserves stable page
+  identity and atomically moves locator/owner indexes; duplication copies one
+  exact source revision into a fresh identity. Both memory and Deno KV reject
+  managed destination conflicts and may retire a pre-reservation trial at the
+  destination. Public summaries omit page IDs, revisions, and owner identity;
+  private and guest pages never enter creator listings. The durable adapter uses
+  coherent ID/locator/owner indexes and immutable binary-safe content chunks in
+  a fresh keyspace. The composition root selects one page repository and exposes
+  this service plus its strict HTTP adapter to thin Fresh collection, item,
+  direct-delivery, and wrapped-view routes. The current publishing form sends
+  the nested explicit public-create request and creator CSRF token without
+  losing draft state on API errors; see
   [the page API contract](docs/api/pages.md);
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
@@ -186,10 +191,11 @@ Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
 sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
-replaceable by anyone. Total page capacity, publishing frequency, guest expiry,
-rename/duplicate/bulk operations, exploration tags/content indexing/relevance,
-and backend migration are not implemented; these endpoints are not ready for
-untrusted public traffic.
+replaceable by anyone. Rename and duplicate now exist in the HTTP-independent
+core but are not yet exposed through the API or site. Total page capacity,
+publishing frequency, guest expiry, tags/filters/bulk operations, exploration
+text indexing/relevance, and backend migration are not implemented; these
+endpoints are not ready for untrusted public traffic.
 
 ## Local development
 
@@ -210,8 +216,9 @@ authenticated header shows only signed-in state and the CSRF-protected
 rotates the browser to a distinct guest session. Signed-in creators can reserve
 and list namespaces through the creator panel, then publish into their own
 claim. The creator management panel lists, inspects, edits, changes access, and
-deletes their pages over the revision-bound management API. Broader
-rename/duplicate/bulk management remains future work.
+deletes their pages over the revision-bound management API. Core rename and
+generated-name duplicate contracts are implemented, but their API and site
+controls plus tags, filters, and bulk management remain future work.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

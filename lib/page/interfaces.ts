@@ -147,6 +147,59 @@ export type ReplaceManagedResult =
   | { ok: true; page: PageRecord }
   | { ok: false; reason: "not_found" | "revision_conflict" };
 
+/**
+ * Revision-bound locator move within the page's current namespace. The page id,
+ * content, access, stewardship, and creation time stay stable. A target trial
+ * may be retired, but another managed page is always a conflict.
+ */
+export interface RenameManagedRequest {
+  page_id: PageId;
+  owner_user_id: string;
+  expected_revision: number;
+  locator: Locator;
+  now: Date;
+}
+
+export type RenameManagedResult =
+  | {
+    ok: true;
+    outcome: "renamed" | "replaced_trial";
+    page: PageRecord;
+  }
+  | {
+    ok: false;
+    reason: "not_found" | "revision_conflict" | "locator_conflict";
+  };
+
+/**
+ * Revision-bound copy from one managed source into a generated locator in the
+ * same namespace. The source is unchanged; the copy receives a fresh id,
+ * creation timestamp, and revision 1 while retaining content and access.
+ */
+export interface DuplicateManagedRequest {
+  source_page_id: PageId;
+  owner_user_id: string;
+  expected_revision: number;
+  page_id: PageId;
+  locator: Locator;
+  now: Date;
+}
+
+export type DuplicateManagedResult =
+  | {
+    ok: true;
+    outcome: "created" | "replaced_trial";
+    page: PageRecord;
+  }
+  | {
+    ok: false;
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "locator_conflict"
+      | "page_id_conflict";
+  };
+
 /** Revision-bound managed deletion with the same authority conditions. */
 export interface DeleteManagedRequest {
   page_id: PageId;
@@ -159,8 +212,8 @@ export type DeleteManagedResult =
   | { ok: false; reason: "not_found" | "revision_conflict" };
 
 /**
- * Storage for pages (DS-PROTECT). Implementations own atomic
- * identity/index/revision conditions; services own validation, authorization,
+ * Storage for pages (DS-PROTECT, DS-MANAGE). Implementations own atomic
+ * identity/index/revision/locator conditions; services own validation, authorization,
  * derivation, and business results.
  *
  * Missing, trial, and foreign pages collapse into one non-disclosing
@@ -182,6 +235,10 @@ export interface PageRepository {
   replace_managed(
     request: ReplaceManagedRequest,
   ): Promise<ReplaceManagedResult>;
+  rename_managed(request: RenameManagedRequest): Promise<RenameManagedResult>;
+  duplicate_managed(
+    request: DuplicateManagedRequest,
+  ): Promise<DuplicateManagedResult>;
   delete_managed(request: DeleteManagedRequest): Promise<DeleteManagedResult>;
 }
 
@@ -340,6 +397,53 @@ export type DeleteManagedPageResult =
   | { ok: true }
   | { ok: false; reason: "not_found" | "revision_conflict" };
 
+export interface RenameManagedPageRequest {
+  actor: UserPageActor;
+  page_id: PageId;
+  expected_revision: number;
+  /** Omit to make this namespace's default page. */
+  page_name?: string;
+}
+
+export type RenameManagedPageResult =
+  | {
+    ok: true;
+    outcome: "renamed" | "replaced_trial" | "unchanged";
+    page: ManagedPageInspection;
+  }
+  | {
+    ok: false;
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "revision_exhausted"
+      | "invalid_page_name"
+      | "page_exists"
+      | "unknown_content_type";
+  };
+
+export interface DuplicateManagedPageRequest {
+  actor: UserPageActor;
+  page_id: PageId;
+  expected_revision: number;
+}
+
+export type DuplicateManagedPageResult =
+  | {
+    ok: true;
+    outcome: "created" | "replaced_trial";
+    page: ManagedPageInspection;
+  }
+  | {
+    ok: false;
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "unknown_content_type"
+      | "page_name_generation_exhausted"
+      | "page_id_generation_exhausted";
+  };
+
 export type ViewPublicPageResult =
   | {
     ok: true;
@@ -417,6 +521,18 @@ export interface ManagedPageDeleter {
   delete_managed(
     request: DeleteManagedPageRequest,
   ): Promise<DeleteManagedPageResult>;
+}
+
+export interface ManagedPageRenamer {
+  rename_managed(
+    request: RenameManagedPageRequest,
+  ): Promise<RenameManagedPageResult>;
+}
+
+export interface ManagedPageDuplicator {
+  duplicate_managed(
+    request: DuplicateManagedPageRequest,
+  ): Promise<DuplicateManagedPageResult>;
 }
 
 export interface PageDeliverer {

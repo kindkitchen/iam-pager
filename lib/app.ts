@@ -23,6 +23,8 @@ import {
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler } from "./content/mod.ts";
 import {
+  type ManagedPageDuplicator,
+  type ManagedPageRenamer,
   MemoryPageRepository,
   type PageDeliverer,
   PageHttpAdapter,
@@ -104,6 +106,8 @@ export interface AppServices {
   pages:
     & PageHttpApplication
     & PageDeliverer
+    & ManagedPageRenamer
+    & ManagedPageDuplicator
     & PublicPageViewer
     & PublicPageLister
     & PublicPageExplorer;

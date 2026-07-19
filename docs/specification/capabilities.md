@@ -98,7 +98,15 @@ renders a creator management panel over these same contracts: a server presenter
 lists the first page of managed rows, and the island continues through
 `/api/pages` for pagination, inspection, editor-based content updates, access
 toggling, and deletion, always revision-bound via the published strong ETags.
-Rename, duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
+The first DS-MANAGE core now adds explicit `ManagedPageRenamer` and
+`ManagedPageDuplicator` contracts. Rename is revision-bound, keeps the stable
+page ID/content/access/creation time, atomically moves locator and owner
+indexes, and reports a managed destination conflict; duplicate copies one exact
+source revision under a bounded generated available name and fresh ID. A
+destination trial may be retired consistently with managed creation. Memory and
+Deno KV pass the same conformance and concurrent claims settle on one winner.
+HTTP endpoints and creator controls for these operations are still pending;
+tags, managed filters, and bulk actions remain later DS-MANAGE work.
 
 ## CP-EXPLORE — Public exploration
 

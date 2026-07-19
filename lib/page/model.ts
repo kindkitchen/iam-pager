@@ -27,8 +27,9 @@ export interface PageContent<Data = unknown> {
 /**
  * One stored page. Identity for management is `page_id`; identity for direct
  * delivery is the case-insensitive locator key, while `locator` keeps the
- * publisher-supplied casing for display (DA-LOCATOR). Timestamps live on the
- * page: access-only mutation updates the page, not a content lifecycle.
+ * publisher-supplied casing for display (DA-LOCATOR). Managed rename can move
+ * that locator without changing `page_id`. Timestamps live on the page:
+ * metadata-only mutation updates the page, not a content lifecycle.
  */
 export interface PageRecord<Data = unknown> {
   page_id: PageId;

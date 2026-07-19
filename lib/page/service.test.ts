@@ -9,6 +9,7 @@ import { type MdPageData, MdPageHandler } from "../content/md-page.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
+import type { RandomNameGenerator } from "../random-name.ts";
 import type { PageClock, PageIdGenerator } from "./interfaces.ts";
 import { MemoryPageRepository } from "./memory-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
@@ -35,6 +36,19 @@ class SequenceIds implements PageIdGenerator {
   }
 }
 
+class SequenceNames implements RandomNameGenerator {
+  #names: string[];
+  #fallback = 0;
+
+  constructor(names: string[] = []) {
+    this.#names = [...names];
+  }
+
+  generate(): string {
+    return this.#names.shift() ?? `generated-name-${++this.#fallback}`;
+  }
+}
+
 class SequenceClock implements PageClock {
   #dates: Date[];
 
@@ -51,6 +65,8 @@ async function make_fixture(options: {
   ids?: string[];
   dates?: Date[];
   max_page_id_attempts?: number;
+  names?: string[];
+  max_page_name_attempts?: number;
 } = {}) {
   const repository = new MemoryPageRepository();
   const namespaces = new MemoryNamespaceRepository();
@@ -70,6 +86,8 @@ async function make_fixture(options: {
     page_id_generator: new SequenceIds(options.ids),
     clock: new SequenceClock(options.dates),
     max_page_id_attempts: options.max_page_id_attempts,
+    page_name_generator: new SequenceNames(options.names),
+    max_page_name_attempts: options.max_page_name_attempts,
   });
   return { service, repository, namespaces };
 }
@@ -412,6 +430,174 @@ Deno.test("PageService concurrent updates with one revision have exactly one win
   );
 });
 
+Deno.test("PageService rename validates, conflicts safely, and can set the default page", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["source", "protected"],
+    dates: [t1, t2, t3],
+  });
+  const source = await service.create_managed(
+    managed_request("notes", "public", "# Source"),
+  );
+  const protected_page = await service.create_managed(
+    managed_request("protected", "private", "# Protected"),
+  );
+  assert(source.ok && protected_page.ok);
+
+  assertEquals(
+    await service.rename_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 1,
+      page_name: "",
+    }),
+    { ok: false, reason: "invalid_page_name" },
+  );
+  const renamed = await service.rename_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 1,
+    page_name: "Reports/Today",
+  });
+  assert(renamed.ok);
+  assertEquals(renamed.outcome, "renamed");
+  assertEquals(renamed.page.path, "/Mine/Reports/Today");
+  assertEquals(renamed.page.revision, 2);
+  assertEquals(renamed.page.content.input, { md: "# Source" });
+  assertEquals(
+    await repository.find_by_locator({ namespace: "Mine", page_name: "notes" }),
+    null,
+  );
+
+  const unchanged = await service.rename_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 2,
+    page_name: "Reports/Today",
+  });
+  assert(unchanged.ok);
+  assertEquals(unchanged.outcome, "unchanged");
+  assertEquals(unchanged.page.revision, 2);
+  assertEquals(
+    await service.rename_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 2,
+      page_name: "protected",
+    }),
+    { ok: false, reason: "page_exists" },
+  );
+
+  const made_default = await service.rename_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 2,
+  });
+  assert(made_default.ok);
+  assertEquals(made_default.page.path, "/Mine");
+  assertEquals(made_default.page.revision, 3);
+  assertEquals((await repository.find_by_id("protected"))?.revision, 1);
+});
+
+Deno.test("PageService rename remains revision-bound and owner-nondisclosing", async () => {
+  const { service } = await make_fixture({ ids: ["managed-1"] });
+  const created = await service.create_managed(managed_request());
+  assert(created.ok);
+  assertEquals(
+    await service.rename_managed({
+      actor: owner,
+      page_id: created.page.page_id,
+      expected_revision: 2,
+      page_name: "moved",
+    }),
+    { ok: false, reason: "revision_conflict" },
+  );
+  assertEquals(
+    await service.rename_managed({
+      actor: other,
+      page_id: created.page.page_id,
+      expected_revision: 1,
+      page_name: "moved",
+    }),
+    { ok: false, reason: "not_found" },
+  );
+});
+
+Deno.test("PageService duplicate retries generated names and preserves the source snapshot", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["source", "protected", "discarded-id", "copy"],
+    names: ["protected", "generated-name"],
+    dates: [t1, t2, t3],
+  });
+  const source = await service.create_managed({
+    ...managed_request("notes", "private"),
+    content: {
+      content_type: "md-page",
+      input: { md: "# Source", css: "body { color: navy; }" },
+    },
+  });
+  const protected_page = await service.create_managed(
+    managed_request("protected", "public", "# Protected"),
+  );
+  assert(source.ok && protected_page.ok);
+
+  const duplicated = await service.duplicate_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 1,
+  });
+  assert(duplicated.ok);
+  assertEquals(duplicated.outcome, "created");
+  assertEquals(duplicated.page.page_id, "copy");
+  assertEquals(duplicated.page.path, "/Mine/generated-name");
+  assertEquals(duplicated.page.access, "private");
+  assertEquals(duplicated.page.revision, 1);
+  assertEquals(duplicated.page.created_at, t3);
+  assertEquals(duplicated.page.updated_at, t3);
+  assertEquals(duplicated.page.content.input, {
+    md: "# Source",
+    css: "body { color: navy; }",
+  });
+  assertEquals((await repository.find_by_id("source"))?.revision, 1);
+  assertEquals((await repository.find_by_id("protected"))?.revision, 1);
+});
+
+Deno.test("PageService duplicate retries id collisions and bounds name exhaustion", async () => {
+  const id_fixture = await make_fixture({
+    ids: ["source", "source", "copy"],
+    names: ["generated"],
+    max_page_id_attempts: 2,
+  });
+  const source = await id_fixture.service.create_managed(managed_request());
+  assert(source.ok);
+  const retried = await id_fixture.service.duplicate_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 1,
+  });
+  assert(retried.ok);
+  assertEquals(retried.page.page_id, "copy");
+
+  const exhausted = await make_fixture({
+    ids: ["source", "one", "two", "attempt-1", "attempt-2"],
+    names: ["one", "two"],
+    max_page_name_attempts: 2,
+  });
+  const exhausted_source = await exhausted.service.create_managed(
+    managed_request("source"),
+  );
+  await exhausted.service.create_managed(managed_request("one"));
+  await exhausted.service.create_managed(managed_request("two"));
+  assert(exhausted_source.ok);
+  assertEquals(
+    await exhausted.service.duplicate_managed({
+      actor: owner,
+      page_id: exhausted_source.page.page_id,
+      expected_revision: 1,
+    }),
+    { ok: false, reason: "page_name_generation_exhausted" },
+  );
+});
+
 Deno.test("PageService delete is revision-bound and removes management and delivery", async () => {
   const { service } = await make_fixture({ ids: ["managed-1"] });
   const created = await service.create_managed(
@@ -746,6 +932,16 @@ Deno.test("PageService rejects invalid dependencies and generated values", async
       }),
     Error,
     "duplicate content type",
+  );
+  assertThrows(
+    () =>
+      new PageService({
+        ...base,
+        handlers: [new MdPageHandler()],
+        max_page_name_attempts: 0,
+      }),
+    Error,
+    "max_page_name_attempts",
   );
   const invalid_id_service = new PageService({
     ...base,

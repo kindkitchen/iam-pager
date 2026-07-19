@@ -511,6 +511,322 @@ export function test_page_repository_conformance(
     },
   );
 
+  conformance_test(
+    "rename_managed atomically moves locator and owner ordering",
+    async (repository) => {
+      const created = await seed_managed(
+        repository,
+        "managed-1",
+        "owner-1",
+        "Alice",
+        "notes",
+        "v1",
+        "private",
+      );
+      const renamed = await repository.rename_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "Alice", page_name: "Reports" },
+        now: t2,
+      });
+      assert(renamed.ok);
+      assertEquals(renamed.outcome, "renamed");
+      assertEquals(renamed.page, {
+        ...created,
+        locator: { namespace: "Alice", page_name: "Reports" },
+        revision: 2,
+        updated_at: t2,
+      });
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "notes",
+        }),
+        null,
+      );
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "ALICE",
+          page_name: "reports",
+        }),
+        renamed.page,
+      );
+      assertEquals(await repository.find_by_id(created.page_id), renamed.page);
+      const listed = await repository.list_managed({
+        owner_user_id: "owner-1",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(listed.pages, [renamed.page]);
+    },
+  );
+
+  conformance_test(
+    "rename_managed replaces a trial but never another managed page",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      const protected_target = await seed_managed(
+        repository,
+        "protected",
+        "owner-1",
+        "alice",
+        "protected",
+        "protected",
+      );
+      const conflict = await repository.rename_managed({
+        page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "alice", page_name: "PROTECTED" },
+        now: t2,
+      });
+      assertEquals(conflict, { ok: false, reason: "locator_conflict" });
+      assertEquals(await repository.find_by_id("protected"), protected_target);
+      assertEquals((await repository.find_by_id("source"))?.revision, 1);
+
+      await repository.put_trial({
+        page_id: "trial-target",
+        locator: { namespace: "alice", page_name: "available" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+      const replaced = await repository.rename_managed({
+        page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "Alice", page_name: "Available" },
+        now: t2,
+      });
+      assert(replaced.ok);
+      assertEquals(replaced.outcome, "replaced_trial");
+      assertEquals(replaced.page.page_id, "source");
+      assertEquals(replaced.page.revision, 2);
+      assertEquals(await repository.find_by_id("trial-target"), null);
+      assertEquals(
+        (await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "available",
+        }))?.page_id,
+        "source",
+      );
+    },
+  );
+
+  conformance_test(
+    "rename_managed is revision-bound and owner-nondisclosing",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "managed-1",
+        "owner-1",
+        "alice",
+        "notes",
+        "v1",
+      );
+      for (
+        const request of [
+          {
+            page_id: "managed-1",
+            owner_user_id: "owner-1",
+            expected_revision: 2,
+          },
+          {
+            page_id: "managed-1",
+            owner_user_id: "owner-2",
+            expected_revision: 1,
+          },
+          {
+            page_id: "absent",
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+          },
+        ]
+      ) {
+        const result = await repository.rename_managed({
+          ...request,
+          locator: { namespace: "alice", page_name: "moved" },
+          now: t2,
+        });
+        assertEquals(
+          result,
+          request.expected_revision === 2
+            ? { ok: false, reason: "revision_conflict" }
+            : { ok: false, reason: "not_found" },
+        );
+      }
+      assertEquals(
+        (await repository.find_by_id("managed-1"))?.locator.page_name,
+        "notes",
+      );
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed copies a revision-bound snapshot under fresh identity",
+    async (repository) => {
+      const source = await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "Alice",
+        "notes",
+        "source",
+        "private",
+      );
+      const duplicated = await repository.duplicate_managed({
+        source_page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        page_id: "duplicate",
+        locator: { namespace: "Alice", page_name: "generated-name" },
+        now: t2,
+      });
+      assert(duplicated.ok);
+      assertEquals(duplicated.outcome, "created");
+      assertEquals(duplicated.page, {
+        ...source,
+        page_id: "duplicate",
+        locator: { namespace: "Alice", page_name: "generated-name" },
+        revision: 1,
+        created_at: t2,
+        updated_at: t2,
+      });
+      assertEquals(await repository.find_by_id("source"), source);
+      assertEquals(await repository.find_by_id("duplicate"), duplicated.page);
+      const listed = await repository.list_managed({
+        owner_user_id: "owner-1",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(
+        listed.pages.map((page) => page.page_id),
+        ["duplicate", "source"],
+      );
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed replaces trials and reports protected locator or id conflicts",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      await seed_managed(
+        repository,
+        "protected",
+        "owner-1",
+        "alice",
+        "protected",
+        "protected",
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "copy-1",
+          locator: { namespace: "alice", page_name: "protected" },
+          now: t2,
+        }),
+        { ok: false, reason: "locator_conflict" },
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "protected",
+          locator: { namespace: "alice", page_name: "new-name" },
+          now: t2,
+        }),
+        { ok: false, reason: "page_id_conflict" },
+      );
+
+      await repository.put_trial({
+        page_id: "trial-target",
+        locator: { namespace: "alice", page_name: "available" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+      const replaced = await repository.duplicate_managed({
+        source_page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        page_id: "copy-2",
+        locator: { namespace: "Alice", page_name: "Available" },
+        now: t2,
+      });
+      assert(replaced.ok);
+      assertEquals(replaced.outcome, "replaced_trial");
+      assertEquals(await repository.find_by_id("trial-target"), null);
+      assertEquals((await repository.find_by_id("copy-2"))?.revision, 1);
+      assertEquals((await repository.find_by_id("source"))?.revision, 1);
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed is revision-bound and owner-nondisclosing",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 2,
+          page_id: "copy-stale",
+          locator: { namespace: "alice", page_name: "stale" },
+          now: t2,
+        }),
+        { ok: false, reason: "revision_conflict" },
+      );
+      for (
+        const [source_page_id, owner_user_id] of [
+          ["source", "owner-2"],
+          ["absent", "owner-1"],
+        ] as const
+      ) {
+        assertEquals(
+          await repository.duplicate_managed({
+            source_page_id,
+            owner_user_id,
+            expected_revision: 1,
+            page_id: `copy-${owner_user_id}`,
+            locator: { namespace: "alice", page_name: "hidden" },
+            now: t2,
+          }),
+          { ok: false, reason: "not_found" },
+        );
+      }
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "stale",
+        }),
+        null,
+      );
+    },
+  );
+
   conformance_test("delete_managed removes id and locator visibility", async (
     repository,
   ) => {
@@ -1168,6 +1484,91 @@ export function test_page_repository_conformance(
   );
 
   conformance_test(
+    "concurrent renames cannot claim one locator twice",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source-1",
+        "owner-1",
+        "race",
+        "one",
+        "one",
+      );
+      await seed_managed(
+        repository,
+        "source-2",
+        "owner-1",
+        "race",
+        "two",
+        "two",
+      );
+      const results = await Promise.all(
+        ["source-1", "source-2"].map((page_id) =>
+          repository.rename_managed({
+            page_id,
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+            locator: { namespace: "race", page_name: "winner" },
+            now: t2,
+          })
+        ),
+      );
+      assertEquals(only_ok(results).length, 1);
+      assertEquals(
+        results.filter((result) => !result.ok).map((result) => result.reason),
+        ["locator_conflict"],
+      );
+      const winner = await repository.find_by_locator({
+        namespace: "race",
+        page_name: "winner",
+      });
+      assert(winner !== null);
+      assertEquals(winner.revision, 2);
+      const losing_id = winner.page_id === "source-1" ? "source-2" : "source-1";
+      assertEquals((await repository.find_by_id(losing_id))?.revision, 1);
+    },
+  );
+
+  conformance_test(
+    "concurrent duplicates cannot claim one generated locator twice",
+    async (repository) => {
+      const source = await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "race",
+        "source",
+        "source",
+      );
+      const results = await Promise.all(
+        ["copy-1", "copy-2"].map((page_id) =>
+          repository.duplicate_managed({
+            source_page_id: "source",
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+            page_id,
+            locator: { namespace: "race", page_name: "generated" },
+            now: t2,
+          })
+        ),
+      );
+      assertEquals(only_ok(results).length, 1);
+      assertEquals(
+        results.filter((result) => !result.ok).map((result) => result.reason),
+        ["locator_conflict"],
+      );
+      assertEquals(await repository.find_by_id("source"), source);
+      const winner = await repository.find_by_locator({
+        namespace: "race",
+        page_name: "generated",
+      });
+      assert(winner !== null);
+      assertEquals(winner.revision, 1);
+      assertEquals(winner.content, source.content);
+    },
+  );
+
+  conformance_test(
     "concurrent managed creates settle on exactly one winner",
     async (repository) => {
       const results = await Promise.all(
@@ -1432,6 +1833,25 @@ export function test_page_repository_conformance(
           page_id: "ok-id",
           owner_user_id: "owner-1",
           expected_revision: 1.5,
+        })
+      );
+      await assertRejects(() =>
+        repository.rename_managed({
+          page_id: "ok-id",
+          owner_user_id: "owner-1",
+          expected_revision: 0,
+          locator: { namespace: "ns", page_name: "moved" },
+          now: t1,
+        })
+      );
+      await assertRejects(() =>
+        repository.duplicate_managed({
+          source_page_id: "bad id!",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "copy",
+          locator: { namespace: "ns", page_name: "copy" },
+          now: t1,
         })
       );
       await assertRejects(() =>

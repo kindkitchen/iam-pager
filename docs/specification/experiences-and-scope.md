@@ -80,10 +80,14 @@ Within a reserved namespace, the creator can:
 - select pages for bulk deletion or access changes;
 
 A name conflict within the reserved namespace is reported instead of replacing
-an authenticated page. The API-first core provides individual create, list,
-inspect, content/access update, and delete operations, and the site management
-panel now exposes those individual operations to the signed-in creator; rename,
-duplicate, filters, tags, and bulk actions remain later scope.
+an authenticated page. The HTTP-independent core provides individual create,
+list, inspect, content/access update, delete, revision-bound same-namespace
+rename, and generated-name duplicate operations. Rename retains the page ID and
+may replace only an old trial; duplicate copies the selected source revision to
+a fresh ID. Memory and Deno KV enforce these rules atomically. The current API
+and site management panel still expose only create/list/inspect/update/delete;
+rename and duplicate transport/UI, filters, tags, and bulk actions remain later
+scope.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

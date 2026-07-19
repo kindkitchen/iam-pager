@@ -14,6 +14,8 @@ import type {
   CreateManagedResult,
   DeleteManagedRequest,
   DeleteManagedResult,
+  DuplicateManagedRequest,
+  DuplicateManagedResult,
   ExplorePublicRequest,
   ExplorePublicResult,
   ListManagedRequest,
@@ -23,6 +25,8 @@ import type {
   PageRepository,
   PutTrialRequest,
   PutTrialResult,
+  RenameManagedRequest,
+  RenameManagedResult,
   ReplaceManagedRequest,
   ReplaceManagedResult,
 } from "./interfaces.ts";
@@ -1202,6 +1206,301 @@ export class DenoKvPageRepository implements PageRepository {
       }
     }
     throw new Error("page repository write contention exhausted retries");
+  }
+
+  async rename_managed(
+    request: RenameManagedRequest,
+  ): Promise<RenameManagedResult> {
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" && request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+
+    for (let attempt = 0; attempt < max_attempts; attempt += 1) {
+      const envelope_entry = await this.#kv.get<unknown>(
+        id_key(request.page_id),
+      );
+      if (envelope_entry.versionstamp === null) {
+        return { ok: false, reason: "not_found" };
+      }
+      const envelope = deserialize_envelope(envelope_entry.value);
+      this.#assert_envelope_identity(envelope_entry.key, envelope);
+      if (
+        envelope.stewardship !== "managed" ||
+        envelope.owner_user_id !== request.owner_user_id
+      ) {
+        return { ok: false, reason: "not_found" };
+      }
+      require(
+        request.locator.namespace.toLowerCase() ===
+          envelope.namespace.toLowerCase(),
+        "rename must stay within the current namespace",
+      );
+      if (envelope.revision !== request.expected_revision) {
+        return { ok: false, reason: "revision_conflict" };
+      }
+      const existing_page = await this.#read_snapshot({
+        entry: envelope_entry,
+        envelope,
+      });
+      if (existing_page === null) continue;
+
+      const old_locator_key = locator_key(existing_page.locator);
+      const old_owner_key = owner_key(existing_page);
+      const target_locator_key = locator_key(request.locator);
+      const same_locator_key = key_equals(old_locator_key, target_locator_key);
+      const base_entries = await this.#kv.getMany<unknown[]>([
+        envelope_entry.key,
+        old_locator_key,
+        old_owner_key,
+        ...(same_locator_key ? [] : [target_locator_key]),
+      ]);
+      const [current_envelope, old_locator_entry, old_owner_entry] =
+        base_entries;
+      if (current_envelope.versionstamp !== envelope_entry.versionstamp) {
+        continue;
+      }
+      this.#assert_mutation_indexes(
+        old_locator_entry,
+        old_owner_entry,
+        envelope,
+      );
+
+      let target_entry: Deno.KvEntryMaybe<unknown> | null = same_locator_key
+        ? null
+        : base_entries[3];
+      let replaced_trial: StoredPageSnapshot | null = null;
+      if (target_entry !== null && target_entry.versionstamp !== null) {
+        const target_index = deserialize_locator_index(target_entry.value);
+        const [current_target, target_envelope_entry] = await this.#kv.getMany<
+          unknown[]
+        >([target_locator_key, id_key(target_index.page_id)]);
+        if (current_target.versionstamp !== target_entry.versionstamp) continue;
+        if (target_envelope_entry.versionstamp === null) invariant_violation();
+        const target_envelope = deserialize_envelope(
+          target_envelope_entry.value,
+        );
+        this.#assert_snapshot_indexes(
+          current_target,
+          target_envelope_entry,
+          target_envelope,
+        );
+        if (target_envelope.stewardship === "managed") {
+          return { ok: false, reason: "locator_conflict" };
+        }
+        target_entry = current_target;
+        replaced_trial = {
+          entry: target_envelope_entry,
+          envelope: target_envelope,
+        };
+      }
+
+      const page: PageRecord = {
+        ...existing_page,
+        locator: structuredClone(request.locator),
+        revision: envelope.revision + 1,
+        updated_at: request.now,
+      };
+      const next_envelope = serialize_envelope(
+        page,
+        envelope.generation,
+        envelope.chunk_count,
+        envelope.data_byte_length,
+      );
+      const next_owner_key = owner_key(page);
+      let atomic = this.#kv.atomic()
+        .check(envelope_entry)
+        .check(old_locator_entry)
+        .check(old_owner_entry)
+        .set(envelope_entry.key, next_envelope);
+      if (same_locator_key) {
+        atomic = atomic
+          .set(old_locator_key, locator_index(page.page_id))
+          .set(old_owner_key, owner_index(page));
+      } else {
+        atomic = atomic
+          .check(target_entry!)
+          .delete(old_locator_key)
+          .delete(old_owner_key)
+          .set(target_locator_key, locator_index(page.page_id))
+          .set(next_owner_key, owner_index(page));
+        if (replaced_trial !== null) {
+          atomic = atomic
+            .check(replaced_trial.entry)
+            .delete(replaced_trial.entry.key);
+          this.#delete_generation(atomic, replaced_trial.envelope);
+        }
+      }
+      const commit = await atomic.commit();
+      if (commit.ok) {
+        return {
+          ok: true,
+          outcome: replaced_trial === null ? "renamed" : "replaced_trial",
+          page,
+        };
+      }
+    }
+    throw new Error("page repository rename contention exhausted retries");
+  }
+
+  async duplicate_managed(
+    request: DuplicateManagedRequest,
+  ): Promise<DuplicateManagedResult> {
+    require(
+      is_valid_page_id(request.source_page_id),
+      "source_page_id must be a route-safe opaque id",
+    );
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" && request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+
+    for (let attempt = 0; attempt < max_attempts; attempt += 1) {
+      const source_entry = await this.#kv.get<unknown>(
+        id_key(request.source_page_id),
+      );
+      if (source_entry.versionstamp === null) {
+        return { ok: false, reason: "not_found" };
+      }
+      const source_envelope = deserialize_envelope(source_entry.value);
+      this.#assert_envelope_identity(source_entry.key, source_envelope);
+      if (
+        source_envelope.stewardship !== "managed" ||
+        source_envelope.owner_user_id !== request.owner_user_id
+      ) {
+        return { ok: false, reason: "not_found" };
+      }
+      require(
+        request.locator.namespace.toLowerCase() ===
+          source_envelope.namespace.toLowerCase(),
+        "duplicate must stay within the source namespace",
+      );
+      if (source_envelope.revision !== request.expected_revision) {
+        return { ok: false, reason: "revision_conflict" };
+      }
+      const source_page = await this.#read_snapshot({
+        entry: source_entry,
+        envelope: source_envelope,
+      });
+      if (source_page === null) continue;
+
+      const target_locator_key = locator_key(request.locator);
+      const source_locator_key = locator_key(source_page.locator);
+      const source_owner_key = owner_key(source_page);
+      const [
+        current_source,
+        source_locator_entry,
+        source_owner_entry,
+        target_entry,
+        new_id_entry,
+      ] = await this.#kv.getMany<unknown[]>([
+        source_entry.key,
+        source_locator_key,
+        source_owner_key,
+        target_locator_key,
+        id_key(request.page_id),
+      ]);
+      if (current_source.versionstamp !== source_entry.versionstamp) continue;
+      this.#assert_mutation_indexes(
+        source_locator_entry,
+        source_owner_entry,
+        source_envelope,
+      );
+
+      let current_target = target_entry;
+      let replaced_trial: StoredPageSnapshot | null = null;
+      if (target_entry.versionstamp !== null) {
+        const target_index = deserialize_locator_index(target_entry.value);
+        const [checked_target, target_envelope_entry] = await this.#kv.getMany<
+          unknown[]
+        >([target_locator_key, id_key(target_index.page_id)]);
+        if (checked_target.versionstamp !== target_entry.versionstamp) continue;
+        if (target_envelope_entry.versionstamp === null) invariant_violation();
+        const target_envelope = deserialize_envelope(
+          target_envelope_entry.value,
+        );
+        this.#assert_snapshot_indexes(
+          checked_target,
+          target_envelope_entry,
+          target_envelope,
+        );
+        if (target_envelope.stewardship === "managed") {
+          return { ok: false, reason: "locator_conflict" };
+        }
+        current_target = checked_target;
+        replaced_trial = {
+          entry: target_envelope_entry,
+          envelope: target_envelope,
+        };
+      }
+      if (new_id_entry.versionstamp !== null) {
+        return { ok: false, reason: "page_id_conflict" };
+      }
+
+      const page: PageRecord = {
+        page_id: request.page_id,
+        locator: structuredClone(request.locator),
+        stewardship: structuredClone(source_page.stewardship),
+        access: source_page.access,
+        revision: 1,
+        content: structuredClone(source_page.content),
+        created_at: request.now,
+        updated_at: request.now,
+      };
+      const serialized = serialize_data(page.content);
+      const chunks = split_chunks(serialized);
+      const generation = crypto.randomUUID();
+      const envelope = serialize_envelope(
+        page,
+        generation,
+        chunks.length,
+        serialized.length,
+      );
+      await this.#write_chunks(page.page_id, generation, chunks);
+      let atomic = this.#kv.atomic()
+        .check(source_entry)
+        .check(source_locator_entry)
+        .check(source_owner_entry)
+        .check(current_target)
+        .check(new_id_entry)
+        .set(id_key(page.page_id), envelope)
+        .set(target_locator_key, locator_index(page.page_id))
+        .set(owner_key(page), owner_index(page));
+      if (replaced_trial !== null) {
+        atomic = atomic
+          .check(replaced_trial.entry)
+          .delete(replaced_trial.entry.key);
+        this.#delete_generation(atomic, replaced_trial.envelope);
+      }
+      const commit = await atomic.commit();
+      if (commit.ok) {
+        return {
+          ok: true,
+          outcome: replaced_trial === null ? "created" : "replaced_trial",
+          page,
+        };
+      }
+      await this.#cleanup_generation(page.page_id, generation, chunks.length);
+    }
+    throw new Error("page repository duplicate contention exhausted retries");
   }
 
   async delete_managed(

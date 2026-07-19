@@ -83,6 +83,14 @@ content changes and deletion. A rename must reject conflicts and should tell the
 creator that old shared URLs may stop working. Redirects and revision history
 are optional later behavior, not required for the first version.
 
+The implemented rename core is revision-bound and keeps the stable page ID while
+atomically replacing its case-insensitive locator and owner-list position inside
+the same namespace. Another managed page is a conflict; an older trial may be
+retired as it is during managed creation. Duplication leaves the source
+unchanged and creates revision 1 under a bounded server-generated available name
+and fresh ID from the exact expected source revision. HTTP and site projections
+remain pending.
+
 Authenticated storage should be durable enough for normal management use, but
 the app should not promise that content can never disappear under any
 circumstance. The practical retention and backup behavior should be stated when

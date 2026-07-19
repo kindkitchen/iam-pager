@@ -2,12 +2,18 @@ import type { ContentTypeHandler } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
+import {
+  FourWordRandomNameGenerator,
+  type RandomNameGenerator,
+} from "../random-name.ts";
 import { max_public_exploration_query_length } from "./interfaces.ts";
 import type {
   CreateManagedPageRequest,
   CreateManagedPageResult,
   DeleteManagedPageRequest,
   DeleteManagedPageResult,
+  DuplicateManagedPageRequest,
+  DuplicateManagedPageResult,
   ExplorePublicPagesRequest,
   ExplorePublicPagesResult,
   InspectManagedPageRequest,
@@ -18,9 +24,11 @@ import type {
   ListPublicPagesResult,
   ManagedPageCreator,
   ManagedPageDeleter,
+  ManagedPageDuplicator,
   ManagedPageInspection,
   ManagedPageInspector,
   ManagedPageLister,
+  ManagedPageRenamer,
   ManagedPageUpdater,
   NamespaceAuthorityResolver,
   PageClock,
@@ -35,6 +43,8 @@ import type {
   PublicPageViewer,
   PublishTrialPageRequest,
   PublishTrialPageResult,
+  RenameManagedPageRequest,
+  RenameManagedPageResult,
   TrialPagePublisher,
   UpdateManagedPageRequest,
   UpdateManagedPageResult,
@@ -60,6 +70,10 @@ export interface PageServiceOptions {
   clock?: PageClock;
   /** Bounded retries for generated-id collisions. Defaults to 3. */
   max_page_id_attempts?: number;
+  /** Server-owned generator for duplicate page names. */
+  page_name_generator?: RandomNameGenerator;
+  /** Bounded generated-name attempts for duplication. Defaults to 16. */
+  max_page_name_attempts?: number;
 }
 
 type ContentPreparationResult =
@@ -68,11 +82,11 @@ type ContentPreparationResult =
   | { ok: false; reason: "invalid_input"; detail: string };
 
 /**
- * HTTP/session-independent DS-PROTECT application layer. It is the only valid
- * producer of page content and always applies validate -> derive -> render ->
- * metadata before storage. Namespace authority is resolved through an
- * interface and every conditional managed mutation remains revision-bound in
- * the repository.
+ * HTTP/session-independent page application layer (DS-PROTECT, DS-MANAGE). It
+ * is the only valid producer of page content and always applies validate ->
+ * derive -> render -> metadata before storage. Namespace authority is resolved
+ * through an interface and every conditional managed mutation remains
+ * revision-bound in the repository.
  */
 export class PageService
   implements
@@ -82,6 +96,8 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    ManagedPageRenamer,
+    ManagedPageDuplicator,
     PublicPageViewer,
     PublicPageLister,
     PublicPageExplorer,
@@ -96,6 +112,8 @@ export class PageService
   readonly #page_id_generator: PageIdGenerator;
   readonly #clock: PageClock;
   readonly #max_page_id_attempts: number;
+  readonly #page_name_generator: RandomNameGenerator;
+  readonly #max_page_name_attempts: number;
 
   constructor(options: PageServiceOptions) {
     for (const handler of options.handlers) {
@@ -119,7 +137,17 @@ export class PageService
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
     this.#clock = options.clock ?? new SystemPageClock();
+    const max_page_name_attempts = options.max_page_name_attempts ?? 16;
+    if (
+      !Number.isSafeInteger(max_page_name_attempts) ||
+      max_page_name_attempts < 1
+    ) {
+      throw new Error("max_page_name_attempts must be a positive safe integer");
+    }
     this.#max_page_id_attempts = max_page_id_attempts;
+    this.#page_name_generator = options.page_name_generator ??
+      new FourWordRandomNameGenerator();
+    this.#max_page_name_attempts = max_page_name_attempts;
   }
 
   async publish_trial(
@@ -313,6 +341,139 @@ export class PageService
     });
     if (!replaced.ok) return replaced;
     return this.#inspection(replaced.page);
+  }
+
+  async rename_managed(
+    request: RenameManagedPageRequest,
+  ): Promise<RenameManagedPageResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const existing = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (existing === null) return { ok: false, reason: "not_found" };
+    if (existing.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const current_inspection = this.#inspection(existing);
+    if (!current_inspection.ok) return current_inspection;
+    const locator: Locator = request.page_name === undefined
+      ? { namespace: existing.locator.namespace }
+      : { namespace: existing.locator.namespace, page_name: request.page_name };
+    if (!this.#engine.validate(locator).ok) {
+      return { ok: false, reason: "invalid_page_name" };
+    }
+    if (existing.locator.page_name === locator.page_name) {
+      return {
+        ok: true,
+        outcome: "unchanged",
+        page: current_inspection.page,
+      };
+    }
+    if (existing.revision === Number.MAX_SAFE_INTEGER) {
+      return { ok: false, reason: "revision_exhausted" };
+    }
+    const renamed = await this.#repository.rename_managed({
+      page_id: existing.page_id,
+      owner_user_id: request.actor.user_id,
+      expected_revision: request.expected_revision,
+      locator,
+      now: this.#operation_time(),
+    });
+    if (!renamed.ok) {
+      if (renamed.reason === "locator_conflict") {
+        return { ok: false, reason: "page_exists" };
+      }
+      return { ok: false, reason: renamed.reason };
+    }
+    const inspection = this.#inspection(renamed.page);
+    return inspection.ok
+      ? { ok: true, outcome: renamed.outcome, page: inspection.page }
+      : inspection;
+  }
+
+  async duplicate_managed(
+    request: DuplicateManagedPageRequest,
+  ): Promise<DuplicateManagedPageResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const source = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (source === null) return { ok: false, reason: "not_found" };
+    if (source.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const source_inspection = this.#inspection(source);
+    if (!source_inspection.ok) return source_inspection;
+
+    const now = this.#operation_time();
+    const used_names = new Set<string>();
+    if (source.locator.page_name !== undefined) {
+      used_names.add(source.locator.page_name.toLowerCase());
+    }
+    for (
+      let name_attempt = 0;
+      name_attempt < this.#max_page_name_attempts;
+      name_attempt += 1
+    ) {
+      const page_name = this.#page_name_generator.generate(used_names);
+      const normalized_name = page_name.toLowerCase();
+      if (used_names.has(normalized_name)) {
+        throw new Error("RandomNameGenerator repeated a used page name");
+      }
+      const locator = { namespace: source.locator.namespace, page_name };
+      if (!this.#engine.validate(locator).ok) {
+        throw new Error("RandomNameGenerator produced an invalid page name");
+      }
+      used_names.add(normalized_name);
+      let name_conflict = false;
+      for (
+        let id_attempt = 0;
+        id_attempt < this.#max_page_id_attempts;
+        id_attempt += 1
+      ) {
+        const page_id = this.#generate_page_id();
+        const duplicated = await this.#repository.duplicate_managed({
+          source_page_id: source.page_id,
+          owner_user_id: request.actor.user_id,
+          expected_revision: request.expected_revision,
+          page_id,
+          locator,
+          now,
+        });
+        if (duplicated.ok) {
+          const inspection = this.#inspection(duplicated.page);
+          return inspection.ok
+            ? {
+              ok: true,
+              outcome: duplicated.outcome,
+              page: inspection.page,
+            }
+            : inspection;
+        }
+        if (duplicated.reason === "not_found") {
+          return { ok: false, reason: "not_found" };
+        }
+        if (duplicated.reason === "revision_conflict") {
+          return { ok: false, reason: "revision_conflict" };
+        }
+        if (duplicated.reason === "locator_conflict") {
+          name_conflict = true;
+          break;
+        }
+      }
+      if (!name_conflict) {
+        return { ok: false, reason: "page_id_generation_exhausted" };
+      }
+    }
+    return { ok: false, reason: "page_name_generation_exhausted" };
   }
 
   async delete_managed(

@@ -76,11 +76,14 @@ for deployment continuity.
 authoritative envelope by stable page ID, case-normalized locator and ordered
 owner indexes, and immutable content generations split into bounded chunks.
 Content writes finish their chunks before an atomic visibility commit updates
-all envelopes and indexes; access-only updates retain the exact generation,
-while content updates, trial replacement, managed takeover, and deletion remove
-the replaced visible generation in the same commit. The tagged JSON codec
-round-trips plain structured data and `Uint8Array`. Reads validate key/value
-identity, stewardship/access/revision/date/meta fields, index coherence, chunk
+all envelopes and indexes; access-only updates and rename retain the exact
+generation, while rename moves both indexes with the envelope revision in one
+commit. Duplication writes a fresh generation and conditionally checks the exact
+source revision and generated destination; content updates, trial replacement,
+managed takeover, and deletion remove the replaced visible generation in the
+same commit. The tagged JSON codec round-trips plain structured data and
+`Uint8Array`. Reads validate key/value identity,
+stewardship/access/revision/date/meta fields, index coherence, chunk
 order/count/length, codec shape, and schema version; impossible or unknown
 states are corruption. Conditional retries are bounded, and failed visibility
 conditions clean unreferenced new chunks best-effort. Neither ownership nor

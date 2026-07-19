@@ -2,6 +2,17 @@
 
 ## 2026-07-19
 
+- Activated DS-MANAGE and completed its first HTTP-independent
+  locator-management foundation. Explicit revision-bound rename and duplicate
+  contracts now run through `PageService`, memory, and Deno KV: rename preserves
+  stable identity while atomically moving locator/owner indexes, generated-name
+  duplication copies one exact source revision into a fresh ID, managed
+  destination conflicts never overwrite, pre-reservation trials may be retired,
+  retries are bounded, and concurrent claims settle on one winner. The shared
+  four-word generator moved out of UI code so server behavior does not depend on
+  the web projection. API and creator controls remain the next layer; check,
+  build, and all 404 tests pass.
+
 - Completed the first DS-EXPLORE slice and settled OQ-EXPLORE as deterministic
   browse plus case-insensitive namespace/page-name substring search (separate or
   AND-combined), with tags and text indexing deferred. The HTTP-independent
