@@ -2,6 +2,12 @@
 
 ## 2026-07-19
 
+- Clarified production and preview storage profiles after diagnosing
+  intermittent deployed sign-in loss as process-local configuration: attaching
+  Deno KV does not select it, production must opt ownership, sessions, and pages
+  into the attached database, and memory-backed serverless previews are not
+  request-stable.
+
 - Restricted gauth/Effect SSR externalization to production builds so Fresh's
   Deno resolver handles JSR imports during Vite development and HMR works again.
 
