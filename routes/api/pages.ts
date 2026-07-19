@@ -1,17 +1,18 @@
-import { define } from "../../utils.ts";
 import { app_services } from "../../lib/app.ts";
-import {
-  publish_actor_from_session,
-  publish_guest_md_page_request,
-} from "../../lib/publishing/mod.ts";
+import { define } from "../../utils.ts";
 
-/** Create-or-replace endpoint for the first MdPage flow; guests welcome. */
+/** Page collection route; decoding and authority stay in the raw HTTP adapter. */
 export const handler = define.handlers({
-  async POST(ctx) {
-    return publish_guest_md_page_request(
+  async GET(ctx) {
+    return (await app_services()).pages_http.collection(
       ctx.req,
-      (await app_services()).publishing,
-      publish_actor_from_session(ctx.state.request_context.session),
+      ctx.state.request_context,
+    );
+  },
+  async POST(ctx) {
+    return (await app_services()).pages_http.collection(
+      ctx.req,
+      ctx.state.request_context,
     );
   },
 });

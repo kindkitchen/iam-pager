@@ -1,5 +1,81 @@
 # Changelog
 
+## 2026-07-19
+
+- Restricted gauth/Effect SSR externalization to production builds so Fresh's
+  Deno resolver handles JSR imports during Vite development and HMR works again.
+
+- Accepted and completed `page-management-api`: aligned the page/access/API/
+  retention specification with the implemented contracts, made bodyless DELETE
+  tolerate Deno's zero-byte transport stream while still rejecting payloads, and
+  covered that behavior in the HTTP suite. All 345 tests, check, build, the
+  composed local API/auth lifecycle smoke, and browser draft-retention smoke
+  pass.
+
+- Removed the superseded locator-only publishing stack: legacy publishing
+  services and HTTP adapters, `ContentRepository` memory/Deno KV
+  implementations, conformance suites, obsolete page record types, and their
+  tests. The composed `PageService`, management/direct HTTP boundaries, and
+  `PageRepository` are now the only page mutation, delivery, and persistence
+  path; direct response/isolation coverage was migrated to that boundary (345
+  tests total).
+
+- Composed the page-management application boundary into Fresh: deployment
+  storage now selects `PageRepository`, collection/item routes expose the strict
+  management API, and catch-all delivery uses the same service with
+  session-derived private-page authority. Migrated the publishing form to the
+  nested explicit create contract with creator CSRF and added composition,
+  storage-selector, private-delivery, and presenter coverage (411 tests total).
+
+- Implemented the Fresh-independent page-management HTTP boundary: strict
+  bounded nested create, authenticated list/inspect, revision-bound PATCH and
+  DELETE, owner-safe presenters, opaque pagination, canonical strong ETags, and
+  exact no-store status/error mapping. Authenticated mutations reuse a shared
+  constant-time CSRF comparison, and stale creator intent cannot downgrade to a
+  guest trial. Added 13 HTTP/ETag/CSRF tests (406 total); Fresh composition and
+  route migration remain the next fragment.
+
+- Implemented `DenoKvPageRepository` in a fresh versioned page keyspace with
+  authoritative ID envelopes, coherent case-normalized locator and ordered owner
+  indexes, immutable chunked content generations, atomic conditional
+  create/replace/update/delete, bounded contention handling, binary-safe tagged
+  JSON data, and strict corruption checks. The unchanged repository conformance
+  suite now passes against memory and Deno KV; seven adapter-specific tests
+  cover persistence, physical layout, generation reuse/replacement, cleanup,
+  codec rejection, and corruption (393 tests total, 34 new).
+
+- Implemented the HTTP-independent page-management application layer: typed
+  guest/user actors and namespace-authority resolution, trial public
+  create-or-replace, managed create over owned reservations, owner-safe bounded
+  listing and editable-source inspection, atomic revision-bound content/access
+  updates and deletion, and public/owner-private delivery with authorization
+  before handler disclosure. The service retries generated-ID collisions,
+  derives delivery metadata from validated content, and keeps owner IDs and
+  stored derivations out of management representations. Check, build, and all
+  359 tests pass (17 new); route composition remains a later fragment.
+
+- Implemented the page-management storage foundation (`page-management-api` plan
+  steps 2-4): a new `lib/page/` module with the page domain model (stable opaque
+  page IDs, publisher-cased locators, trial/managed stewardship, public/private
+  access, positive revisions, page-level timestamps and invariant validation),
+  the atomic `PageRepository` contract (trial create-or-replace that can never
+  touch managed pages, managed creation that replaces trials and retires their
+  IDs, revision-bound replace/delete with non-disclosing not-found results,
+  bounded deterministic owner listing with strict base64url continuation
+  cursors), a 27-test backend-neutral conformance suite, and the memory
+  implementation passing it. Content handlers gained `to_input`, recovering
+  editable source (`md`/`css`, never derived html) from stored data. Check,
+  build, and all 342 tests pass.
+
+- Planned and activated `page-management-api`, the DS-PROTECT continuation after
+  namespace reservation: API-first managed-page create, list, inspect,
+  revision-bound content/access update, and delete with stable opaque page IDs,
+  explicit trial-versus-managed stewardship, and owner-only private direct
+  delivery, all in interface-backed code with UI reduced to compatibility
+  wiring. A narrower access-only exploration was discarded during planning; its
+  valid conclusions are folded into the task's analysis and plan. Baseline check
+  and all 307 tests pass.
+
 ## 2026-07-18
 
 - Delivered the namespace-reservation HTTP/UI slice: authenticated creators can

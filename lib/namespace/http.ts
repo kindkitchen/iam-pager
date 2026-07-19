@@ -1,3 +1,4 @@
+import { csrf_tokens_match } from "../http/csrf.ts";
 import {
   is_json_media_type,
   read_bounded_request_text,
@@ -202,16 +203,6 @@ function reserve_failure_response(
         "namespace is already reserved",
       );
   }
-}
-
-/** Fixed-length comparison avoids early exit on attacker-controlled input. */
-function csrf_tokens_match(expected: string, actual: string): boolean {
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index++) {
-    difference |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
-  }
-  return difference === 0;
 }
 
 function error_response(

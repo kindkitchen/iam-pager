@@ -11,8 +11,8 @@ missing or invalid page produces a clear not-found response that may link back
 to the site; it does not silently return the home page as if the content had
 been found.
 
-A private page is not disclosed to a visitor who only knows its URL and behave
-as missing page described above.
+A private page is not disclosed to a visitor who only knows its URL and behaves
+as the missing page described above.
 
 ## EX-VIEW — Visitor uses the site view
 
@@ -72,7 +72,9 @@ Within a reserved namespace, the creator can:
 - select pages for bulk deletion or access changes;
 
 A name conflict within the reserved namespace is reported instead of replacing
-an authenticated page.
+an authenticated page. The API-first core currently provides individual create,
+list, inspect, content/access update, and delete operations; the site management
+UI and rename, duplicate, filters, tags, and bulk actions remain later scope.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

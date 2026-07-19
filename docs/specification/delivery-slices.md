@@ -25,6 +25,11 @@ The creator can create, inspect, update, make public or private, and delete
 pages. Visitors can directly open public pages; private pages remain limited to
 the creator session.
 
+The API-first core of this slice is now composed: Fresh exposes collection and
+item management routes over the selected page repository, and direct delivery
+uses the same page service with session-derived authority. Management UI and the
+expanded operations below remain later work.
+
 ## DS-VIEW — Present a page through the site
 
 A visitor can open a public page in a thin site wrapper, continue to its direct

@@ -254,8 +254,9 @@ remains only until its absolute-lifetime TTL.
 
 Changing backend or ownership path does not migrate sessions. Backup and
 recovery follow the selected KV provider or deployment operator. Page content
-remains process-local. Repository interfaces remain the replacement boundaries,
-and cookie transport remains independent from session storage.
+separately remains memory-backed by default and can opt into the linked Deno KV
+ownership database. Repository interfaces remain the replacement boundaries, and
+cookie transport remains independent from session storage.
 
 ## Next boundary
 
@@ -266,8 +267,14 @@ provider-owned recovery, in-place guest upgrade, and logout revocation.
 Authentication does not itself confer namespace or publishing authority.
 
 Namespace reservation and publishing authorization now exist as server-owned
-business services, with optional Deno KV persistence for the linked identity and
-claim records. Their authenticated HTTP/API and site surfaces, including wiring
-the resolved session user as the publishing actor, are the next product
-boundary. Profile/account/settings navigation remains optional follow-up UI work
-and must not substitute for that authority.
+business services with optional Deno KV persistence, authenticated HTTP APIs,
+and a site reservation panel; publishing already receives the resolved session
+actor. The HTTP-independent managed-page service is also implemented against the
+new page repository contract, with conforming memory and Deno KV adapters. Its
+strict HTTP adapter is now composed into Fresh collection/item routes with
+bounded schemas, shared synchronizer-token CSRF, session-derived guest/creator
+dispatch, owner-safe presenters, and revision ETags. Deployment selection now
+targets the page repository, and catch-all direct delivery derives guest or user
+authority from this same resolved session before invoking the same page service.
+Profile/account/settings navigation remains optional follow-up UI work and must
+not substitute for that authority.

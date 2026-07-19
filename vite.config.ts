@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [
     {
       name: "externalize-authentication-runtime",
+      apply: "build",
       enforce: "pre",
       resolveId(source, _importer, options) {
         if (options.ssr && authentication_runtime_ids.has(source)) {

@@ -34,6 +34,24 @@ user, provider identity, or namespace reservation. Reservation and concurrent
 uniqueness remain an explicit authorization capability, not an effect of
 authentication itself.
 
+### OQ-ACCESS — Public and private behavior
+
+Trial pages are always public. A managed page may be public or private, and its
+creator changes access through the same atomic revision-bound PATCH used for
+content updates. Direct delivery observes the committed representation
+immediately. A private page is available only to its stored creator's current
+session and is ordinary missing to guests, logged-out creators, and other users.
+Exploration remains later scope and must exclude private pages.
+
+### OQ-API — API surface
+
+The first concrete page API is settled as `POST`/`GET /api/pages` and
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`, with strict nested JSON, browser
+session authentication, synchronizer-token CSRF for authenticated mutations,
+opaque pagination, and strong revision ETags. Direct retrieval remains the
+locator URL. External bearer credentials and expanded management operations are
+later scope; see [`docs/api/pages.md`](../api/pages.md).
+
 ## OQ-OPEN — MVP decisions still needed
 
 ### OQ-CONTENT — Supported content
@@ -51,19 +69,6 @@ Choose initial limits for content size, total stored size, page count, and
 frequency. Guest publishing uses stricter limits and no namespace guarantee. The
 original guest-capacity phrase "removes the latest" still needs one concrete
 meaning: remove an existing item, expire items, or reject the new item.
-
-### OQ-ACCESS — Public and private behavior
-
-For authenticated pages, settle the exact transition between public, directly
-accessible content and private content available only to the creator's session.
-Decide how quickly access and exploration reflect that change.
-
-### OQ-API — API surface
-
-Choose the smallest programmatic publishing and direct-retrieval request and
-response contracts. Authenticated management should extend the same application
-behavior rather than creating separate rules for the UI and API. Concrete API
-routing remains an integration choice.
 
 ### OQ-EXPLORE — Public exploration
 
@@ -84,8 +89,10 @@ Deno KV sessions instead follow the bounded session lifecycle. Their record and
 credential-index TTL is the absolute expiry; idle and absolute checks remain
 service-enforced because KV cleanup is lazy, and revocation removes bearer
 lookup immediately. Backup and recovery follow the KV provider or deployment
-operator. Switching the backend or path does not migrate records. Retention for
-pages and future account deletion remains open.
+operator. Switching the backend or path does not migrate records. Opted-in Deno
+KV pages remain until replaced or revision-bound deletion; a crash before a
+visibility commit may leave unreachable chunks, and no sweeper exists yet. Guest
+expiry, account deletion, migration, and broader backup policy remain open.
 
 ## OQ-RISKS — Nearby risks
 

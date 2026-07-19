@@ -31,6 +31,15 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
+The new `PageService` is the HTTP/session-independent application boundary for
+trial and managed page behavior. It receives a typed actor and resolves
+namespace authority through an interface, while repositories alone own atomic
+locator, ID, and revision conditions. Owner-safe summaries and inspection input
+exclude stewardship IDs and stored derivations. This service runs against either
+conforming page repository. The composition root selects the memory or Deno KV
+adapter, exposes the service and strict HTTP boundary once, and Fresh
+collection/item/direct routes remain thin adapters over those interfaces.
+
 ## QT-STORAGE — Repository persistence
 
 Each durable adapter must preserve its repository contract and pass the same
@@ -53,18 +62,27 @@ one-use authentication attempts, credential rotation, logout, and revocation
 remain atomic. Records and credential-hash indexes carry the absolute-session
 TTL; service checks remain authoritative because KV expiration is lazy.
 
-Page content is a third opt-in behind the same `ContentRepository` contract and
-follows the session rule: durable content requires the configured Deno KV
-ownership database, because a page in a reserved namespace must not outlive the
-reservation and user that authorize it. The adapter stores one envelope record
-per locator plus immutable generation chunks, since a page's source and derived
-data can exceed a single KV value. Every replacement writes a fresh generation
-before atomically flipping the envelope and deleting the replaced generation, so
-readers always observe one complete page and concurrent replacements settle on
-exactly one winner. Stored content data must be JSON-serializable; the envelope
-names its codec so later versions can add encodings without a key migration.
-Neither ownership nor session settings alone imply that pages survive a restart;
-unset content configuration keeps pages process-local.
+Page persistence is a third opt-in and follows the session rule: durable pages
+require the configured Deno KV ownership database, because a page in a reserved
+namespace must not outlive the reservation and user that authorize it. The
+composition root selects `PageRepository` directly; the retained
+`IAM_PAGER_CONTENT_STORAGE_BACKEND` variable now controls this page repository
+for deployment continuity.
+
+`DenoKvPageRepository` uses a fresh schema-versioned keyspace with one
+authoritative envelope by stable page ID, case-normalized locator and ordered
+owner indexes, and immutable content generations split into bounded chunks.
+Content writes finish their chunks before an atomic visibility commit updates
+all envelopes and indexes; access-only updates retain the exact generation,
+while content updates, trial replacement, managed takeover, and deletion remove
+the replaced visible generation in the same commit. The tagged JSON codec
+round-trips plain structured data and `Uint8Array`. Reads validate key/value
+identity, stewardship/access/revision/date/meta fields, index coherence, chunk
+order/count/length, codec shape, and schema version; impossible or unknown
+states are corruption. Conditional retries are bounded, and failed visibility
+conditions clean unreferenced new chunks best-effort. Neither ownership nor
+session settings alone imply that pages survive a restart; only the explicit
+page-storage opt-in selects durable page persistence.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
@@ -267,16 +285,6 @@ buttons. The current overwriteable guest flow has no locator availability
 endpoint, so numeric fallback only avoids a combination already generated in the
 local UI.
 
-The publishing API is `POST /api/pages` with an `application/json` body:
-`namespace` and `md` are required strings; `page_name` and `css` are optional
-strings. A guest request remains unowned; an authenticated request derives its
-creator actor from the resolved server session and can write into that creator's
-reserved namespace. Success returns `201`, a relative `Location` header, and
-JSON containing `path` and absolute `url`. Malformed requests return `400`,
-oversized request bodies `413`, unsupported media types `415`, reserved
-namespaces `403`, and locator or content validation failures `422`. Responses
-use `no-store`.
-
 Authenticated namespace ownership uses `GET /api/namespaces` to list the
 caller's claims and `POST /api/namespaces` with required string `namespace` and
 `csrf_token` fields to claim one. The synchronizer token must match the resolved
@@ -286,6 +294,20 @@ return `401`; invalid CSRF and platform namespaces return `403`; malformed and
 oversized bodies return `400`/`413`; unsupported media types return `415`; taken
 names return `409`; invalid locator names return `422`. Responses use
 `no-store`.
+
+The composed page-management HTTP adapter serves `POST`/`GET /api/pages` and
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`. Creation uses nested
+locator/access/content input and session-derived trial-versus-managed semantics;
+authenticated mutation requires the shared constant-time CSRF header check, and
+a stale creator header on a guest session cannot downgrade into trial
+publication. Authenticated list/inspect output excludes owner IDs, source from
+lists, and stored derivations. PATCH and DELETE require one canonical strong
+page/revision ETag, mapping missing, malformed, and stale preconditions to
+`428`, `400`, and `412`. JSON bodies, item IDs, query names/counts/lengths,
+limits, and cursors are bounded and strict. All management/error responses are
+no-store. The exact public contract is documented in
+[`docs/api/pages.md`](../api/pages.md); the superseded flat endpoint and its
+locator-only application/storage path have been removed.
 
 ## QT-SEARCH — Search and privacy
 
@@ -308,4 +330,16 @@ Tests should cover the behavior that defines the product:
 - publishing limits and capacity behavior;
 - route conflicts and missing-page responses;
 - page updates without mixed content and metadata;
+- revision conflicts for concurrent update/delete intent;
+- strict HTTP schemas, CSRF, pagination, and ETag preconditions;
+- owner-only private delivery with an ordinary missing response for everyone
+  else;
+- the same identity, index, concurrency, and binary/large-content repository
+  contract against memory and Deno KV;
 - exclusion of private and guest pages from exploration.
+
+The page-management suites cover these domain, repository, HTTP, composition,
+and direct-delivery boundaries. Final acceptance also exercises the composed
+local server through guest trial publication, local authentication and namespace
+reservation, managed takeover, private delivery, access PATCH, stale ETag,
+deletion, and logout.

@@ -56,7 +56,9 @@ The subsequent namespace-ownership capability must let an authenticated creator:
 - keep guests and other creators from mutating pages in reserved namespaces;
 - reserve additional namespaces later.
 
-Namespace persistence and publishing authorization are not implemented yet.
+Namespace reservation, memory or Deno KV persistence, authenticated listing and
+claiming, and publishing authorization are implemented. Additional namespaces
+already fit the repository model; release and transfer remain later.
 
 ## CP-MANAGE — Authenticated page management
 
@@ -75,6 +77,17 @@ Within a reserved namespace, a creator can:
 
 Programmatic management should follow the same namespace checks and page
 behavior as the site.
+
+The HTTP-independent management core now implements trial publishing and managed
+create, bounded list, source inspection, revision-bound content/access update,
+deletion, and owner-only private delivery over the `PageRepository` interface.
+Its memory and Deno KV adapters are complete and pass the same repository
+conformance. Fresh collection and item routes now expose the strict bounded
+create/list/inspect/update/delete adapter with synchronizer CSRF, owner-safe
+presenters, pagination, and strong revision ETags. The composed catch-all route
+uses the same service and session-derived actor for public or owner-private
+delivery, while deployment storage selection targets `PageRepository`. Rename,
+duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
 
 ## CP-EXPLORE — Public exploration
 
