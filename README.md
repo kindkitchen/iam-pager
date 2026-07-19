@@ -280,26 +280,60 @@ omitted, `Deno.serve` retains its port-8000 default. A deployed instance
 requires original Google mode and its callback URL, client ID, and client secret
 variables listed above.
 
-Ownership persistence is selected independently from session transport. Unset
-configuration, or an explicit `memory` value, keeps identities, namespace
-reservations, sessions, and pages process-local. Deno KV selects the linked
-ownership repositories as one unit; sessions and pages are separate opt-ins:
+### Storage profiles
+
+Database availability and repository selection are separate. Attaching a Deno KV
+database to a deployment only makes it available to `Deno.openKv()`; it does not
+select any application backend. An unset backend, or an explicit `memory` value,
+keeps that repository process-local.
+
+For a Deno Deploy production context that must preserve sign-in, namespace
+reservations, and published pages, attach a KV database to that context and set
+all three backend variables there:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
-IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/ownership.kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
 ```
 
-The path is optional. When omitted, `Deno.openKv()` uses the runtime's default
-KV database (including the linked database on Deno Deploy); an explicit local
-path is durable only when its filesystem is durable. Durable sessions and
-durable pages each require Deno KV ownership and inherit its exact path/default
+Leave `IAM_PAGER_OWNERSHIP_DENO_KV_PATH` unset on Deno Deploy so every adapter
+uses the attached default database. Scope these values to the production
+context. Changing backend selection does not migrate process-local records or
+sessions; deploy the new configuration and sign in again.
+
+For local development or an intentionally ephemeral preview, omit all three
+backend variables or set them explicitly:
+
+```env
+IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=memory
+IAM_PAGER_SESSION_STORAGE_BACKEND=memory
+IAM_PAGER_CONTENT_STORAGE_BACKEND=memory
+```
+
+`deno task dev` already uses the unset, in-memory default. Memory is reliable
+for a single local process, but not for a serverless preview: requests may reach
+different instances or an instance may restart. A bearer upgraded during a
+successful sign-in can then be unknown on the next request, which intentionally
+creates a fresh guest session. The visible symptoms are another sign-in prompt
+or `not_authenticated` failures from namespace reservation and creator
+publication. Use Deno KV for any preview where authentication or publication
+must work reliably across requests.
+
+A self-hosted durable process can use the three `deno-kv` settings with an
+explicit durable filesystem path:
+
+```env
+IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/ownership.kv
+```
+
+Deno KV selects the linked identity and namespace repositories as one ownership
+unit; sessions and pages remain separate opt-ins. Durable sessions and durable
+pages each require Deno KV ownership and inherit its exact path or default
 database. Startup rejects either option with memory ownership, preventing an
 authenticated session from surviving without its user record and a published
-page from surviving without its namespace reservation. Omitting an opt-in keeps
-that store's restart-invalidated memory behavior even when ownership is durable.
+page from surviving without its namespace reservation. Omitting either opt-in
+keeps that store in restart-invalidated memory even when ownership is durable.
 
 The Deno KV session adapter atomically preserves creation, renewal,
 authentication-attempt consumption, credential rotation, logout, and revocation.
@@ -321,7 +355,8 @@ KV service or deployment operator. Without the content opt-in, pages still
 disappear on restart.
 
 For Deno Deploy, use `deno task build` as the build command and
-`_fresh/server.js` as the application entrypoint. Configure the original-mode
+`_fresh/server.js` as the application entrypoint. Apply the appropriate storage
+profile above to each production or preview context. Configure the original-mode
 Google variables for every deployment context that must warm successfully. The
 callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
 used by that context. Dynamic preview contexts using local mock authentication

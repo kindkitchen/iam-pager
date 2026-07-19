@@ -235,12 +235,20 @@ is implied by this header state.
 
 `MemorySessionRepository` remains the default: restarting the process
 invalidates all sessions, and multiple app instances do not share session state.
-A deployment with Deno KV ownership may separately set
+Attaching a runtime Deno KV database does not select this application's adapter;
+the deployment must explicitly select Deno KV ownership and set
 `IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv`. The session adapter inherits the
 ownership database path (or the runtime's same default KV database); startup
 rejects durable sessions with process-local ownership so an authenticated
 session cannot retain a user ID that disappears on restart. Omitting the session
 setting preserves memory behavior even when ownership is durable.
+
+Process-local sessions are therefore unsuitable for reliable authentication on a
+multi-instance or serverless deployment. A bearer created or upgraded on one
+instance may be unknown on the next; failed-closed resolution then replaces it
+with a fresh guest session. A successful provider callback followed by an
+authentication-required API failure is a deployment-storage symptom, not a
+successful cross-instance session guarantee.
 
 `DenoKvSessionRepository` uses versioned ISO-date values, a logical-session
 record, and a credential-hash index. Native atomic commits preserve ID and
