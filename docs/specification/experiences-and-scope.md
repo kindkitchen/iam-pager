@@ -86,10 +86,14 @@ list, inspect, content/access/tag update, delete, revision-bound same-namespace
 rename, and generated-name duplicate operations. Tags are normalized into a
 bounded canonical set; managed lists can AND-combine page-name substring,
 access, and tag filters, and duplicate copies the selected source revision
-including tags to a fresh ID. Memory and Deno KV enforce these rules atomically.
-The current API and site management panel still expose only create, list,
-inspect, update, and delete without tag or filter fields; rename, duplicate,
-tag/filter transport and UI, and bulk actions remain later scope.
+including tags to a fresh ID. Bounded raw bulk commands accept 1-100 distinct,
+explicit page/revision selections for one access target or deletion, then return
+an ordered success, stale, or non-disclosing missing result for each item;
+accepted items are independent rather than transactionally all-or-nothing.
+Memory and Deno KV enforce each mutation atomically. The current API and site
+management panel still expose only create, list, inspect, update, and delete
+without tag or filter fields; rename, duplicate, tag/filter, and bulk transport
+and UI remain later scope.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

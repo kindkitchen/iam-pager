@@ -108,8 +108,12 @@ into a lowercase sorted unique set, while list supports AND-combined page-name
 substring, exact access, and exact tag filters. Public exploration accepts the
 same exact tag without disclosing private or guest pages. Memory and Deno KV
 pass common mutation/filter/cursor conformance, and old durable records without
-tags read as untagged. HTTP endpoints and creator controls for these operations
-are still pending; bulk actions remain later DS-MANAGE work.
+tags read as untagged. `ManagedPageBulkAccessChanger` and
+`ManagedPageBulkDeleter` now accept a prevalidated bounded set of distinct
+page/revision pairs and return one ordered, independently revision-bound,
+non-disclosing result per page. Partial item failure does not undo successful
+items, while invalid selections fail before any mutation. HTTP endpoints and
+creator controls for these expanded operations are still pending.
 
 ## CP-EXPLORE — Public exploration
 

@@ -426,6 +426,56 @@ export type DeleteManagedPageResult =
   | { ok: true }
   | { ok: false; reason: "not_found" | "revision_conflict" };
 
+/** Maximum number of distinct pages accepted by one bulk management command. */
+export const max_bulk_managed_pages = 100;
+
+/** One explicit page/revision pair selected by a creator for a bulk command. */
+export interface ManagedPageRevisionSelection {
+  page_id: PageId;
+  expected_revision: number;
+}
+
+export interface BulkChangeManagedPageAccessRequest {
+  actor: UserPageActor;
+  access: PageAccess;
+  selection: readonly ManagedPageRevisionSelection[];
+}
+
+export type BulkChangeManagedPageAccessItemResult =
+  | { page_id: PageId; ok: true; page: PageSummary }
+  | {
+    page_id: PageId;
+    ok: false;
+    reason: "not_found" | "revision_conflict" | "revision_exhausted";
+  };
+
+/**
+ * A valid command returns one ordered result per selected page. Item failures
+ * do not roll back successful items. The complete selection is rejected before
+ * mutation unless it contains 1-100 distinct, valid page/revision pairs.
+ */
+export type BulkChangeManagedPageAccessResult =
+  | { ok: true; results: BulkChangeManagedPageAccessItemResult[] }
+  | { ok: false; reason: "invalid_access" | "invalid_selection" };
+
+export interface BulkDeleteManagedPagesRequest {
+  actor: UserPageActor;
+  selection: readonly ManagedPageRevisionSelection[];
+}
+
+export type BulkDeleteManagedPageItemResult =
+  | { page_id: PageId; ok: true }
+  | {
+    page_id: PageId;
+    ok: false;
+    reason: "not_found" | "revision_conflict";
+  };
+
+/** Ordered, independently revision-bound deletion outcomes for one selection. */
+export type BulkDeleteManagedPagesResult =
+  | { ok: true; results: BulkDeleteManagedPageItemResult[] }
+  | { ok: false; reason: "invalid_selection" };
+
 export interface RenameManagedPageRequest {
   actor: UserPageActor;
   page_id: PageId;
@@ -551,6 +601,18 @@ export interface ManagedPageDeleter {
   delete_managed(
     request: DeleteManagedPageRequest,
   ): Promise<DeleteManagedPageResult>;
+}
+
+export interface ManagedPageBulkAccessChanger {
+  bulk_change_managed_access(
+    request: BulkChangeManagedPageAccessRequest,
+  ): Promise<BulkChangeManagedPageAccessResult>;
+}
+
+export interface ManagedPageBulkDeleter {
+  bulk_delete_managed(
+    request: BulkDeleteManagedPagesRequest,
+  ): Promise<BulkDeleteManagedPagesResult>;
 }
 
 export interface ManagedPageRenamer {

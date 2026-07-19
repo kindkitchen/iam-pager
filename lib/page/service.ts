@@ -7,10 +7,17 @@ import {
   type RandomNameGenerator,
 } from "../random-name.ts";
 import {
+  max_bulk_managed_pages,
   max_managed_page_name_query_length,
   max_public_exploration_query_length,
 } from "./interfaces.ts";
 import type {
+  BulkChangeManagedPageAccessItemResult,
+  BulkChangeManagedPageAccessRequest,
+  BulkChangeManagedPageAccessResult,
+  BulkDeleteManagedPageItemResult,
+  BulkDeleteManagedPagesRequest,
+  BulkDeleteManagedPagesResult,
   CreateManagedPageRequest,
   CreateManagedPageResult,
   DeleteManagedPageRequest,
@@ -25,6 +32,8 @@ import type {
   ListManagedPagesResult,
   ListPublicPagesRequest,
   ListPublicPagesResult,
+  ManagedPageBulkAccessChanger,
+  ManagedPageBulkDeleter,
   ManagedPageCreator,
   ManagedPageDeleter,
   ManagedPageDuplicator,
@@ -32,6 +41,7 @@ import type {
   ManagedPageInspector,
   ManagedPageLister,
   ManagedPageRenamer,
+  ManagedPageRevisionSelection,
   ManagedPageUpdater,
   NamespaceAuthorityResolver,
   PageClock,
@@ -101,6 +111,8 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    ManagedPageBulkAccessChanger,
+    ManagedPageBulkDeleter,
     ManagedPageRenamer,
     ManagedPageDuplicator,
     PublicPageViewer,
@@ -369,6 +381,73 @@ export class PageService
     return this.#inspection(replaced.page);
   }
 
+  async bulk_change_managed_access(
+    request: BulkChangeManagedPageAccessRequest,
+  ): Promise<BulkChangeManagedPageAccessResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_access(request.access)) {
+      return { ok: false, reason: "invalid_access" };
+    }
+    if (!is_valid_bulk_selection(request.selection)) {
+      return { ok: false, reason: "invalid_selection" };
+    }
+
+    const results: BulkChangeManagedPageAccessItemResult[] = [];
+    let now: Date | undefined;
+    for (const selected of request.selection) {
+      const page = await this.#find_authorized_page(
+        request.actor,
+        selected.page_id,
+      );
+      if (page === null) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "not_found",
+        });
+        continue;
+      }
+      if (page.revision !== selected.expected_revision) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "revision_conflict",
+        });
+        continue;
+      }
+      if (page.revision === Number.MAX_SAFE_INTEGER) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "revision_exhausted",
+        });
+        continue;
+      }
+      now ??= this.#operation_time();
+      const replaced = await this.#repository.replace_managed({
+        page_id: page.page_id,
+        owner_user_id: request.actor.user_id,
+        expected_revision: selected.expected_revision,
+        access: request.access,
+        now,
+      });
+      if (!replaced.ok) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: replaced.reason,
+        });
+        continue;
+      }
+      results.push({
+        page_id: selected.page_id,
+        ok: true,
+        page: this.#summary(replaced.page),
+      });
+    }
+    return { ok: true, results };
+  }
+
   async rename_managed(
     request: RenameManagedPageRequest,
   ): Promise<RenameManagedPageResult> {
@@ -519,6 +598,44 @@ export class PageService
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
     });
+  }
+
+  async bulk_delete_managed(
+    request: BulkDeleteManagedPagesRequest,
+  ): Promise<BulkDeleteManagedPagesResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_bulk_selection(request.selection)) {
+      return { ok: false, reason: "invalid_selection" };
+    }
+
+    const results: BulkDeleteManagedPageItemResult[] = [];
+    for (const selected of request.selection) {
+      const page = await this.#find_authorized_page(
+        request.actor,
+        selected.page_id,
+      );
+      if (page === null) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "not_found",
+        });
+        continue;
+      }
+      const deleted = await this.#repository.delete_managed({
+        page_id: page.page_id,
+        owner_user_id: request.actor.user_id,
+        expected_revision: selected.expected_revision,
+      });
+      results.push(
+        deleted.ok ? { page_id: selected.page_id, ok: true } : {
+          page_id: selected.page_id,
+          ok: false,
+          reason: deleted.reason,
+        },
+      );
+    }
+    return { ok: true, results };
   }
 
   async view_public(locator: Locator): Promise<ViewPublicPageResult> {
@@ -747,6 +864,32 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function is_valid_bulk_selection(
+  value: unknown,
+): value is readonly ManagedPageRevisionSelection[] {
+  if (
+    !Array.isArray(value) || value.length < 1 ||
+    value.length > max_bulk_managed_pages
+  ) {
+    return false;
+  }
+  const page_ids = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== "object" || candidate === null) return false;
+    const selected = candidate as Record<string, unknown>;
+    if (
+      typeof selected.page_id !== "string" ||
+      !is_valid_page_id(selected.page_id) ||
+      !is_valid_page_revision(selected.expected_revision) ||
+      page_ids.has(selected.page_id)
+    ) {
+      return false;
+    }
+    page_ids.add(selected.page_id);
+  }
+  return true;
 }
 
 function normalize_optional_query(

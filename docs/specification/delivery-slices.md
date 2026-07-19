@@ -81,8 +81,12 @@ Managed listing supports AND-combined page-name substring, exact access, and
 exact tag filters in addition to namespace, with continuations bound to the
 complete filter scope. Memory and Deno KV pass the same mutation, filtering,
 pagination, and cursor conformance; older schema-v1 KV pages read as untagged.
-These operations are not yet exposed by the page API or creator panel. Per-page
-result bulk access/delete contracts remain the next core work.
+The raw service also exposes bounded bulk access and deletion interfaces: each
+command prevalidates 1-100 distinct page ID/revision pairs, applies accepted
+items independently under current ownership and exact revisions, and preserves
+selection order in one result per page. A failed item does not roll back another
+item; malformed selections cannot partially mutate. These expanded operations
+are not yet exposed by the page API or creator panel.
 
 ## DS-EXTERNAL — Evaluate external storage
 

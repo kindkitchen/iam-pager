@@ -1,6 +1,6 @@
 ---
 name: management-expansion
-description: DS-MANAGE expansion - locator operations, tags, and filters are implemented in the core; load when adding bulk actions or exposing expanded management through API/UI.
+description: DS-MANAGE expansion - locator, tag/filter, and per-page-result bulk contracts are implemented in the core; load when exposing expanded management through API/UI.
 created: 2026-07-19
 updated: 2026-07-19
 tags: [api, backend, frontend, management]
@@ -9,14 +9,13 @@ relates: [public-exploration, creator-management-ui]
 
 Active, chain position 4 of 4.
 
-Implemented two core milestones in `PageService`, memory, and Deno KV:
-revision-bound same-namespace rename/server-generated duplication, then bounded
-canonical tags with managed name/access/tag filtering and exact-tag public
-exploration. Mutation and cursor scope remain revision/filter bound; old KV
-records read as untagged. See [[003.log]] and [[004.log]].
+The HTTP-independent DS-MANAGE core is complete: revision-bound rename and
+generated duplication; bounded canonical tags; managed name/access/tag and
+public exact-tag filtering; and prevalidated 1-100 page bulk access/deletion with
+ordered, independently revision-bound results. Memory and Deno KV enforce each
+mutation atomically. See [[003.log]], [[004.log]], and [[005.log]].
 
-No rename, duplicate, tag, filter, or bulk HTTP/creator controls exist yet.
+No expanded HTTP or creator controls exist yet.
 
-Next: implement explicit per-page-result bulk access and deletion contracts in
-the raw service, then expose the expanded management operations through API and
-UI.
+Next: expose rename, duplicate, tag/filter, public tag, and bulk operations
+through strict authenticated HTTP adapters, then extend the creator UI.

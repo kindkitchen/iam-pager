@@ -10,7 +10,11 @@ import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
 import type { RandomNameGenerator } from "../random-name.ts";
-import type { PageClock, PageIdGenerator } from "./interfaces.ts";
+import {
+  max_bulk_managed_pages,
+  type PageClock,
+  type PageIdGenerator,
+} from "./interfaces.ts";
 import { MemoryPageRepository } from "./memory-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
 import { make_page_content } from "./repository-conformance.ts";
@@ -718,6 +722,205 @@ Deno.test("PageService delete is revision-bound and removes management and deliv
     await service.deliver({ namespace: "Mine", page_name: "notes" }, guest),
     { ok: false, reason: "not_found" },
   );
+});
+
+Deno.test("PageService bulk access prevalidates a bounded selection and returns ordered per-page results", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["change-one", "change-two", "keep-stale"],
+    dates: [t1, t1, t1, t2],
+  });
+  const one = await service.create_managed({
+    ...managed_request("one", "private"),
+    tags: ["keep"],
+  });
+  const two = await service.create_managed(managed_request("two", "private"));
+  const stale = await service.create_managed(
+    managed_request("stale", "private"),
+  );
+  assert(one.ok && two.ok && stale.ok);
+  await repository.create_managed({
+    page_id: "foreign",
+    locator: { namespace: "Theirs", page_name: "foreign" },
+    owner_user_id: other.user_id,
+    access: "private",
+    content: make_page_content("foreign"),
+    now: t1,
+  });
+
+  const invalid_selection = { ok: false, reason: "invalid_selection" } as const;
+  assertEquals(
+    await service.bulk_change_managed_access({
+      actor: owner,
+      access: "invalid" as "public",
+      selection: [{ page_id: one.page.page_id, expected_revision: 1 }],
+    }),
+    { ok: false, reason: "invalid_access" },
+  );
+  assertEquals(
+    await service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: [],
+    }),
+    invalid_selection,
+  );
+  assertEquals(
+    await service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: [
+        { page_id: one.page.page_id, expected_revision: 1 },
+        { page_id: "bad id", expected_revision: 1 },
+      ],
+    }),
+    invalid_selection,
+  );
+  assertEquals(
+    await service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: [
+        { page_id: one.page.page_id, expected_revision: 1 },
+        { page_id: one.page.page_id, expected_revision: 1 },
+      ],
+    }),
+    invalid_selection,
+  );
+  assertEquals(
+    await service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: Array.from(
+        { length: max_bulk_managed_pages + 1 },
+        (_, index) => ({
+          page_id: `oversized-${index}`,
+          expected_revision: 1,
+        }),
+      ),
+    }),
+    invalid_selection,
+  );
+  assertEquals((await repository.find_by_id(one.page.page_id))?.revision, 1);
+
+  const changed = await service.bulk_change_managed_access({
+    actor: owner,
+    access: "public",
+    selection: [
+      { page_id: one.page.page_id, expected_revision: 1 },
+      { page_id: stale.page.page_id, expected_revision: 2 },
+      { page_id: two.page.page_id, expected_revision: 1 },
+      { page_id: "foreign", expected_revision: 1 },
+      { page_id: "absent", expected_revision: 1 },
+    ],
+  });
+  assert(changed.ok);
+  assertEquals(
+    changed.results.map((item) =>
+      item.ok
+        ? {
+          page_id: item.page_id,
+          ok: true,
+          access: item.page.access,
+          revision: item.page.revision,
+        }
+        : item
+    ),
+    [
+      { page_id: "change-one", ok: true, access: "public", revision: 2 },
+      {
+        page_id: "keep-stale",
+        ok: false,
+        reason: "revision_conflict",
+      },
+      { page_id: "change-two", ok: true, access: "public", revision: 2 },
+      { page_id: "foreign", ok: false, reason: "not_found" },
+      { page_id: "absent", ok: false, reason: "not_found" },
+    ],
+  );
+  const changed_one = await repository.find_by_id(one.page.page_id);
+  const changed_two = await repository.find_by_id(two.page.page_id);
+  assertEquals(changed_one?.tags, ["keep"]);
+  assertEquals(changed_one?.updated_at, t2);
+  assertEquals(changed_two?.updated_at, t2);
+  assertEquals((await repository.find_by_id(stale.page.page_id))?.revision, 1);
+});
+
+Deno.test("PageService concurrent bulk access commands have one item winner per revision", async () => {
+  const { service } = await make_fixture({ ids: ["bulk-race"] });
+  const created = await service.create_managed(managed_request());
+  assert(created.ok);
+  const results = await Promise.all([
+    service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: [{ page_id: created.page.page_id, expected_revision: 1 }],
+    }),
+    service.bulk_change_managed_access({
+      actor: owner,
+      access: "public",
+      selection: [{ page_id: created.page.page_id, expected_revision: 1 }],
+    }),
+  ]);
+  assert(results.every((result) => result.ok));
+  const items = results.flatMap((result) => result.ok ? result.results : []);
+  assertEquals(items.filter((item) => item.ok).length, 1);
+  assertEquals(
+    items.filter((item) => !item.ok).map((item) => item.reason),
+    ["revision_conflict"],
+  );
+});
+
+Deno.test("PageService bulk delete is prevalidated and independently revision-bound", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["delete-one", "keep-stale", "delete-two"],
+  });
+  const one = await service.create_managed(managed_request("one"));
+  const stale = await service.create_managed(managed_request("stale"));
+  const two = await service.create_managed(managed_request("two"));
+  assert(one.ok && stale.ok && two.ok);
+  await repository.create_managed({
+    page_id: "foreign-delete",
+    locator: { namespace: "Theirs", page_name: "foreign" },
+    owner_user_id: other.user_id,
+    access: "private",
+    content: make_page_content("foreign"),
+    now: t1,
+  });
+
+  assertEquals(
+    await service.bulk_delete_managed({
+      actor: owner,
+      selection: [
+        { page_id: one.page.page_id, expected_revision: 1 },
+        { page_id: "bad id", expected_revision: 1 },
+      ],
+    }),
+    { ok: false, reason: "invalid_selection" },
+  );
+  assert((await repository.find_by_id(one.page.page_id)) !== null);
+
+  const deleted = await service.bulk_delete_managed({
+    actor: owner,
+    selection: [
+      { page_id: one.page.page_id, expected_revision: 1 },
+      { page_id: stale.page.page_id, expected_revision: 2 },
+      { page_id: "foreign-delete", expected_revision: 1 },
+      { page_id: "absent-delete", expected_revision: 1 },
+      { page_id: two.page.page_id, expected_revision: 1 },
+    ],
+  });
+  assert(deleted.ok);
+  assertEquals(deleted.results, [
+    { page_id: "delete-one", ok: true },
+    { page_id: "keep-stale", ok: false, reason: "revision_conflict" },
+    { page_id: "foreign-delete", ok: false, reason: "not_found" },
+    { page_id: "absent-delete", ok: false, reason: "not_found" },
+    { page_id: "delete-two", ok: true },
+  ]);
+  assertEquals(await repository.find_by_id(one.page.page_id), null);
+  assertEquals(await repository.find_by_id(two.page.page_id), null);
+  assertEquals((await repository.find_by_id(stale.page.page_id))?.revision, 1);
+  assert((await repository.find_by_id("foreign-delete")) !== null);
 });
 
 Deno.test("PageService direct delivery permits public pages and only the private owner", async () => {

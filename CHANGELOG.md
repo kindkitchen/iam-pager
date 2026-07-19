@@ -2,6 +2,15 @@
 
 ## 2026-07-19
 
+- Added bounded HTTP-independent bulk management contracts. A creator can submit
+  1-100 distinct page ID/revision pairs for one access target or deletion; the
+  service validates the complete selection before mutation, preserves result
+  order, applies each item independently under current ownership and exact
+  revision, and returns one non-disclosing outcome per page. Successful access
+  changes retain content/tags and share one operation timestamp; concurrent
+  commands still have one winner per revision. API and creator-panel exposure
+  remain next.
+
 - Completed the second HTTP-independent DS-MANAGE milestone: managed pages now
   carry at most ten normalized canonical tags, exact-revision updates can
   replace or clear them, rename preserves them, and duplicate copies them.

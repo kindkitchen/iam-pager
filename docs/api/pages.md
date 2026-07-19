@@ -157,12 +157,13 @@ a repeated delete and non-owner access return `404`.
 ## Expanded management operations
 
 Rename, generated-name duplication, bounded tag mutation, managed
-name/access/tag filtering, and exact-tag public exploration are implemented in
-the HTTP-independent page service and both repositories, but are deliberately
-not yet exposed by these routes. Their future HTTP shapes must retain
-authenticated ownership, synchronizer CSRF, strong source-revision
-preconditions, strict request decoding, and the existing non-disclosing error
-boundary. Bulk operations remain unimplemented.
+name/access/tag filtering, exact-tag public exploration, and bulk access/delete
+are implemented in the HTTP-independent page service, but are deliberately not
+yet exposed by these routes. Bulk commands prevalidate 1-100 distinct page
+ID/revision selections and return one ordered, independently applied result per
+page. Their future HTTP shapes must retain authenticated ownership, synchronizer
+CSRF, strong source-revision preconditions, strict request decoding, and the
+existing non-disclosing error boundary.
 
 ## Direct delivery
 

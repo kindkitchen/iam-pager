@@ -315,6 +315,15 @@ no-store. The exact public contract is documented in
 [`docs/api/pages.md`](../api/pages.md); the superseded flat endpoint and its
 locator-only application/storage path have been removed.
 
+Bulk access and deletion remain HTTP-independent. Their service boundary accepts
+only 1-100 distinct, syntactically valid page ID/positive-revision pairs and
+validates the complete selection before mutation. Accepted items execute in
+selection order with current owner/namespace authority and repository revision
+conditions; one item failure does not roll back another. Access successes retain
+content and tags, increment once, and use one shared bulk-operation timestamp.
+Results preserve input order and collapse missing, foreign, and unauthorized
+pages to the same item-level `not_found` outcome.
+
 ## QT-SEARCH — Search and privacy
 
 - Private pages and their content must not appear in public search.
@@ -358,6 +367,8 @@ Tests should cover the behavior that defines the product:
 - route conflicts and missing-page responses;
 - page updates without mixed content and metadata;
 - revision conflicts for concurrent update/delete intent;
+- bounded bulk selection prevalidation, ordered partial results, and concurrent
+  per-item revision conflicts;
 - strict HTTP schemas, CSRF, pagination, and ETag preconditions;
 - owner-only private delivery with an ordinary missing response for everyone
   else;
