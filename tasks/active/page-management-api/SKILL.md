@@ -7,16 +7,16 @@ tags: [api, backend, security, storage]
 relates: []
 ---
 
-Active; implementing `003.plan.md`. Steps 1-10 are delivered and compacted in
-`009.summary`: the page model, memory/Deno KV repositories, application service,
-strict management HTTP adapter, storage selection, Fresh collection/item routes,
-session-authorized direct delivery, and nested/CSRF-aware publishing form are now
-composed into the running application.
+Active; implementing `003.plan.md`. Steps 1-11 are delivered: the page model,
+memory/Deno KV repositories, application service, strict management HTTP
+adapter, storage selection, Fresh collection/item routes, session-authorized
+direct delivery, and nested/CSRF-aware publishing form are composed into the
+running application.
 
-The composition root exposes only the new `PageRepository`, page application
-interfaces, and page HTTP handler. The old locator-only content/publishing code
-is no longer route-accessible but still exists as standalone modules and tests.
+The superseded locator-only `ContentRepository`, publishing services, HTTP
+adapters, page record types, conformance suites, and tests are removed.
+`PageService`, `PageRepository`, and their management/direct HTTP boundaries are
+the only page mutation, delivery, and persistence path.
 
-Next: step 11, delete those superseded repositories, publishing services, HTTP
-adapters, and tests; then finish documentation/acceptance and local smoke. Current
-gates: check, build, and all 411 tests pass.
+Next: finish documentation/acceptance, run local smoke verification, and close
+the task. Current gates: check, build, and all 345 remaining tests pass.

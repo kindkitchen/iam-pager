@@ -305,18 +305,19 @@ oversized bodies return `400`/`413`; unsupported media types return `415`; taken
 names return `409`; invalid locator names return `422`. Responses use
 `no-store`.
 
-The replacement page-management HTTP adapter is implemented independently from
-Fresh but not yet selected by current routes. Its `POST /api/pages` contract
-uses nested locator/access/content input and session-derived
-trial-versus-managed semantics; authenticated mutation requires the shared
-constant-time CSRF header check, and a stale creator header on a guest session
-cannot downgrade into trial publication. Authenticated GET list/inspect output
-excludes owner IDs, source from lists, and stored derivations. PATCH and DELETE
-require one canonical strong page/revision ETag, mapping missing, malformed, and
-stale preconditions to `428`, `400`, and `412`. JSON bodies, item IDs, query
-names/counts/lengths, limits, and cursors are bounded and strict. All
-management/error responses are no-store. The route migration will make this
-documented contract public and remove the older flat endpoint described above.
+The composed page-management HTTP adapter serves `POST`/`GET /api/pages` and
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`. Creation uses nested
+locator/access/content input and session-derived trial-versus-managed semantics;
+authenticated mutation requires the shared constant-time CSRF header check, and
+a stale creator header on a guest session cannot downgrade into trial
+publication. Authenticated list/inspect output excludes owner IDs, source from
+lists, and stored derivations. PATCH and DELETE require one canonical strong
+page/revision ETag, mapping missing, malformed, and stale preconditions to
+`428`, `400`, and `412`. JSON bodies, item IDs, query names/counts/lengths,
+limits, and cursors are bounded and strict. All management/error responses are
+no-store. The exact public contract is documented in
+[`docs/api/pages.md`](../api/pages.md); the superseded flat endpoint and its
+locator-only application/storage path have been removed.
 
 ## QT-SEARCH — Search and privacy
 

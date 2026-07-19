@@ -2,6 +2,14 @@
 
 ## 2026-07-19
 
+- Removed the superseded locator-only publishing stack: legacy publishing
+  services and HTTP adapters, `ContentRepository` memory/Deno KV
+  implementations, conformance suites, obsolete page record types, and their
+  tests. The composed `PageService`, management/direct HTTP boundaries, and
+  `PageRepository` are now the only page mutation, delivery, and persistence
+  path; direct response/isolation coverage was migrated to that boundary (345
+  tests total).
+
 - Composed the page-management application boundary into Fresh: deployment
   storage now selects `PageRepository`, collection/item routes expose the strict
   management API, and catch-all delivery uses the same service with

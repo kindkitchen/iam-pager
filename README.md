@@ -137,7 +137,7 @@ The first publishing slice currently provides:
   cross-user writes into reserved namespaces while allowing the owner; ownership
   is in-memory by default, or Deno KV can atomically persist users, external
   identities, and namespace claims together;
-- the next page-management core under `lib/page/`: stable opaque page IDs,
+- the page-management core under `lib/page/`: stable opaque page IDs,
   trial/managed stewardship, access and revision invariants, an atomic
   repository contract with deterministic owner pagination, memory and Deno KV
   backends passing the same conformance suite, and an HTTP-independent
@@ -194,8 +194,8 @@ authenticated header shows only signed-in state and the CSRF-protected
 `Sign out` action; signing out revokes that authenticated bearer and immediately
 rotates the browser to a distinct guest session. Signed-in creators can reserve
 and list namespaces through the creator panel, then publish into their own
-claim; page inspection, access control, deletion, and broader management remain
-future work.
+claim. Page inspection, access control, and deletion are available through the
+management API; their site UI and broader management remain future work.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed
@@ -308,17 +308,17 @@ Session records and credential indexes receive the absolute-session-lifetime KV
 TTL; idle and absolute expiry remain enforced by the service because KV expiry
 is lazy, and logout/revocation removes the credential index atomically.
 
-The Deno KV content adapter stores each page as an envelope record plus
-immutable generation chunks, so a page's Markdown source and derived HTML are
-not limited by the single-value size cap. Replacement writes the new
-generation's chunks first and then atomically flips the envelope while deleting
-the replaced generation: readers always see one complete page, and concurrent
-replacements settle on exactly one winner. A crash between chunk writes and the
-flip can only orphan chunks of a never-referenced generation. Changing the
-backend or ownership path does not migrate or merge records. Ownership records
-still have no application expiry or deletion path, and backup/recovery follows
-the selected KV service or deployment operator. Without the content opt-in,
-pages still disappear on restart.
+The Deno KV page adapter stores each page as an envelope record plus immutable
+generation chunks, so a page's Markdown source and derived HTML are not limited
+by the single-value size cap. Replacement writes the new generation's chunks
+first and then atomically flips the envelope while deleting the replaced
+generation: readers always see one complete page, and concurrent replacements
+settle on exactly one winner. A crash between chunk writes and the flip can only
+orphan chunks of a never-referenced generation. Changing the backend or
+ownership path does not migrate or merge records. Ownership records still have
+no application expiry or deletion path, and backup/recovery follows the selected
+KV service or deployment operator. Without the content opt-in, pages still
+disappear on restart.
 
 For Deno Deploy, use `deno task build` as the build command and
 `_fresh/server.js` as the application entrypoint. Configure the original-mode
