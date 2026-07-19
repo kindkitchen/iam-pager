@@ -144,9 +144,13 @@ The first publishing slice currently provides:
   `PageService` for trial publish plus managed create, list, source inspection,
   content/access update, deletion, and owner-only private delivery. The durable
   adapter uses coherent ID/locator/owner indexes and immutable binary-safe
-  content chunks in a fresh keyspace. This core is tested but is not composed
-  into the current routes or storage selector yet; the existing endpoint
-  behavior below remains authoritative until the HTTP/storage migration lands;
+  content chunks in a fresh keyspace. A Fresh-independent page HTTP adapter now
+  provides strict bounded create/list/inspect/PATCH/delete contracts, shared
+  CSRF validation, owner-safe JSON presenters, and strong revision ETags; see
+  [the page API contract](docs/api/pages.md). This core and HTTP boundary are
+  tested but are not composed into the current routes or storage selector yet;
+  the existing endpoint behavior below remains authoritative until that
+  migration lands;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - interface-backed create-or-replace content storage, in memory by default or
   optionally persisted in linked Deno KV generation chunks;

@@ -7,27 +7,26 @@ tags: [api, backend, security, storage]
 relates: []
 ---
 
-Active; implementing `003.plan.md`. Steps 2-6 are delivered (`005.log` through
-`007.log`): `lib/page/` now holds the invariant-checked page model, atomic
-repository contract, strict list cursors, backend-neutral conformance suite,
-namespace-authority resolver, HTTP/session-independent `PageService`, and
-conforming memory and Deno KV repositories.
+Active; implementing `003.plan.md`. Steps 2-7 are delivered (`005.log` through
+`008.log`): `lib/page/` now holds the invariant-checked model, atomic repository
+contract, conforming memory/Deno KV adapters, namespace-authority resolver,
+HTTP/session-independent `PageService`, and strict Fresh-independent
+`PageHttpAdapter`.
 
-The durable adapter uses a fresh schema-versioned page keyspace with coherent
-ID, case-normalized locator, and ordered owner indexes plus immutable chunked
-content generations. Conditional atomic commits cover trial replacement,
-managed takeover, revision-bound content/access updates, and deletion across
-repository instances. A tagged JSON codec preserves plain data and
-`Uint8Array`; reads validate envelopes, indexes, identities, revisions, and
-chunks and fail closed on corruption. Access-only updates retain the exact
-content generation.
+The HTTP boundary provides bounded nested create/PATCH decoding, strict list
+queries and pagination, owner-safe list/inspection presenters, shared
+constant-time CSRF validation, session-derived trial-versus-managed dispatch,
+and canonical page/revision ETags for revision-bound PATCH/DELETE. A stale
+creator request cannot downgrade to a guest trial. All management/error
+responses are no-store, owner IDs and stored derivations stay off wire, and the
+concrete pending-route contract is documented in `docs/api/pages.md`.
 
-Next: step 7, implement strict Fresh-independent HTTP primitives and adapter:
-ETags, shared CSRF, bounded request/query decoding, owner-safe presenters, and
-exact status/error mapping. Then proceed to composition and routes in plan
-order. The new page adapter is not selected by current route composition yet.
+Next: step 8, select `PageRepository` storage in composition, expose page
+service/HTTP interfaces from `AppServices`, and move Fresh collection/item routes
+to the adapter. The new adapter is not selected by current route composition yet;
+the legacy locator-only endpoint remains public until that migration.
 
 No production-data migration or legacy API compatibility is required. Rename,
 duplicate, bulk actions, tags, filters beyond namespace, search, and management
-UI remain later DS-MANAGE work. Current gates: check, build, and all 393 tests
+UI remain later DS-MANAGE work. Current gates: check, build, and all 406 tests
 pass.

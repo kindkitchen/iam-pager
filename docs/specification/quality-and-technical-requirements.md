@@ -36,9 +36,9 @@ trial and managed page behavior. It receives a typed actor and resolves
 namespace authority through an interface, while repositories alone own atomic
 locator, ID, and revision conditions. Owner-safe summaries and inspection input
 exclude stewardship IDs and stored derivations. This service currently runs
-against either conforming page repository. The memory and Deno KV adapters are
-implemented; route composition and deployment storage selection remain the next
-fragments.
+against either conforming page repository. The memory and Deno KV adapters and a
+Fresh-independent strict HTTP management adapter are implemented; route
+composition and deployment storage selection remain the next fragments.
 
 ## QT-STORAGE — Repository persistence
 
@@ -306,6 +306,19 @@ return `401`; invalid CSRF and platform namespaces return `403`; malformed and
 oversized bodies return `400`/`413`; unsupported media types return `415`; taken
 names return `409`; invalid locator names return `422`. Responses use
 `no-store`.
+
+The replacement page-management HTTP adapter is implemented independently from
+Fresh but not yet selected by current routes. Its `POST /api/pages` contract
+uses nested locator/access/content input and session-derived
+trial-versus-managed semantics; authenticated mutation requires the shared
+constant-time CSRF header check, and a stale creator header on a guest session
+cannot downgrade into trial publication. Authenticated GET list/inspect output
+excludes owner IDs, source from lists, and stored derivations. PATCH and DELETE
+require one canonical strong page/revision ETag, mapping missing, malformed, and
+stale preconditions to `428`, `400`, and `412`. JSON bodies, item IDs, query
+names/counts/lengths, limits, and cursors are bounded and strict. All
+management/error responses are no-store. The route migration will make this
+documented contract public and remove the older flat endpoint described above.
 
 ## QT-SEARCH — Search and privacy
 

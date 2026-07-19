@@ -2,6 +2,14 @@
 
 ## 2026-07-19
 
+- Implemented the Fresh-independent page-management HTTP boundary: strict
+  bounded nested create, authenticated list/inspect, revision-bound PATCH and
+  DELETE, owner-safe presenters, opaque pagination, canonical strong ETags, and
+  exact no-store status/error mapping. Authenticated mutations reuse a shared
+  constant-time CSRF comparison, and stale creator intent cannot downgrade to a
+  guest trial. Added 13 HTTP/ETag/CSRF tests (406 total); Fresh composition and
+  route migration remain the next fragment.
+
 - Implemented `DenoKvPageRepository` in a fresh versioned page keyspace with
   authoritative ID envelopes, coherent case-normalized locator and ordered owner
   indexes, immutable chunked content generations, atomic conditional
