@@ -2,6 +2,9 @@
 
 ## 2026-07-19
 
+- Restricted gauth/Effect SSR externalization to production builds so Fresh's
+  Deno resolver handles JSR imports during Vite development and HMR works again.
+
 - Accepted and completed `page-management-api`: aligned the page/access/API/
   retention specification with the implemented contracts, made bodyless DELETE
   tolerate Deno's zero-byte transport stream while still rejecting payloads, and
