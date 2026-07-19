@@ -2,6 +2,14 @@
 
 ## 2026-07-19
 
+- Planned the next development chain as tasks: `creator-management-ui`
+  (active) completes the DS-PROTECT site management UI over the existing
+  page-management contracts, followed by chained todos `public-view-capability`
+  (DS-VIEW), `public-exploration` (DS-EXPLORE first version, names +
+  namespaces), and `management-expansion` (DS-MANAGE). Each task records the
+  project invariants (interface-first contracts, web as secondary projection,
+  specs updated with the change).
+
 - Clarified production and preview storage profiles after diagnosing
   intermittent deployed sign-in loss as process-local configuration: attaching
   Deno KV does not select it, production must opt ownership, sessions, and pages
