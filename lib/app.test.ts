@@ -21,6 +21,7 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
+import { MemoryContentRepository } from "./content/mod.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
 import {
@@ -29,6 +30,9 @@ import {
 } from "./session/mod.ts";
 import { deliver_locator_path } from "./publishing/mod.ts";
 import {
+  CONTENT_STORAGE_BACKEND_ENV,
+  type ContentRepositoryFactory,
+  type ContentStorageConfig,
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   type OwnershipRepositoryFactory,
@@ -246,6 +250,62 @@ Deno.test("configured composition selects referentially safe session storage", a
       )
     )?.session_id,
     resolution.session.session_id,
+  );
+});
+
+Deno.test("configured composition selects referentially safe content storage", async () => {
+  const selected_content_repository = new MemoryContentRepository();
+  let selected_config: ContentStorageConfig | undefined;
+  const content_repository_factory: ContentRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve(selected_content_repository);
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+    [CONTENT_STORAGE_BACKEND_ENV]: "deno-kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    {
+      ownership_repository_factory: {
+        create: () =>
+          Promise.resolve({
+            identity_repository: new MemoryIdentityRepository({
+              generate: () => "user-a",
+            }),
+            namespace_repository: new MemoryNamespaceRepository(),
+          }),
+      },
+      content_repository_factory,
+    },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  assertStrictEquals(services.repository, selected_content_repository);
+  const published = await services.publishing.publish({
+    locator: { namespace: "Durable", page_name: "hello" },
+    content_type: "md-page",
+    input: { md: "# Durable" },
+  });
+  assertEquals(published.ok, true);
+  assertEquals(
+    (await selected_content_repository.get({
+      namespace: "durable",
+      page_name: "hello",
+    }))?.content.content_type,
+    "md-page",
   );
 });
 

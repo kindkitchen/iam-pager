@@ -56,10 +56,13 @@ import {
   RequestContextMiddleware,
 } from "./request-context.ts";
 import {
+  type ContentRepositoryFactory,
+  DefaultContentRepositoryFactory,
   DefaultOwnershipRepositoryFactory,
   DefaultSessionRepositoryFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
+  parse_content_storage_config,
   parse_ownership_storage_config,
   parse_session_storage_config,
   type SessionRepositoryFactory,
@@ -95,6 +98,8 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Referentially linked repositories are supplied as one composition unit. */
   readonly ownership_repositories?: OwnershipRepositories;
+  /** Page persistence stays behind `ContentRepository`; memory is default. */
+  readonly content_repository?: ContentRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
   /** Provider implementations are supplied at the composition boundary. */
@@ -111,6 +116,8 @@ export interface ConfiguredAppServiceOptions {
   readonly ownership_repository_factory?: OwnershipRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
   readonly session_repository_factory?: SessionRepositoryFactory;
+  /** Override only at an outer composition or test boundary. */
+  readonly content_repository_factory?: ContentRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -133,7 +140,8 @@ export function create_app_services(
     strategies: [new PathSlugStrategy()],
     forbidden_namespaces,
   });
-  const repository = new MemoryContentRepository();
+  const repository = options.content_repository ??
+    new MemoryContentRepository();
   const ownership_repositories = options.ownership_repositories ?? {
     identity_repository: new MemoryIdentityRepository(new CryptoIdGenerator()),
     namespace_repository: new MemoryNamespaceRepository(),
@@ -216,6 +224,10 @@ export async function create_configured_app_services(
     environment,
     ownership_storage_config,
   );
+  const content_storage_config = parse_content_storage_config(
+    environment,
+    ownership_storage_config,
+  );
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
   const ownership_repositories = await (
@@ -227,9 +239,13 @@ export async function create_configured_app_services(
   const session_repository = await (
     options.session_repository_factory ?? new DefaultSessionRepositoryFactory()
   ).create(session_storage_config);
+  const content_repository = await (
+    options.content_repository_factory ?? new DefaultContentRepositoryFactory()
+  ).create(content_storage_config);
   return create_app_services({
     ownership_repositories,
     session_repository,
+    content_repository,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),

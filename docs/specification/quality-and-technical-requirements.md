@@ -51,15 +51,30 @@ database. Startup rejects durable sessions with memory ownership, preventing an
 authenticated session from outliving its user. Session creation, renewal,
 one-use authentication attempts, credential rotation, logout, and revocation
 remain atomic. Records and credential-hash indexes carry the absolute-session
-TTL; service checks remain authoritative because KV expiration is lazy. Content
-remains independently in-memory, and neither ownership nor session settings
-imply that pages survive a restart.
+TTL; service checks remain authoritative because KV expiration is lazy.
+
+Page content is a third opt-in behind the same `ContentRepository` contract and
+follows the session rule: durable content requires the configured Deno KV
+ownership database, because a page in a reserved namespace must not outlive the
+reservation and user that authorize it. The adapter stores one envelope record
+per locator plus immutable generation chunks, since a page's source and derived
+data can exceed a single KV value. Every replacement writes a fresh generation
+before atomically flipping the envelope and deleting the replaced generation, so
+readers always observe one complete page and concurrent replacements settle on
+exactly one winner. Stored content data must be JSON-serializable; the envelope
+names its codec so later versions can add encodings without a key migration.
+Neither ownership nor session settings alone imply that pages survive a restart;
+unset content configuration keeps pages process-local.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
 the responsibility of the configured KV service or deployment operator. Session
-records expire through their bounded lifecycle; these operational limits must
-remain visible until broader lifecycle and migration behavior is delivered.
+records expire through their bounded lifecycle, and page records live until
+replaced or deleted through publishing. A crash between chunk writes and the
+envelope flip can orphan chunks of a never-referenced generation; they are
+invisible to readers and harmless, but no sweeper reclaims them yet. These
+operational limits must remain visible until broader lifecycle and migration
+behavior is delivered.
 
 ## QT-ROUTING — Routing and HTTP behavior
 

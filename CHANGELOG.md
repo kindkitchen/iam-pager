@@ -2,6 +2,19 @@
 
 ## 2026-07-18
 
+- Delivered the durable-content storage slice: `DenoKvContentRepository` stores
+  each page as a versioned envelope record plus immutable generation chunks, so
+  source and derived data are not capped by one KV value. Replacement writes the
+  new generation before atomically flipping the envelope and deleting the
+  replaced generation; readers always reassemble one complete page, concurrent
+  replacements settle on one winner without leaked chunks, and corruption is
+  distinguished from contention. Extracted the `ContentRepository` conformance
+  suite from the memory tests and ran memory and Deno KV through it, including
+  multi-chunk and concurrency cases. `IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv`
+  requires Deno KV ownership and inherits its database so persisted pages cannot
+  outlive their namespace reservations; unset keeps pages process-local. Updated
+  README and specification retention guidance. Added 29 tests (290 total).
+
 - Delivered the durable-session storage slice: `DenoKvSessionRepository` uses
   versioned serialization, absolute-lifetime KV TTLs, and native atomic commits
   for ID/credential uniqueness, renewal, bounded one-use authentication

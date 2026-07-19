@@ -79,11 +79,12 @@ the app should not promise that content can never disappear under any
 circumstance. The practical retention and backup behavior should be stated when
 those systems are implemented.
 
-The first optional durable boundary covers ownership records, not content: Deno
-KV stores application users, provider identities, and namespace reservations
-together so a persisted claim always retains a resolvable owner after restart.
-Sessions may separately opt into that same ownership database and bounded
-lifecycle; durable sessions with process-local ownership are rejected. There is
-currently no application expiry or deletion for ownership records and no
-automatic migration between memory, database paths, or backends. Pages remain
-process-local.
+The first optional durable boundary covers ownership records: Deno KV stores
+application users, provider identities, and namespace reservations together so a
+persisted claim always retains a resolvable owner after restart. Sessions and
+page content may separately opt into that same ownership database; durable
+sessions or durable content with process-local ownership are rejected, so a
+persisted page in a reserved namespace always retains its resolvable reservation
+and owner. There is currently no application expiry or deletion for ownership
+records and no automatic migration between memory, database paths, or backends.
+Without the content opt-in, pages remain process-local.
