@@ -13,6 +13,8 @@ import type {
   DeleteManagedResult,
   ListManagedRequest,
   ListManagedResult,
+  ListPublicRequest,
+  ListPublicResult,
   PageRepository,
   PutTrialRequest,
   PutTrialResult,
@@ -724,6 +726,70 @@ export class DenoKvPageRepository implements PageRepository {
         compare_page_sort_keys(page_sort_key(page), after) <= 0
       ) {
         invariant_violation();
+      }
+      if (pages.length === request.limit) {
+        has_more = true;
+        break;
+      }
+      pages.push(page);
+    }
+    return {
+      ok: true,
+      pages,
+      next_cursor: has_more
+        ? encode_page_list_cursor(
+          page_sort_key(pages[pages.length - 1]),
+          filter,
+        )
+        : null,
+    };
+  }
+
+  async list_public(request: ListPublicRequest): Promise<ListPublicResult> {
+    require(
+      typeof request.namespace === "string" && request.namespace !== "",
+      "namespace must be non-empty",
+    );
+    require(
+      Number.isSafeInteger(request.limit) && request.limit >= 1,
+      "limit must be a positive safe integer",
+    );
+    const filter = request.namespace.toLowerCase();
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_list_cursor(request.cursor, filter);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const prefix: Deno.KvKey = [...by_locator_prefix, filter];
+    const start: Deno.KvKey | undefined = after === null ? undefined : [
+      ...by_locator_prefix,
+      filter,
+      after.default_rank,
+      after.page_name_key,
+    ];
+    const pages: PageRecord[] = [];
+    let has_more = false;
+    for await (
+      const entry of this.#kv.list<unknown>(
+        start === undefined ? { prefix } : { prefix, start },
+      )
+    ) {
+      // The continuation cursor names the last delivered locator; resume
+      // strictly after it.
+      if (start !== undefined && key_equals(entry.key, start)) continue;
+      const index = deserialize_locator_index(entry.value);
+      const page = await this.find_by_id(index.page_id);
+      if (
+        page === null || !key_equals(locator_key(page.locator), entry.key)
+      ) {
+        const current = await this.#kv.get<unknown>(entry.key);
+        if (current.versionstamp !== entry.versionstamp) continue;
+        invariant_violation();
+      }
+      // Eligibility, not an invariant: trial and private pages share the
+      // locator index but never enter public listings (OQ-ACCESS).
+      if (page.stewardship.kind !== "managed" || page.access !== "public") {
+        continue;
       }
       if (pages.length === request.limit) {
         has_more = true;

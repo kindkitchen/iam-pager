@@ -2,6 +2,14 @@
 
 ## 2026-07-19
 
+- Completed DS-VIEW with HTTP-independent public page viewing and bounded,
+  cursor-paginated namespace listings over both memory and Deno KV. Public
+  summaries omit management identity; creator listings exclude private and guest
+  pages. `/site/<locator>` now returns a real wrapped view with sandboxed,
+  no-referrer HTML preview or a direct-content fallback, links to direct
+  content, the creator default, and other public pages; private, malformed, and
+  missing views share a non-disclosing 404. The suite grew to 371 tests.
+
 - Completed the DS-PROTECT site surface with a creator management panel: a
   web-independent presenter serves the first page of managed rows in the same
   shape as `/api/pages` summaries, and a new island projects pagination,

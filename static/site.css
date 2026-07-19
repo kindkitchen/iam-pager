@@ -1128,6 +1128,104 @@ h2 {
   }
 }
 
+.public-page-shell {
+  display: grid;
+  gap: 1.5rem;
+  width: min(100% - 2rem, 72rem);
+}
+
+.public-page-platform-header,
+.public-page-related,
+.public-page-missing {
+  border: 1px solid #c9cec7;
+  border-radius: 0.8rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  background: rgb(255 254 250 / 88%);
+}
+
+.public-page-platform-header .site-navigation {
+  margin-bottom: 1rem;
+}
+
+.public-page-platform-header h1,
+.public-page-missing h1 {
+  margin-top: 1.5rem;
+  font-size: clamp(2.4rem, 8vw, 5rem);
+}
+
+.public-page-home {
+  color: #173c27;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.public-page-platform-label,
+.public-content-label {
+  margin-left: 0.65rem;
+  color: #59635c;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+}
+
+.public-page-actions a,
+.public-content-fallback a,
+.public-page-related a {
+  color: #1c5333;
+  font-weight: 750;
+}
+
+.public-content-frame {
+  overflow: hidden;
+  border: 2px solid #627369;
+  border-radius: 0.8rem;
+  background: #fff;
+  box-shadow: 0 1rem 2.5rem rgb(31 54 39 / 10%);
+}
+
+.public-content-frame > .public-content-label {
+  display: block;
+  margin: 0;
+  border-bottom: 1px solid #c9cec7;
+  padding: 0.65rem 1rem;
+  background: #e9eee8;
+}
+
+.public-content-frame iframe {
+  display: block;
+  width: 100%;
+  min-height: min(65rem, 72vh);
+  border: 0;
+  background: #fff;
+}
+
+.public-content-fallback {
+  padding: clamp(2rem, 6vw, 4rem);
+  text-align: center;
+}
+
+.public-page-related ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 1rem 0;
+  padding-left: 1.25rem;
+}
+
+.public-page-missing {
+  max-width: 48rem;
+  margin: 2rem auto;
+}
+
 @media (min-width: 70rem) {
   .publish-panel {
     grid-template-columns: minmax(13rem, 0.32fr) minmax(0, 1fr);

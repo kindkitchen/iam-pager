@@ -13,6 +13,8 @@ import type {
   DeleteManagedResult,
   ListManagedRequest,
   ListManagedResult,
+  ListPublicRequest,
+  ListPublicResult,
   PageRepository,
   PutTrialRequest,
   PutTrialResult,
@@ -280,6 +282,43 @@ export class MemoryPageRepository implements PageRepository {
       if (record.stewardship.owner_user_id !== request.owner_user_id) continue;
       const key = page_sort_key(record);
       if (filter !== null && key.namespace_key !== filter) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, record });
+    }
+    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
+    const selected = candidates.slice(0, request.limit);
+    const next_cursor = candidates.length > request.limit
+      ? encode_page_list_cursor(selected[selected.length - 1].key, filter)
+      : null;
+    return {
+      ok: true,
+      pages: selected.map((entry) => clone(entry.record)),
+      next_cursor,
+    };
+  }
+
+  // deno-lint-ignore require-await
+  async list_public(request: ListPublicRequest): Promise<ListPublicResult> {
+    require(
+      typeof request.namespace === "string" && request.namespace !== "",
+      "namespace must be non-empty",
+    );
+    require(
+      Number.isSafeInteger(request.limit) && request.limit >= 1,
+      "limit must be a positive safe integer",
+    );
+    const filter = request.namespace.toLowerCase();
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_list_cursor(request.cursor, filter);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
+    for (const record of this.#by_id.values()) {
+      if (record.stewardship.kind !== "managed") continue;
+      if (record.access !== "public") continue;
+      const key = page_sort_key(record);
+      if (key.namespace_key !== filter) continue;
       if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
       candidates.push({ key, record });
     }

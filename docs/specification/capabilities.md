@@ -41,6 +41,13 @@ The app can show an eligible public page inside a thin wrapper that provides:
 - a link to the creator's default page when one exists;
 - a link to the creator's other public pages.
 
+The capability is implemented through HTTP-independent `PublicPageViewer` and
+`PublicPageLister` interfaces. Public summaries omit management identity,
+revision, and owner data; creator listings are bounded, cursor-paginated, and
+exclude private and guest pages in both memory and Deno KV. `/site/<locator>`
+projects that model with a sandboxed content frame or a direct-content fallback.
+A private, invalid, or missing wrapped view is the same non-disclosing 404.
+
 ## CP-NAMESPACE — Authentication and namespace management
 
 Account entry and namespace authority are separate capabilities. The implemented

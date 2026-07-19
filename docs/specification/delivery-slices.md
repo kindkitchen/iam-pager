@@ -40,6 +40,15 @@ content, visit the creator's default page, and see other public pages. Supported
 content is previewed without confusing it with the platform UI; other content
 has a suitable download or fallback view.
 
+This slice is composed at `/site/<locator>`. A web-independent public-view
+contract resolves eligible pages and creator-default pages, while a
+visibility-scoped repository operation paginates only public managed pages in a
+namespace. Memory and Deno KV satisfy the same contract. The Fresh route is a
+thin projection: supported HTML is confined to a sandboxed, no-referrer iframe;
+unknown formats receive a direct-content fallback; trial pages can be viewed by
+known locator but never acquire creator listings; private and missing pages
+share a real 404 response.
+
 ## DS-EXPLORE — Explore public pages
 
 Exploration begins with page names, namespaces, and tags. Text-content search

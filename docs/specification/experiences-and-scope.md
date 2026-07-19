@@ -24,8 +24,12 @@ visitor can:
 - open the creator's default public page;
 - browse the creator's other public pages.
 
-Creator content must remain visually and technically distinguishable from the
-platform's own controls.
+Creator content remains visually and technically distinguishable from the
+platform's own controls: `/site/<locator>` labels and confines supported HTML in
+a sandboxed, no-referrer frame, while the wrapper alone owns navigation and
+related-page links. Unsupported content receives a metadata fallback and its
+direct-content link. Trial pages remain viewable by known locator but expose no
+creator listing; private and missing pages receive the same real 404.
 
 ## EX-EXPLORE — Explorer finds public pages
 

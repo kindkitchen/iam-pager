@@ -520,6 +520,114 @@ Deno.test("PageService authorizes private delivery before retired-handler disclo
   assertEquals((await repository.find_by_id("retired-private"))?.revision, 1);
 });
 
+Deno.test("PageService public view resolves eligible pages and hides the rest", async () => {
+  const { service } = await make_fixture({
+    ids: ["default-1", "public-1", "private-1", "trial-1"],
+  });
+  const default_page = await service.create_managed({
+    ...managed_request("ignored", "public", "# Default"),
+    locator: { namespace: "Mine" },
+  });
+  const named = await service.create_managed(
+    managed_request("pub", "public"),
+  );
+  const hidden = await service.create_managed(
+    managed_request("secret", "private"),
+  );
+  const trial = await service.publish_trial(trial_request("Free"));
+  assert(default_page.ok && named.ok && hidden.ok && trial.ok);
+
+  // A locator without a page name resolves the namespace default page.
+  const viewed_default = await service.view_public({ namespace: "MINE" });
+  assert(viewed_default.ok);
+  assertEquals(viewed_default.page.path, "/Mine");
+  assertEquals(viewed_default.page.stewardship, "managed");
+  assertEquals(viewed_default.page.content_type, "md-page");
+  assertEquals(viewed_default.page.media_type, "text/html; charset=utf-8");
+  assertEquals("page_id" in viewed_default.page, false);
+  assertEquals("revision" in viewed_default.page, false);
+
+  const viewed_named = await service.view_public({
+    namespace: "mine",
+    page_name: "PUB",
+  });
+  assert(viewed_named.ok);
+  assertEquals(viewed_named.page.path, "/Mine/pub");
+
+  const viewed_trial = await service.view_public({ namespace: "free" });
+  assert(viewed_trial.ok);
+  assertEquals(viewed_trial.page.stewardship, "trial");
+
+  const not_found = { ok: false, reason: "not_found" } as const;
+  assertEquals(
+    await service.view_public({ namespace: "Mine", page_name: "secret" }),
+    not_found,
+  );
+  assertEquals(
+    await service.view_public({ namespace: "Mine", page_name: "absent" }),
+    not_found,
+  );
+  assertEquals(await service.view_public({ namespace: "site" }), not_found);
+  assertEquals(await service.view_public({ namespace: "a/b" }), not_found);
+});
+
+Deno.test("PageService public listing validates namespace and maps visitor-safe rows", async () => {
+  const { service } = await make_fixture({
+    ids: ["default-1", "public-1", "private-1", "trial-1"],
+  });
+  await service.create_managed({
+    ...managed_request("ignored", "public"),
+    locator: { namespace: "Mine" },
+  });
+  await service.create_managed(managed_request("pub", "public"));
+  await service.create_managed(managed_request("secret", "private"));
+  await service.publish_trial(trial_request("Free"));
+
+  const listed = await service.list_public({ namespace: "MINE", limit: 10 });
+  assert(listed.ok);
+  assertEquals(
+    listed.pages.map((page) => page.path),
+    ["/Mine", "/Mine/pub"],
+  );
+  assert(
+    listed.pages.every((page) =>
+      page.stewardship === "managed" &&
+      !("page_id" in page) && !("revision" in page) && !("access" in page)
+    ),
+  );
+  assertEquals(listed.next_cursor, null);
+
+  const first = await service.list_public({ namespace: "mine", limit: 1 });
+  assert(first.ok && first.next_cursor !== null);
+  const second = await service.list_public({
+    namespace: "Mine",
+    limit: 10,
+    cursor: first.next_cursor,
+  });
+  assert(second.ok);
+  assertEquals(second.pages.map((page) => page.path), ["/Mine/pub"]);
+
+  const guest_namespace = await service.list_public({
+    namespace: "free",
+    limit: 10,
+  });
+  assert(guest_namespace.ok);
+  assertEquals(guest_namespace.pages, []);
+
+  assertEquals(
+    await service.list_public({ namespace: "a/b", limit: 10 }),
+    { ok: false, reason: "invalid_namespace" },
+  );
+  assertEquals(
+    await service.list_public({ namespace: "site", limit: 10 }),
+    { ok: false, reason: "forbidden_namespace" },
+  );
+  assertEquals(
+    await service.list_public({ namespace: "Mine", limit: 10, cursor: "!" }),
+    { ok: false, reason: "invalid_cursor" },
+  );
+});
+
 Deno.test("PageService retries generated id collisions and reports bounded exhaustion", async () => {
   const { service, repository } = await make_fixture({
     ids: ["collision", "fresh-id"],

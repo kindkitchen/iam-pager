@@ -30,6 +30,8 @@ import {
   type PageHttpHandler,
   type PageRepository,
   PageService,
+  type PublicPageLister,
+  type PublicPageViewer,
   RepositoryNamespaceAuthorityResolver,
 } from "./page/mod.ts";
 import {
@@ -48,6 +50,10 @@ import {
   CreatorPageManagementPresenter,
   type PageManagementPanelPresenter,
 } from "./ui/page-management.ts";
+import {
+  CreatorPublicPageViewPresenter,
+  type PublicPageViewPresenter,
+} from "./ui/public-page-view.ts";
 import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
@@ -90,8 +96,13 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 export interface AppServices {
   engine: LocatorEngine;
   page_repository: PageRepository;
-  pages: PageHttpApplication & PageDeliverer;
+  pages:
+    & PageHttpApplication
+    & PageDeliverer
+    & PublicPageViewer
+    & PublicPageLister;
   pages_http: PageHttpHandler;
+  public_page_view: PublicPageViewPresenter;
   namespace_repository: NamespaceRepository;
   namespaces: NamespaceReservationManager;
   namespaces_http: NamespaceHttpHandler;
@@ -181,6 +192,7 @@ export function create_app_services(
     clock,
   });
   const pages_http = new PageHttpAdapter({ pages });
+  const public_page_view = new CreatorPublicPageViewPresenter({ pages });
   const page_management_panel = new CreatorPageManagementPresenter({ pages });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
@@ -226,6 +238,7 @@ export function create_app_services(
     page_repository,
     pages,
     pages_http,
+    public_page_view,
     namespace_repository,
     namespaces,
     namespaces_http,

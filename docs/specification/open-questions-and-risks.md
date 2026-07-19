@@ -41,7 +41,11 @@ creator changes access through the same atomic revision-bound PATCH used for
 content updates. Direct delivery observes the committed representation
 immediately. A private page is available only to its stored creator's current
 session and is ordinary missing to guests, logged-out creators, and other users.
-Exploration remains later scope and must exclude private pages.
+The site-mediated view applies the same non-disclosure: private pages are
+ordinary missing. Namespace public listings are cursor-bounded and exclude both
+private and trial pages; trial pages remain reachable only by a known direct or
+site-view locator. Cross-namespace exploration remains later scope and must use
+the same visibility rule.
 
 ### OQ-API — API surface
 
@@ -99,8 +103,11 @@ expiry, account deletion, migration, and broader backup policy remain open.
 ### OQ-ISOLATION — Direct-content isolation
 
 Raw HTML or another active format can conflict with authenticated site sessions
-if it shares the same browser trust boundary. The chosen routing and response
-model must keep creator content from acting as the management site.
+if it shares the same browser trust boundary. Direct HTML responses use active-
+content isolation headers. The site-mediated view places supported creator HTML
+in a sandboxed iframe without same-origin, script, or referrer permissions;
+creator markup never enters the platform DOM. Future active formats must satisfy
+those same boundaries before gaining an inline preview.
 
 ### OQ-ROUTES — Route collisions
 
@@ -110,9 +117,10 @@ as stable.
 
 ### OQ-MISSING — Missing-page fallback
 
-Silently returning the home page for a missing direct URL makes clients believe
-the content request succeeded. Use a real missing-page response, optionally with
-a link to the site.
+Silently returning the home page for a missing URL makes clients believe the
+content request succeeded. Direct and site-mediated locator routes now return
+real missing responses; the wrapper deliberately uses the same 404 for missing,
+private, forbidden, and malformed visitor lookups.
 
 ### OQ-FORMATS — Broad content support
 

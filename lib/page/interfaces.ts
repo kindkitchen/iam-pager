@@ -54,6 +54,25 @@ export type ListManagedResult =
   | { ok: false; reason: "invalid_cursor" };
 
 /**
+ * Bounded visitor-facing listing of one namespace's public managed pages
+ * (DS-VIEW). `namespace` matches case-insensitively; `cursor` is an opaque
+ * continuation token from a previous result for the same namespace. Private
+ * pages and trial (guest) pages never appear: an unreserved namespace lists
+ * empty, and eligibility gaps are skipped without shortening a page of
+ * results.
+ */
+export interface ListPublicRequest {
+  namespace: string;
+  /** Maximum records to return; a positive safe integer. */
+  limit: number;
+  cursor?: string;
+}
+
+export type ListPublicResult =
+  | { ok: true; pages: PageRecord[]; next_cursor: string | null }
+  | { ok: false; reason: "invalid_cursor" };
+
+/**
  * Trial create-or-replace. Atomically creates at an absent locator (using the
  * generated `page_id`) or replaces an existing trial page, preserving its id
  * and creation time and incrementing its revision. Never touches a managed
@@ -137,12 +156,29 @@ export interface PageRepository {
   /** Management resolution by opaque id; null when absent. */
   find_by_id(page_id: PageId): Promise<PageRecord | null>;
   list_managed(request: ListManagedRequest): Promise<ListManagedResult>;
+  list_public(request: ListPublicRequest): Promise<ListPublicResult>;
   put_trial(request: PutTrialRequest): Promise<PutTrialResult>;
   create_managed(request: CreateManagedRequest): Promise<CreateManagedResult>;
   replace_managed(
     request: ReplaceManagedRequest,
   ): Promise<ReplaceManagedResult>;
   delete_managed(request: DeleteManagedRequest): Promise<DeleteManagedResult>;
+}
+
+/**
+ * Visitor-safe public representation (DS-VIEW): no page id, owner identity,
+ * or revision leaves the contract. `stewardship` only distinguishes
+ * creator-backed pages from unowned trial output.
+ */
+export interface PublicPageSummary {
+  locator: Locator;
+  path: string;
+  stewardship: "trial" | "managed";
+  content_type: string;
+  media_type: string;
+  size_bytes: number;
+  created_at: Date;
+  updated_at: Date;
 }
 
 /** Owner-safe management representation; stewardship and source are omitted. */
@@ -284,6 +320,28 @@ export type DeleteManagedPageResult =
   | { ok: true }
   | { ok: false; reason: "not_found" | "revision_conflict" };
 
+export type ViewPublicPageResult =
+  | {
+    ok: true;
+    page: PublicPageSummary;
+    /** Rendered content when its handler remains available; null is fallback. */
+    payload: DeliveryPayload | null;
+  }
+  | { ok: false; reason: "not_found" };
+
+export interface ListPublicPagesRequest {
+  namespace: string;
+  limit: number;
+  cursor?: string;
+}
+
+export type ListPublicPagesResult =
+  | { ok: true; pages: PublicPageSummary[]; next_cursor: string | null }
+  | {
+    ok: false;
+    reason: "forbidden_namespace" | "invalid_namespace" | "invalid_cursor";
+  };
+
 export type DeliverPageResult =
   | { ok: true; page: PageRecord; payload: DeliveryPayload }
   | {
@@ -329,4 +387,22 @@ export interface ManagedPageDeleter {
 
 export interface PageDeliverer {
   deliver(locator: Locator, actor: PageActor): Promise<DeliverPageResult>;
+}
+
+/**
+ * Resolves an eligible public page for wrapped viewing (CP-VIEW). A locator
+ * without a page name resolves the namespace's default page, so this one
+ * operation also answers "does the creator have a default page". Missing,
+ * private, and structurally invalid locators collapse into one non-disclosing
+ * `not_found` (OQ-ACCESS, OQ-MISSING).
+ */
+export interface PublicPageViewer {
+  view_public(locator: Locator): Promise<ViewPublicPageResult>;
+}
+
+/** Lists a creator namespace's public pages for the site wrapper (CP-VIEW). */
+export interface PublicPageLister {
+  list_public(
+    request: ListPublicPagesRequest,
+  ): Promise<ListPublicPagesResult>;
 }

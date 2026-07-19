@@ -11,6 +11,8 @@ import type {
   InspectManagedPageResult,
   ListManagedPagesRequest,
   ListManagedPagesResult,
+  ListPublicPagesRequest,
+  ListPublicPagesResult,
   ManagedPageCreator,
   ManagedPageDeleter,
   ManagedPageInspection,
@@ -24,12 +26,16 @@ import type {
   PageIdGenerator,
   PageRepository,
   PageSummary,
+  PublicPageLister,
+  PublicPageSummary,
+  PublicPageViewer,
   PublishTrialPageRequest,
   PublishTrialPageResult,
   TrialPagePublisher,
   UpdateManagedPageRequest,
   UpdateManagedPageResult,
   UserPageActor,
+  ViewPublicPageResult,
 } from "./interfaces.ts";
 import {
   is_valid_page_access,
@@ -72,6 +78,8 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    PublicPageViewer,
+    PublicPageLister,
     PageDeliverer {
   readonly #engine: LocatorEngine;
   readonly #repository: PageRepository;
@@ -321,6 +329,52 @@ export class PageService
     });
   }
 
+  async view_public(locator: Locator): Promise<ViewPublicPageResult> {
+    if (!this.#engine.validate(locator).ok) {
+      return { ok: false, reason: "not_found" };
+    }
+    const page = await this.#repository.find_by_locator(locator);
+    if (
+      page === null || page.access !== "public" ||
+      page_record_violation(page) !== null
+    ) {
+      // Missing, private, and incoherent pages are indistinguishable to
+      // visitors (OQ-ACCESS, OQ-MISSING).
+      return { ok: false, reason: "not_found" };
+    }
+    const handler = this.#handlers.get(page.content.content_type);
+    return {
+      ok: true,
+      page: this.#public_summary(page),
+      payload: handler === undefined ? null : handler.render(page.content.data),
+    };
+  }
+
+  async list_public(
+    request: ListPublicPagesRequest,
+  ): Promise<ListPublicPagesResult> {
+    const validation = this.#engine.validate({ namespace: request.namespace });
+    if (!validation.ok) {
+      return {
+        ok: false,
+        reason: validation.reason === "forbidden_namespace"
+          ? "forbidden_namespace"
+          : "invalid_namespace",
+      };
+    }
+    const listed = await this.#repository.list_public({
+      namespace: validation.locator.namespace,
+      limit: request.limit,
+      cursor: request.cursor,
+    });
+    if (!listed.ok) return listed;
+    return {
+      ok: true,
+      pages: listed.pages.map((page) => this.#public_summary(page)),
+      next_cursor: listed.next_cursor,
+    };
+  }
+
   async deliver(
     locator: Locator,
     actor: { kind: "guest" } | UserPageActor,
@@ -404,6 +458,19 @@ export class PageService
       },
     };
     return { ok: true, page: inspection };
+  }
+
+  #public_summary(page: PageRecord): PublicPageSummary {
+    return {
+      locator: structuredClone(page.locator),
+      path: this.#engine.format(page.locator),
+      stewardship: page.stewardship.kind,
+      content_type: page.content.content_type,
+      media_type: page.content.meta.media_type,
+      size_bytes: page.content.meta.size_bytes,
+      created_at: new Date(page.created_at),
+      updated_at: new Date(page.updated_at),
+    };
   }
 
   #summary(page: PageRecord): PageSummary {
