@@ -3,6 +3,7 @@ export * from "./interfaces.ts";
 export * from "./cursor.ts";
 export * from "./generators.ts";
 export * from "./memory-repository.ts";
+export * from "./kv-repository.ts";
 export * from "./namespace-authority.ts";
 export * from "./service.ts";
 export {

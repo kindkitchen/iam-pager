@@ -81,9 +81,10 @@ behavior as the site.
 The HTTP-independent management core now implements trial publishing and managed
 create, bounded list, source inspection, revision-bound content/access update,
 deletion, and owner-only private delivery over the `PageRepository` interface.
-Its memory adapter is complete; HTTP composition and durable page storage are
-the next delivery fragments, so these operations are not public API claims yet.
-Rename, duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
+Its memory and Deno KV adapters are complete and pass the same repository
+conformance; HTTP composition and storage selection are the next delivery
+fragments, so these operations are not public API claims yet. Rename, duplicate,
+tags, filters, and bulk actions remain DS-MANAGE scope.
 
 ## CP-EXPLORE — Public exploration
 

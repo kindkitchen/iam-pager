@@ -326,9 +326,17 @@ export function test_page_repository_conformance(
         "notes",
         "winner",
       );
-      for (const owner_user_id of ["owner-2", "owner-1"]) {
+      for (
+        const [page_id, owner_user_id] of [
+          ["challenger-owner-2", "owner-2"],
+          ["challenger-owner-1", "owner-1"],
+          // Locator conflict takes precedence even when the generated ID also
+          // names the winner; callers must not retry a page that already exists.
+          ["managed-1", "owner-1"],
+        ] as const
+      ) {
         const attempt = await repository.create_managed({
-          page_id: `challenger-${owner_user_id}`,
+          page_id,
           locator: { namespace: "ALICE", page_name: "NOTES" },
           owner_user_id,
           access: "public",

@@ -2,6 +2,15 @@
 
 ## 2026-07-19
 
+- Implemented `DenoKvPageRepository` in a fresh versioned page keyspace with
+  authoritative ID envelopes, coherent case-normalized locator and ordered owner
+  indexes, immutable chunked content generations, atomic conditional
+  create/replace/update/delete, bounded contention handling, binary-safe tagged
+  JSON data, and strict corruption checks. The unchanged repository conformance
+  suite now passes against memory and Deno KV; seven adapter-specific tests
+  cover persistence, physical layout, generation reuse/replacement, cleanup,
+  codec rejection, and corruption (393 tests total, 34 new).
+
 - Implemented the HTTP-independent page-management application layer: typed
   guest/user actors and namespace-authority resolution, trial public
   create-or-replace, managed create over owned reservations, owner-safe bounded

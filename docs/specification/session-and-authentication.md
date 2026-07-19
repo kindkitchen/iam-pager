@@ -270,7 +270,7 @@ Namespace reservation and publishing authorization now exist as server-owned
 business services with optional Deno KV persistence, authenticated HTTP APIs,
 and a site reservation panel; publishing already receives the resolved session
 actor. The HTTP-independent managed-page service is also implemented against the
-new page repository contract. Its Deno KV adapter, HTTP/API composition, and
-private direct-delivery route wiring are the next product boundary.
-Profile/account/settings navigation remains optional follow-up UI work and must
-not substitute for that authority.
+new page repository contract, with conforming memory and Deno KV adapters.
+HTTP/API composition, deployment storage selection, and private direct-delivery
+route wiring are the next product boundary. Profile/account/settings navigation
+remains optional follow-up UI work and must not substitute for that authority.
