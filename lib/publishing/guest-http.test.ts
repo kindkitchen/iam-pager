@@ -1,12 +1,40 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { create_app_services } from "../app.ts";
+import { MdPageHandler, MemoryContentRepository } from "../content/mod.ts";
+import { LocatorEngine, PathSlugStrategy } from "../locator/mod.ts";
+import {
+  MemoryNamespaceRepository,
+  NamespaceReservationService,
+} from "../namespace/mod.ts";
 import type { Session } from "../session/model.ts";
 import { deliver_locator_path } from "./http.ts";
+import { NamespacePublishingAuthorizer } from "./namespace-authorizer.ts";
+import { PublishingService } from "./service.ts";
 import {
   guest_publish_request_max_bytes,
   publish_actor_from_session,
   publish_guest_md_page_request,
 } from "./guest-http.ts";
+
+function create_legacy_services() {
+  const engine = new LocatorEngine({
+    strategies: [new PathSlugStrategy()],
+    forbidden_namespaces: ["site", "api", "auth"],
+  });
+  const namespace_repository = new MemoryNamespaceRepository();
+  return {
+    engine,
+    namespaces: new NamespaceReservationService({
+      engine,
+      repository: namespace_repository,
+    }),
+    publishing: new PublishingService({
+      engine,
+      repository: new MemoryContentRepository(),
+      handlers: [new MdPageHandler()],
+      authorizer: new NamespacePublishingAuthorizer(namespace_repository),
+    }),
+  };
+}
 
 function json_request(body: unknown): Request {
   return new Request("https://pager.test/api/pages", {
@@ -17,7 +45,7 @@ function json_request(body: unknown): Request {
 }
 
 Deno.test("guest API publishes a named MdPage and returns its direct URL", async () => {
-  const { engine, publishing } = create_app_services();
+  const { engine, publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     json_request({
       namespace: "Ada Lovelace",
@@ -47,7 +75,7 @@ Deno.test("guest API publishes a named MdPage and returns its direct URL", async
 });
 
 Deno.test("guest API publishes a namespace default page", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     json_request({ namespace: "guest", md: "default" }),
     publishing,
@@ -57,7 +85,7 @@ Deno.test("guest API publishes a namespace default page", async () => {
 });
 
 Deno.test("guest API requires JSON", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     new Request("https://pager.test/api/pages", {
       method: "POST",
@@ -70,7 +98,7 @@ Deno.test("guest API requires JSON", async () => {
 });
 
 Deno.test("guest API reports malformed JSON", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     new Request("https://pager.test/api/pages", {
       method: "POST",
@@ -84,7 +112,7 @@ Deno.test("guest API reports malformed JSON", async () => {
 });
 
 Deno.test("guest API validates its request shape", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     json_request({ namespace: 7, md: "hello" }),
     publishing,
@@ -98,7 +126,7 @@ Deno.test("guest API validates its request shape", async () => {
 });
 
 Deno.test("guest API rejects reserved and invalid locators", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const reserved = await publish_guest_md_page_request(
     json_request({ namespace: "API", md: "hello" }),
     publishing,
@@ -115,7 +143,7 @@ Deno.test("guest API rejects reserved and invalid locators", async () => {
 });
 
 Deno.test("guest API rejects publishing into a creator-reserved namespace", async () => {
-  const { publishing, namespaces } = create_app_services();
+  const { publishing, namespaces } = create_legacy_services();
   const reserved = await namespaces.reserve({
     namespace: "Claimed",
     owner_user_id: "owner-1",
@@ -135,7 +163,7 @@ Deno.test("guest API rejects publishing into a creator-reserved namespace", asyn
 });
 
 Deno.test("session-derived actor lets the owner publish into its reserved namespace", async () => {
-  const { publishing, namespaces } = create_app_services();
+  const { publishing, namespaces } = create_legacy_services();
   const reserved = await namespaces.reserve({
     namespace: "Claimed",
     owner_user_id: "owner-1",
@@ -183,7 +211,7 @@ Deno.test("publish actors derive from the request session kind", () => {
 });
 
 Deno.test("guest API surfaces MdPage validation", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     json_request({ namespace: "guest", md: "" }),
     publishing,
@@ -197,7 +225,7 @@ Deno.test("guest API surfaces MdPage validation", async () => {
 });
 
 Deno.test("guest API bounds request buffering", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     new Request("https://pager.test/api/pages", {
       method: "POST",
@@ -211,7 +239,7 @@ Deno.test("guest API bounds request buffering", async () => {
 });
 
 Deno.test("guest API enforces MdPage content limits", async () => {
-  const { publishing } = create_app_services();
+  const { publishing } = create_legacy_services();
   const response = await publish_guest_md_page_request(
     json_request({
       namespace: "guest",

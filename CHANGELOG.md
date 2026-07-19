@@ -2,6 +2,13 @@
 
 ## 2026-07-19
 
+- Composed the page-management application boundary into Fresh: deployment
+  storage now selects `PageRepository`, collection/item routes expose the strict
+  management API, and catch-all delivery uses the same service with
+  session-derived private-page authority. Migrated the publishing form to the
+  nested explicit create contract with creator CSRF and added composition,
+  storage-selector, private-delivery, and presenter coverage (411 tests total).
+
 - Implemented the Fresh-independent page-management HTTP boundary: strict
   bounded nested create, authenticated list/inspect, revision-bound PATCH and
   DELETE, owner-safe presenters, opaque pagination, canonical strong ETags, and

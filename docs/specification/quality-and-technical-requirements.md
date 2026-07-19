@@ -35,10 +35,10 @@ The new `PageService` is the HTTP/session-independent application boundary for
 trial and managed page behavior. It receives a typed actor and resolves
 namespace authority through an interface, while repositories alone own atomic
 locator, ID, and revision conditions. Owner-safe summaries and inspection input
-exclude stewardship IDs and stored derivations. This service currently runs
-against either conforming page repository. The memory and Deno KV adapters and a
-Fresh-independent strict HTTP management adapter are implemented; route
-composition and deployment storage selection remain the next fragments.
+exclude stewardship IDs and stored derivations. This service runs against either
+conforming page repository. The composition root selects the memory or Deno KV
+adapter, exposes the service and strict HTTP boundary once, and Fresh
+collection/item/direct routes remain thin adapters over those interfaces.
 
 ## QT-STORAGE — Repository persistence
 
@@ -62,13 +62,12 @@ one-use authentication attempts, credential rotation, logout, and revocation
 remain atomic. Records and credential-hash indexes carry the absolute-session
 TTL; service checks remain authoritative because KV expiration is lazy.
 
-Page content is a third opt-in and follows the session rule: durable content
-requires the configured Deno KV ownership database, because a page in a reserved
+Page persistence is a third opt-in and follows the session rule: durable pages
+require the configured Deno KV ownership database, because a page in a reserved
 namespace must not outlive the reservation and user that authorize it. The
-currently composed publishing path still selects the earlier locator-only
-`ContentRepository`; the new management core replaces that boundary with
-`PageRepository`, and deployment selection moves to it when route composition
-lands.
+composition root selects `PageRepository` directly; the retained
+`IAM_PAGER_CONTENT_STORAGE_BACKEND` variable now controls this page repository
+for deployment continuity.
 
 `DenoKvPageRepository` uses a fresh schema-versioned keyspace with one
 authoritative envelope by stable page ID, case-normalized locator and ordered
@@ -82,9 +81,8 @@ identity, stewardship/access/revision/date/meta fields, index coherence, chunk
 order/count/length, codec shape, and schema version; impossible or unknown
 states are corruption. Conditional retries are bounded, and failed visibility
 conditions clean unreferenced new chunks best-effort. Neither ownership nor
-session settings alone imply that pages survive a restart; until the new
-repository is composed, the existing content-storage opt-in remains the active
-deployment behavior.
+session settings alone imply that pages survive a restart; only the explicit
+page-storage opt-in selects durable page persistence.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is

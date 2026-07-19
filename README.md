@@ -144,16 +144,13 @@ The first publishing slice currently provides:
   `PageService` for trial publish plus managed create, list, source inspection,
   content/access update, deletion, and owner-only private delivery. The durable
   adapter uses coherent ID/locator/owner indexes and immutable binary-safe
-  content chunks in a fresh keyspace. A Fresh-independent page HTTP adapter now
-  provides strict bounded create/list/inspect/PATCH/delete contracts, shared
-  CSRF validation, owner-safe JSON presenters, and strong revision ETags; see
-  [the page API contract](docs/api/pages.md). This core and HTTP boundary are
-  tested but are not composed into the current routes or storage selector yet;
-  the existing endpoint behavior below remains authoritative until that
-  migration lands;
+  content chunks in a fresh keyspace. The composition root selects one page
+  repository and exposes this service plus its strict HTTP adapter to thin Fresh
+  collection, item, and direct-delivery routes. The current publishing form
+  sends the nested explicit public-create request and creator CSRF token without
+  losing draft state on API errors; see
+  [the page API contract](docs/api/pages.md);
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
-- interface-backed create-or-replace content storage, in memory by default or
-  optionally persisted in linked Deno KV generation chunks;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site/*`, with soft in-field four-word random locator helpers, a collapsible
   Page workspace with exclusive Markdown/CSS source panes, split or full-width
@@ -162,8 +159,9 @@ The first publishing slice currently provides:
   CSS-reactive sandboxed section previews, editable element-based CSS presets,
   CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
   `site`, `api`, and `auth` remain reserved as namespaces;
-- `POST /api/pages` for JSON guest or authenticated-creator publishing,
-  returning the direct path and URL;
+- `GET`/`POST /api/pages` and `GET`/`PATCH`/`DELETE /api/pages/:page_id` for
+  trial creation and authenticated page management, including pagination,
+  owner-safe source inspection, CSRF, and revision ETags;
 - authenticated `GET /api/namespaces` and CSRF-protected `POST /api/namespaces`
   for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -173,11 +171,11 @@ The first publishing slice currently provides:
 
 Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
-sessions and content separately opt into that same database; either durable
-store is rejected unless ownership is durable. Pages in unreserved namespaces
-remain replaceable by anyone. Total page capacity, publishing frequency,
-expiry/deletion, creator page management, search, and backend migration are not
-implemented; these endpoints are not ready for untrusted public traffic.
+sessions and pages separately opt into that same database; either durable store
+is rejected unless ownership is durable. Pages in unreserved namespaces remain
+replaceable by anyone. Total page capacity, publishing frequency, guest expiry,
+management UI, rename/duplicate/bulk operations, search, and backend migration
+are not implemented; these endpoints are not ready for untrusted public traffic.
 
 ## Local development
 
@@ -285,8 +283,7 @@ variables listed above.
 Ownership persistence is selected independently from session transport. Unset
 configuration, or an explicit `memory` value, keeps identities, namespace
 reservations, sessions, and pages process-local. Deno KV selects the linked
-ownership repositories as one unit; sessions and page content are separate
-opt-ins:
+ownership repositories as one unit; sessions and pages are separate opt-ins:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
@@ -298,12 +295,11 @@ IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
 The path is optional. When omitted, `Deno.openKv()` uses the runtime's default
 KV database (including the linked database on Deno Deploy); an explicit local
 path is durable only when its filesystem is durable. Durable sessions and
-durable content each require Deno KV ownership and inherit its exact
-path/default database. Startup rejects either option with memory ownership,
-preventing an authenticated session from surviving without its user record and a
-published page from surviving without its namespace reservation. Omitting an
-opt-in keeps that store's restart-invalidated memory behavior even when
-ownership is durable.
+durable pages each require Deno KV ownership and inherit its exact path/default
+database. Startup rejects either option with memory ownership, preventing an
+authenticated session from surviving without its user record and a published
+page from surviving without its namespace reservation. Omitting an opt-in keeps
+that store's restart-invalidated memory behavior even when ownership is durable.
 
 The Deno KV session adapter atomically preserves creation, renewal,
 authentication-attempt consumption, credential rotation, logout, and revocation.

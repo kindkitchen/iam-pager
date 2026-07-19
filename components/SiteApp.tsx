@@ -1,6 +1,7 @@
 import PagePublishForm from "../islands/PagePublishForm.tsx";
 import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
 import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
+import { page_publish_authorization } from "../lib/ui/page-publish.ts";
 import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
 import type {
   SiteNavigation,
@@ -36,9 +37,7 @@ export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
 
       <PagePublishForm
         initial_namespace={initial_namespace}
-        publisher_kind={namespace_panel.kind === "creator"
-          ? "creator"
-          : "guest"}
+        authorization={page_publish_authorization(namespace_panel)}
       />
 
       <aside class="guest-notice">

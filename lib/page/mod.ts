@@ -1,6 +1,7 @@
 export * from "./model.ts";
 export * from "./interfaces.ts";
 export * from "./cursor.ts";
+export * from "./delivery-http.ts";
 export * from "./etag.ts";
 export * from "./generators.ts";
 export * from "./http.ts";

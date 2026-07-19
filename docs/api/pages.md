@@ -1,9 +1,7 @@
 # Page management API
 
-> Implementation status: the Fresh-independent adapter described here is
-> implemented and tested. The current Fresh routes still use the legacy flat
-> publishing endpoint until composition migration lands, so this contract is not
-> yet available from a running application.
+> Implementation status: this contract is composed into the Fresh collection and
+> item routes and backed by the selected page repository.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the
@@ -161,5 +159,6 @@ a repeated delete and non-owner access return `404`.
 The management URL is separate from the direct locator path. Public trial and
 managed pages are directly readable. A private managed page is directly readable
 only by its stored creator's current session; guest, logged-out creator, and
-another user receive the ordinary missing-page response. Direct route wiring is
-part of the pending composition migration.
+another user receive the ordinary missing-page response. The catch-all Fresh
+route derives the actor from the resolved session and uses the same composed
+page service as management.

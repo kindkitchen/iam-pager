@@ -21,80 +21,91 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
-import { MemoryContentRepository } from "./content/mod.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
+import { deliver_page_locator_path, MemoryPageRepository } from "./page/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
 import {
   hash_session_credential,
   MemorySessionRepository,
 } from "./session/mod.ts";
-import { deliver_locator_path } from "./publishing/mod.ts";
 import {
-  CONTENT_STORAGE_BACKEND_ENV,
-  type ContentRepositoryFactory,
-  type ContentStorageConfig,
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   type OwnershipRepositoryFactory,
   type OwnershipStorageConfig,
+  PAGE_STORAGE_BACKEND_ENV,
+  type PageRepositoryFactory,
+  type PageStorageConfig,
   SESSION_STORAGE_BACKEND_ENV,
   type SessionRepositoryFactory,
   type SessionStorageConfig,
 } from "./storage/mod.ts";
 
-Deno.test("composition root publishes and delivers an md page end to end", async () => {
-  const { engine, publishing } = create_app_services();
-  const published = await publishing.publish({
-    locator: { namespace: "Guest", page_name: "hello" },
-    content_type: "md-page",
-    input: { md: "# Hi there" },
-  });
-  assertEquals(published.ok, true);
-  if (!published.ok) return;
-  assertEquals(published.path, "/Guest/hello");
-
-  const response = await deliver_locator_path(
-    engine,
-    publishing,
-    published.path,
+Deno.test("composition root exposes page HTTP creation and direct delivery over one service", async () => {
+  const services = create_app_services();
+  const session = (await services.session.resolve()).session;
+  const created = await services.pages_http.collection(
+    new Request("https://pager.test/api/pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        locator: { namespace: "Guest", page_name: "hello" },
+        access: "public",
+        content: {
+          content_type: "md-page",
+          input: { md: "# Hi there" },
+        },
+      }),
+    }),
+    { request_id: "request-1", session },
   );
-  assertEquals(response.status, 200);
-  const body = await response.text();
-  assertEquals(body.includes("Hi there"), true);
+  assertEquals(created.status, 201);
+  assertEquals(created.headers.get("location"), "/Guest/hello");
+
+  const delivered = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    "/Guest/hello",
+    { kind: "guest" },
+  );
+  assertEquals(delivered.status, 200);
+  assertStringIncludes(await delivered.text(), "Hi there");
 });
 
 Deno.test("composition root forbids platform route namespaces", async () => {
-  const { publishing } = create_app_services();
+  const { pages } = create_app_services();
   for (const namespace of ["site", "API", "Auth"]) {
-    const result = await publishing.publish({
+    const result = await pages.publish_trial({
+      actor: { kind: "guest" },
       locator: { namespace },
-      content_type: "md-page",
-      input: { md: "x" },
+      access: "public",
+      content: { content_type: "md-page", input: { md: "x" } },
     });
     assertEquals(result, { ok: false, reason: "forbidden_namespace" });
   }
 });
 
-Deno.test("composition root enforces namespace reservations on publishing", async () => {
-  const { publishing, namespaces } = create_app_services();
+Deno.test("composition root shares namespace authority across management", async () => {
+  const { pages, namespaces } = create_app_services();
   const reserved = await namespaces.reserve({
     namespace: "Claimed",
     owner_user_id: "owner-1",
   });
   assertEquals(reserved.ok, true);
 
-  const guest_write = await publishing.publish({
+  const guest_write = await pages.publish_trial({
+    actor: { kind: "guest" },
     locator: { namespace: "claimed" },
-    content_type: "md-page",
-    input: { md: "# Takeover" },
+    access: "public",
+    content: { content_type: "md-page", input: { md: "# Takeover" } },
   });
   assertEquals(guest_write, { ok: false, reason: "namespace_reserved" });
 
-  const owner_write = await publishing.publish({
-    locator: { namespace: "Claimed" },
-    content_type: "md-page",
-    input: { md: "# Mine" },
+  const owner_write = await pages.create_managed({
     actor: { kind: "user", user_id: "owner-1" },
+    locator: { namespace: "Claimed" },
+    access: "private",
+    content: { content_type: "md-page", input: { md: "# Mine" } },
   });
   assertEquals(owner_write.ok, true);
 
@@ -103,9 +114,52 @@ Deno.test("composition root enforces namespace reservations on publishing", asyn
     { ok: false, reason: "forbidden_namespace" },
   );
   assertEquals(
-    (await namespaces.list_owned("owner-1")).map((r) => r.namespace),
+    (await namespaces.list_owned("owner-1")).map((reservation) =>
+      reservation.namespace
+    ),
     ["Claimed"],
   );
+});
+
+Deno.test("composed direct delivery hides private pages from non-owners", async () => {
+  const services = create_app_services();
+  await services.namespaces.reserve({
+    namespace: "Private",
+    owner_user_id: "owner-1",
+  });
+  const created = await services.pages.create_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    locator: { namespace: "Private" },
+    access: "private",
+    content: { content_type: "md-page", input: { md: "# Secret" } },
+  });
+  assertEquals(created.ok, true);
+
+  const guest = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    "/Private",
+    { kind: "guest" },
+  );
+  const other_user = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    "/Private",
+    { kind: "user", user_id: "owner-2" },
+  );
+  const owner = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    "/Private",
+    { kind: "user", user_id: "owner-1" },
+  );
+
+  assertEquals(guest.status, 404);
+  assertEquals(await guest.text(), "page not found\n");
+  assertEquals(other_user.status, 404);
+  assertEquals(await other_user.text(), "page not found\n");
+  assertEquals(owner.status, 200);
+  assertStringIncludes(await owner.text(), "Secret");
 });
 
 Deno.test("composition root wires interface-backed identity services", async () => {
@@ -253,13 +307,13 @@ Deno.test("configured composition selects referentially safe session storage", a
   );
 });
 
-Deno.test("configured composition selects referentially safe content storage", async () => {
-  const selected_content_repository = new MemoryContentRepository();
-  let selected_config: ContentStorageConfig | undefined;
-  const content_repository_factory: ContentRepositoryFactory = {
+Deno.test("configured composition selects referentially safe page storage", async () => {
+  const selected_page_repository = new MemoryPageRepository();
+  let selected_config: PageStorageConfig | undefined;
+  const page_repository_factory: PageRepositoryFactory = {
     create: (config) => {
       selected_config = config;
-      return Promise.resolve(selected_content_repository);
+      return Promise.resolve(selected_page_repository);
     },
   };
   const values: Readonly<Record<string, string>> = {
@@ -270,7 +324,7 @@ Deno.test("configured composition selects referentially safe content storage", a
       "http://localhost:5173/auth/google/mock-consent",
     [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
     [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
-    [CONTENT_STORAGE_BACKEND_ENV]: "deno-kv",
+    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
   };
 
   const services = await create_configured_app_services(
@@ -285,7 +339,7 @@ Deno.test("configured composition selects referentially safe content storage", a
             namespace_repository: new MemoryNamespaceRepository(),
           }),
       },
-      content_repository_factory,
+      page_repository_factory,
     },
   );
 
@@ -293,15 +347,16 @@ Deno.test("configured composition selects referentially safe content storage", a
     backend: "deno-kv",
     path: "/data/iam-pager.kv",
   });
-  assertStrictEquals(services.repository, selected_content_repository);
-  const published = await services.publishing.publish({
+  assertStrictEquals(services.page_repository, selected_page_repository);
+  const published = await services.pages.publish_trial({
+    actor: { kind: "guest" },
     locator: { namespace: "Durable", page_name: "hello" },
-    content_type: "md-page",
-    input: { md: "# Durable" },
+    access: "public",
+    content: { content_type: "md-page", input: { md: "# Durable" } },
   });
   assertEquals(published.ok, true);
   assertEquals(
-    (await selected_content_repository.get({
+    (await selected_page_repository.find_by_locator({
       namespace: "durable",
       page_name: "hello",
     }))?.content.content_type,

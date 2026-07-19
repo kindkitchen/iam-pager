@@ -7,26 +7,16 @@ tags: [api, backend, security, storage]
 relates: []
 ---
 
-Active; implementing `003.plan.md`. Steps 2-7 are delivered (`005.log` through
-`008.log`): `lib/page/` now holds the invariant-checked model, atomic repository
-contract, conforming memory/Deno KV adapters, namespace-authority resolver,
-HTTP/session-independent `PageService`, and strict Fresh-independent
-`PageHttpAdapter`.
+Active; implementing `003.plan.md`. Steps 1-10 are delivered and compacted in
+`009.summary`: the page model, memory/Deno KV repositories, application service,
+strict management HTTP adapter, storage selection, Fresh collection/item routes,
+session-authorized direct delivery, and nested/CSRF-aware publishing form are now
+composed into the running application.
 
-The HTTP boundary provides bounded nested create/PATCH decoding, strict list
-queries and pagination, owner-safe list/inspection presenters, shared
-constant-time CSRF validation, session-derived trial-versus-managed dispatch,
-and canonical page/revision ETags for revision-bound PATCH/DELETE. A stale
-creator request cannot downgrade to a guest trial. All management/error
-responses are no-store, owner IDs and stored derivations stay off wire, and the
-concrete pending-route contract is documented in `docs/api/pages.md`.
+The composition root exposes only the new `PageRepository`, page application
+interfaces, and page HTTP handler. The old locator-only content/publishing code
+is no longer route-accessible but still exists as standalone modules and tests.
 
-Next: step 8, select `PageRepository` storage in composition, expose page
-service/HTTP interfaces from `AppServices`, and move Fresh collection/item routes
-to the adapter. The new adapter is not selected by current route composition yet;
-the legacy locator-only endpoint remains public until that migration.
-
-No production-data migration or legacy API compatibility is required. Rename,
-duplicate, bulk actions, tags, filters beyond namespace, search, and management
-UI remain later DS-MANAGE work. Current gates: check, build, and all 406 tests
-pass.
+Next: step 11, delete those superseded repositories, publishing services, HTTP
+adapters, and tests; then finish documentation/acceptance and local smoke. Current
+gates: check, build, and all 411 tests pass.

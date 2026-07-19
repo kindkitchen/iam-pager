@@ -271,9 +271,10 @@ business services with optional Deno KV persistence, authenticated HTTP APIs,
 and a site reservation panel; publishing already receives the resolved session
 actor. The HTTP-independent managed-page service is also implemented against the
 new page repository contract, with conforming memory and Deno KV adapters. Its
-Fresh-independent HTTP adapter enforces bounded strict schemas, shared
-synchronizer-token CSRF, session-derived guest/creator dispatch, owner-safe
-presenters, and revision ETags. Fresh route/application composition, deployment
-storage selection, and private direct-delivery route wiring are the next product
-boundary. Profile/account/settings navigation remains optional follow-up UI work
-and must not substitute for that authority.
+strict HTTP adapter is now composed into Fresh collection/item routes with
+bounded schemas, shared synchronizer-token CSRF, session-derived guest/creator
+dispatch, owner-safe presenters, and revision ETags. Deployment selection now
+targets the page repository, and catch-all direct delivery derives guest or user
+authority from this same resolved session before invoking the same page service.
+Profile/account/settings navigation remains optional follow-up UI work and must
+not substitute for that authority.

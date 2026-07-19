@@ -1,15 +1,19 @@
-import { define } from "../utils.ts";
 import { app_services } from "../lib/app.ts";
-import { deliver_locator_path } from "../lib/publishing/mod.ts";
+import {
+  deliver_page_locator_path,
+  page_actor_from_session,
+} from "../lib/page/mod.ts";
+import { define } from "../utils.ts";
 
-/**
- * Catch-all raw delivery (CP-DELIVERY): any path not claimed by a more
- * specific route is treated as a locator and answered with raw content.
- * All mapping logic lives in `lib/publishing/http.ts`.
- */
+/** Catch-all direct delivery through the composed page application service. */
 export const handler = define.handlers({
   async GET(ctx) {
-    const { engine, publishing } = await app_services();
-    return deliver_locator_path(engine, publishing, ctx.url.pathname);
+    const { engine, pages } = await app_services();
+    return deliver_page_locator_path(
+      engine,
+      pages,
+      ctx.url.pathname,
+      page_actor_from_session(ctx.state.request_context.session),
+    );
   },
 });

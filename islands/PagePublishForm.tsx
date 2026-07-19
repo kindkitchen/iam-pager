@@ -1,6 +1,10 @@
 import type { JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
+import {
+  type PagePublishAuthorization,
+  prepare_page_publish_request,
+} from "../lib/ui/page-publish.ts";
 import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
 import { default_page_style_preset } from "../lib/ui/page-style-presets.ts";
 import {
@@ -30,11 +34,13 @@ const initial_markdown = `# Your page
 
 Write. Style. Preview. Publish.`;
 
-export interface PagePublishFormProps {
+interface PagePublishFormBaseProps {
   /** Generated once on the server so hydration keeps the visible suggestion. */
   initial_namespace: string;
-  /** Controls copy only; authority is derived again from the server session. */
-  publisher_kind: "guest" | "creator";
+}
+
+export interface PagePublishFormProps extends PagePublishFormBaseProps {
+  readonly authorization: PagePublishAuthorization;
 }
 
 export default function PagePublishForm(props: PagePublishFormProps) {
@@ -71,21 +77,17 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     event: JSX.TargetedSubmitEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
-    const trimmed_namespace = namespace.trim();
-    const trimmed_page_name = page_name.trim();
-    const body = {
-      namespace: trimmed_namespace,
-      ...(trimmed_page_name === "" ? {} : { page_name: trimmed_page_name }),
-      md: markdown,
-      ...(css === "" ? {} : { css }),
-    };
+    const request = prepare_page_publish_request(
+      { namespace, page_name, markdown, css },
+      props.authorization,
+    );
 
     set_state({ status: "publishing" });
     try {
       const response = await fetch("/api/pages", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        headers: request.headers,
+        body: JSON.stringify(request.body),
       });
       const result = await response.json() as PublishSuccess | PublishFailure;
       if (!response.ok || !result.ok) {
@@ -109,14 +111,14 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     <section class="publish-panel" aria-labelledby="publish-heading">
       <div class="section-heading">
         <p class="eyebrow">
-          {props.publisher_kind === "creator"
+          {props.authorization.kind === "creator"
             ? "Creator publishing"
             : "Guest publishing"}
         </p>
         <h2 id="publish-heading">Create a page</h2>
         <p>
           Choose its direct path. A page name is optional; omit it to publish
-          the namespace's default page. {props.publisher_kind === "creator"
+          the namespace's default page. {props.authorization.kind === "creator"
             ? "Pages in your reserved namespaces are protected."
             : "Guest paths remain unprotected."}
         </p>

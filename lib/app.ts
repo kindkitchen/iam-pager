@@ -21,17 +21,17 @@ import {
   SiteAuthenticationCallbackFailurePresenter,
 } from "./auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
+import { MdPageHandler } from "./content/mod.ts";
 import {
-  type ContentRepository,
-  MdPageHandler,
-  MemoryContentRepository,
-} from "./content/mod.ts";
-import {
-  NamespacePublishingAuthorizer,
+  MemoryPageRepository,
   type PageDeliverer,
-  type PagePublisher,
-  PublishingService,
-} from "./publishing/mod.ts";
+  PageHttpAdapter,
+  type PageHttpApplication,
+  type PageHttpHandler,
+  type PageRepository,
+  PageService,
+  RepositoryNamespaceAuthorityResolver,
+} from "./page/mod.ts";
 import {
   MemoryNamespaceRepository,
   NamespaceHttpAdapter,
@@ -62,14 +62,14 @@ import {
   RequestContextMiddleware,
 } from "./request-context.ts";
 import {
-  type ContentRepositoryFactory,
-  DefaultContentRepositoryFactory,
   DefaultOwnershipRepositoryFactory,
+  DefaultPageRepositoryFactory,
   DefaultSessionRepositoryFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
-  parse_content_storage_config,
+  type PageRepositoryFactory,
   parse_ownership_storage_config,
+  parse_page_storage_config,
   parse_session_storage_config,
   type SessionRepositoryFactory,
 } from "./storage/mod.ts";
@@ -85,12 +85,13 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 /** Everything the web layer needs; routes stay thin adapters over this. */
 export interface AppServices {
   engine: LocatorEngine;
-  repository: ContentRepository;
+  page_repository: PageRepository;
+  pages: PageHttpApplication & PageDeliverer;
+  pages_http: PageHttpHandler;
   namespace_repository: NamespaceRepository;
   namespaces: NamespaceReservationManager;
   namespaces_http: NamespaceHttpHandler;
   namespace_panel: NamespacePanelPresenter;
-  publishing: PagePublisher & PageDeliverer;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -106,8 +107,8 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Referentially linked repositories are supplied as one composition unit. */
   readonly ownership_repositories?: OwnershipRepositories;
-  /** Page persistence stays behind `ContentRepository`; memory is default. */
-  readonly content_repository?: ContentRepository;
+  /** Page persistence stays behind `PageRepository`; memory is default. */
+  readonly page_repository?: PageRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
   /** Provider implementations are supplied at the composition boundary. */
@@ -125,7 +126,7 @@ export interface ConfiguredAppServiceOptions {
   /** Override only at an outer composition or test boundary. */
   readonly session_repository_factory?: SessionRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
-  readonly content_repository_factory?: ContentRepositoryFactory;
+  readonly page_repository_factory?: PageRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -148,8 +149,8 @@ export function create_app_services(
     strategies: [new PathSlugStrategy()],
     forbidden_namespaces,
   });
-  const repository = options.content_repository ??
-    new MemoryContentRepository();
+  const page_repository = options.page_repository ??
+    new MemoryPageRepository();
   const ownership_repositories = options.ownership_repositories ?? {
     identity_repository: new MemoryIdentityRepository(new CryptoIdGenerator()),
     namespace_repository: new MemoryNamespaceRepository(),
@@ -164,13 +165,17 @@ export function create_app_services(
     namespaces,
     engine,
   });
-  const publishing = new PublishingService({
-    engine,
-    repository,
-    handlers: [new MdPageHandler()],
-    authorizer: new NamespacePublishingAuthorizer(namespace_repository),
-  });
   const clock = new SystemClock();
+  const pages = new PageService({
+    engine,
+    repository: page_repository,
+    handlers: [new MdPageHandler()],
+    namespace_authority: new RepositoryNamespaceAuthorityResolver(
+      namespace_repository,
+    ),
+    clock,
+  });
+  const pages_http = new PageHttpAdapter({ pages });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -212,12 +217,13 @@ export function create_app_services(
   });
   return {
     engine,
-    repository,
+    page_repository,
+    pages,
+    pages_http,
     namespace_repository,
     namespaces,
     namespaces_http,
     namespace_panel,
-    publishing,
     session,
     session_transport,
     request_context,
@@ -239,7 +245,7 @@ export async function create_configured_app_services(
     environment,
     ownership_storage_config,
   );
-  const content_storage_config = parse_content_storage_config(
+  const page_storage_config = parse_page_storage_config(
     environment,
     ownership_storage_config,
   );
@@ -254,13 +260,13 @@ export async function create_configured_app_services(
   const session_repository = await (
     options.session_repository_factory ?? new DefaultSessionRepositoryFactory()
   ).create(session_storage_config);
-  const content_repository = await (
-    options.content_repository_factory ?? new DefaultContentRepositoryFactory()
-  ).create(content_storage_config);
+  const page_repository = await (
+    options.page_repository_factory ?? new DefaultPageRepositoryFactory()
+  ).create(page_storage_config);
   return create_app_services({
     ownership_repositories,
     session_repository,
-    content_repository,
+    page_repository,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),
