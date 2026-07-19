@@ -9,12 +9,12 @@ import { define } from "../../utils.ts";
  */
 export default define.page(async function SitePath({ state, url }) {
   const session = state.request_context.session;
+  const services = await app_services();
   return (
     <SiteApp
       navigation={site_navigation_presenter.present(session, url)}
-      namespace_panel={await (await app_services()).namespace_panel.present(
-        session,
-      )}
+      namespace_panel={await services.namespace_panel.present(session)}
+      page_management={await services.page_management_panel.present(session)}
     />
   );
 });

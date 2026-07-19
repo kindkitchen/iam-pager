@@ -72,9 +72,10 @@ Within a reserved namespace, the creator can:
 - select pages for bulk deletion or access changes;
 
 A name conflict within the reserved namespace is reported instead of replacing
-an authenticated page. The API-first core currently provides individual create,
-list, inspect, content/access update, and delete operations; the site management
-UI and rename, duplicate, filters, tags, and bulk actions remain later scope.
+an authenticated page. The API-first core provides individual create, list,
+inspect, content/access update, and delete operations, and the site management
+panel now exposes those individual operations to the signed-in creator; rename,
+duplicate, filters, tags, and bulk actions remain later scope.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

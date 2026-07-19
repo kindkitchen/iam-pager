@@ -86,8 +86,12 @@ conformance. Fresh collection and item routes now expose the strict bounded
 create/list/inspect/update/delete adapter with synchronizer CSRF, owner-safe
 presenters, pagination, and strong revision ETags. The composed catch-all route
 uses the same service and session-derived actor for public or owner-private
-delivery, while deployment storage selection targets `PageRepository`. Rename,
-duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
+delivery, while deployment storage selection targets `PageRepository`. The site
+renders a creator management panel over these same contracts: a server presenter
+lists the first page of managed rows, and the island continues through
+`/api/pages` for pagination, inspection, editor-based content updates, access
+toggling, and deletion, always revision-bound via the published strong ETags.
+Rename, duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
 
 ## CP-EXPLORE — Public exploration
 

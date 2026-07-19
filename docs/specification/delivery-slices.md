@@ -25,10 +25,13 @@ The creator can create, inspect, update, make public or private, and delete
 pages. Visitors can directly open public pages; private pages remain limited to
 the creator session.
 
-The API-first core of this slice is now composed: Fresh exposes collection and
-item management routes over the selected page repository, and direct delivery
-uses the same page service with session-derived authority. Management UI and the
-expanded operations below remain later work.
+The API-first core of this slice is composed: Fresh exposes collection and item
+management routes over the selected page repository, and direct delivery uses
+the same page service with session-derived authority. The site now also projects
+that boundary as a creator management panel - bounded listing with continuation,
+inspection, content editing, revision-bound access changes, and confirmed
+deletion - without adding management rules to the web layer. The expanded
+operations of DS-MANAGE remain later work.
 
 ## DS-VIEW — Present a page through the site
 

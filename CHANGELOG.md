@@ -2,13 +2,22 @@
 
 ## 2026-07-19
 
-- Planned the next development chain as tasks: `creator-management-ui`
-  (active) completes the DS-PROTECT site management UI over the existing
-  page-management contracts, followed by chained todos `public-view-capability`
-  (DS-VIEW), `public-exploration` (DS-EXPLORE first version, names +
-  namespaces), and `management-expansion` (DS-MANAGE). Each task records the
-  project invariants (interface-first contracts, web as secondary projection,
-  specs updated with the change).
+- Completed the DS-PROTECT site surface with a creator management panel: a
+  web-independent presenter serves the first page of managed rows in the same
+  shape as `/api/pages` summaries, and a new island projects pagination,
+  inspection, PageEditor-based content updates, public/private toggling, and
+  confirmed deletion onto the existing revision-bound management contracts (CSRF
+  plus strong `If-Match` validators, 412 conflicts refresh the affected row). No
+  management rule was added to the web layer; specs were updated and the suite
+  grew to 356 tests.
+
+- Planned the next development chain as tasks: `creator-management-ui` (active)
+  completes the DS-PROTECT site management UI over the existing page-management
+  contracts, followed by chained todos `public-view-capability` (DS-VIEW),
+  `public-exploration` (DS-EXPLORE first version, names + namespaces), and
+  `management-expansion` (DS-MANAGE). Each task records the project invariants
+  (interface-first contracts, web as secondary projection, specs updated with
+  the change).
 
 - Clarified production and preview storage profiles after diagnosing
   intermittent deployed sign-in loss as process-local configuration: attaching

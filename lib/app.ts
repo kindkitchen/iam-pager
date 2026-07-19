@@ -45,6 +45,10 @@ import {
   type NamespacePanelPresenter,
 } from "./ui/namespace-panel.ts";
 import {
+  CreatorPageManagementPresenter,
+  type PageManagementPanelPresenter,
+} from "./ui/page-management.ts";
+import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
   CryptoIdGenerator,
@@ -92,6 +96,7 @@ export interface AppServices {
   namespaces: NamespaceReservationManager;
   namespaces_http: NamespaceHttpHandler;
   namespace_panel: NamespacePanelPresenter;
+  page_management_panel: PageManagementPanelPresenter;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -176,6 +181,7 @@ export function create_app_services(
     clock,
   });
   const pages_http = new PageHttpAdapter({ pages });
+  const page_management_panel = new CreatorPageManagementPresenter({ pages });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -224,6 +230,7 @@ export function create_app_services(
     namespaces,
     namespaces_http,
     namespace_panel,
+    page_management_panel,
     session,
     session_transport,
     request_context,

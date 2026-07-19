@@ -1,6 +1,8 @@
 import PagePublishForm from "../islands/PagePublishForm.tsx";
 import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
+import PageManagementPanel from "../islands/PageManagementPanel.tsx";
 import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
+import type { PageManagementPanel as PageManagementPanelModel } from "../lib/ui/page-management.ts";
 import { page_publish_authorization } from "../lib/ui/page-publish.ts";
 import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
 import type {
@@ -11,10 +13,13 @@ import type {
 export interface SiteAppProps {
   readonly navigation: SiteNavigation;
   readonly namespace_panel: NamespacePanel;
+  readonly page_management: PageManagementPanelModel;
 }
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
-export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
+export function SiteApp(
+  { navigation, namespace_panel, page_management }: SiteAppProps,
+) {
   const initial_namespace = new FourWordRandomNameGenerator().generate();
   return (
     <main class="site-app">
@@ -32,6 +37,14 @@ export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
         <NamespaceReservationPanel
           csrf_token={namespace_panel.csrf_token}
           initial_reservations={namespace_panel.reservations}
+        />
+      )}
+
+      {page_management.kind === "creator" && (
+        <PageManagementPanel
+          csrf_token={page_management.csrf_token}
+          initial_pages={page_management.pages}
+          initial_next_cursor={page_management.next_cursor}
         />
       )}
 

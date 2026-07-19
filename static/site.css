@@ -263,6 +263,100 @@ h2 {
   color: #59635c;
 }
 
+.page-management-panel {
+  display: grid;
+  gap: 1.25rem;
+  border-top: 1px solid #b7b9b2;
+  padding-top: 2rem;
+  margin-bottom: 3rem;
+}
+
+.page-management-empty {
+  color: #59635c;
+}
+
+.page-management-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-management-item {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #b7b9b2;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.page-management-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.page-management-path {
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+
+.page-management-access {
+  font-size: 0.8rem;
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #b7b9b2;
+  color: #59635c;
+}
+
+.page-management-access-public {
+  border-color: #4d7c5f;
+  color: #2f5b41;
+}
+
+.page-management-meta {
+  font-size: 0.85rem;
+  color: #59635c;
+}
+
+.page-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.page-management-actions button {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.page-management-danger {
+  color: #8c2f2f;
+}
+
+.page-management-editor {
+  display: grid;
+  gap: 1rem;
+  border-top: 1px solid #d8dad2;
+  padding-top: 1rem;
+}
+
+.page-management-editor-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.page-management-more {
+  justify-self: start;
+}
+
+.page-management-result p {
+  margin: 0;
+}
+
 .publish-form {
   display: grid;
   min-width: 0;

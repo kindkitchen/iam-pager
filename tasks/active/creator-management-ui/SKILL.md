@@ -11,11 +11,14 @@ Active head of the 2026-07-19 development chain
 (`creator-management-ui -> public-view-capability -> public-exploration ->
 management-expansion`).
 
-Goal: complete DS-PROTECT by giving the authenticated creator a site management
-UI over the existing page-management contracts: list managed pages, inspect
-one, edit content with the existing editor stack, toggle public/private, and
-delete. No new business logic in the web layer; `PageService` and the
-`/api/pages` contracts stay authoritative.
+Implemented and verified; awaiting acceptance. The creator management panel
+(list with continuation, inspect, PageEditor-based content update, access
+toggle, confirmed delete) is live in the site shell as a pure projection over
+the existing `/api/pages` contracts: presenter and request/response logic in
+`lib/ui/page-management.ts` (tested), island in
+`islands/PageManagementPanel.tsx`, composition through `AppServices`. Specs
+and CHANGELOG updated; 356 tests, check, build, and a composed auth-to-delete
+smoke all pass ([[002.log]]).
 
-Not started. See [[001.draft]] for scope, non-goals, acceptance, and the
-project invariants to preserve.
+Remaining: user acceptance, then move to done. Scope and invariants:
+[[001.draft]].
