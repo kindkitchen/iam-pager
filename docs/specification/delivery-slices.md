@@ -59,8 +59,10 @@ wrapper and its direct/default/other-page links.
 
 `PublicPageExplorer` keeps this behavior outside Fresh. Memory and Deno KV scan
 their current locator state behind the same repository contract and conformance
-suite, excluding private and guest pages before any result is returned. Tags
-join when DS-MANAGE supplies them. Text-content search, indexing, relevance, and
+suite, excluding private and guest pages before any result is returned. The
+HTTP-independent explorer now also accepts one exact canonical tag, AND-combined
+with either name query and bound into continuation cursors. The current web form
+does not expose that field. Text-content search, indexing, relevance, and
 view-count sorting remain later work.
 
 ## DS-MANAGE — Expand authenticated management
@@ -71,14 +73,16 @@ generated name, apply selected bulk changes, and reserve additional namespaces.
 Date and view filters are added only when the corresponding metadata is useful
 and trustworthy.
 
-The first HTTP-independent DS-MANAGE foundation is implemented: revision-bound
-rename atomically moves a stable page identity inside its namespace, rejects a
-managed destination, and may retire a pre-reservation trial; duplication uses
-the shared four-word generator, retries occupied names and ID collisions within
-bounds, and copies one exact source revision into a fresh identity. Memory and
-Deno KV pass the same locator/index/concurrency conformance. These operations
-are not yet exposed by the page API or creator panel. Tags, managed filters, and
-bulk operations remain the next core work.
+The HTTP-independent DS-MANAGE core now includes revision-bound rename and
+server-generated duplication plus bounded page tags. A managed page carries at
+most ten canonical tags; create normalizes them, update can replace or clear
+them at an exact revision, rename preserves them, and duplicate copies them.
+Managed listing supports AND-combined page-name substring, exact access, and
+exact tag filters in addition to namespace, with continuations bound to the
+complete filter scope. Memory and Deno KV pass the same mutation, filtering,
+pagination, and cursor conformance; older schema-v1 KV pages read as untagged.
+These operations are not yet exposed by the page API or creator panel. Per-page
+result bulk access/delete contracts remain the next core work.
 
 ## DS-EXTERNAL — Evaluate external storage
 

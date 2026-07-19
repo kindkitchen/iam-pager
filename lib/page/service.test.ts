@@ -195,6 +195,50 @@ Deno.test("PageService managed create requires exact current namespace authority
   assertEquals(created.page.revision, 1);
 });
 
+Deno.test("PageService normalizes bounded tags and supports tag-only updates", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["tagged"],
+    dates: [t1, t2],
+  });
+  const created = await service.create_managed({
+    ...managed_request(),
+    tags: [" News ", "deno", "news"],
+  });
+  assert(created.ok);
+  assertEquals(created.page.tags, ["deno", "news"]);
+  assertEquals((await repository.find_by_id("tagged"))?.tags, [
+    "deno",
+    "news",
+  ]);
+
+  const updated = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: 1,
+    patch: { tags: [" Archive "] },
+  });
+  assert(updated.ok);
+  assertEquals(updated.page.tags, ["archive"]);
+  assertEquals(updated.page.revision, 2);
+
+  assertEquals(
+    await service.create_managed({
+      ...managed_request("invalid"),
+      tags: ["bad tag!"],
+    }),
+    { ok: false, reason: "invalid_tags" },
+  );
+  assertEquals(
+    await service.update_managed({
+      actor: owner,
+      page_id: created.page.page_id,
+      expected_revision: 2,
+      patch: { tags: Array.from({ length: 11 }, (_, index) => `tag-${index}`) },
+    }),
+    { ok: false, reason: "invalid_tags" },
+  );
+});
+
 Deno.test("PageService managed create atomically replaces trial but not managed content", async () => {
   const { service, repository } = await make_fixture({
     ids: ["managed-1", "managed-2"],
@@ -270,6 +314,46 @@ Deno.test("PageService namespace-filtered list validates filter, ownership, and 
   assertEquals(
     await service.list_managed({ actor: owner, limit: 10, cursor: "bad" }),
     { ok: false, reason: "invalid_cursor" },
+  );
+});
+
+Deno.test("PageService managed list AND-filters normalized name, access, and tag", async () => {
+  const { service } = await make_fixture({
+    ids: ["public-release", "private-release", "public-other"],
+  });
+  await service.create_managed({
+    ...managed_request("release-notes", "public"),
+    tags: ["Deno", "News"],
+  });
+  await service.create_managed({
+    ...managed_request("release-draft", "private"),
+    tags: ["deno"],
+  });
+  await service.create_managed({
+    ...managed_request("other", "public"),
+    tags: ["deno"],
+  });
+
+  const listed = await service.list_managed({
+    actor: owner,
+    page_name_query: " RELEASE ",
+    access: "public",
+    tag: " DENO ",
+    limit: 10,
+  });
+  assert(listed.ok);
+  assertEquals(listed.pages.map((page) => page.page_id), ["public-release"]);
+  assertEquals(
+    await service.list_managed({
+      actor: owner,
+      page_name_query: "x".repeat(101),
+      limit: 10,
+    }),
+    { ok: false, reason: "invalid_filter" },
+  );
+  assertEquals(
+    await service.list_managed({ actor: owner, tag: "bad tag!", limit: 10 }),
+    { ok: false, reason: "invalid_filter" },
   );
 });
 
@@ -530,6 +614,7 @@ Deno.test("PageService duplicate retries generated names and preserves the sourc
   });
   const source = await service.create_managed({
     ...managed_request("notes", "private"),
+    tags: ["draft", "reference"],
     content: {
       content_type: "md-page",
       input: { md: "# Source", css: "body { color: navy; }" },
@@ -550,6 +635,7 @@ Deno.test("PageService duplicate retries generated names and preserves the sourc
   assertEquals(duplicated.page.page_id, "copy");
   assertEquals(duplicated.page.path, "/Mine/generated-name");
   assertEquals(duplicated.page.access, "private");
+  assertEquals(duplicated.page.tags, ["draft", "reference"]);
   assertEquals(duplicated.page.revision, 1);
   assertEquals(duplicated.page.created_at, t3);
   assertEquals(duplicated.page.updated_at, t3);
@@ -817,11 +903,11 @@ Deno.test("PageService public listing validates namespace and maps visitor-safe 
 Deno.test("PageService explores normalized name queries with visitor-safe results", async () => {
   const { service, repository } = await make_fixture();
   for (
-    const [page_id, namespace, page_name, access] of [
-      ["alice-default", "Alice", undefined, "public"],
-      ["alice-notes", "Alice", "Notes", "public"],
-      ["alicia-notebook", "Alicia", "Notebook", "public"],
-      ["hidden", "Alice", "Secret notes", "private"],
+    const [page_id, namespace, page_name, access, tags] of [
+      ["alice-default", "Alice", undefined, "public", ["featured"]],
+      ["alice-notes", "Alice", "Notes", "public", ["deno", "featured"]],
+      ["alicia-notebook", "Alicia", "Notebook", "public", ["deno"]],
+      ["hidden", "Alice", "Secret notes", "private", ["deno"]],
     ] as const
   ) {
     const seeded = await repository.create_managed({
@@ -831,6 +917,7 @@ Deno.test("PageService explores normalized name queries with visitor-safe result
         : { namespace, page_name },
       owner_user_id: "seed-owner",
       access,
+      tags,
       content: make_page_content(page_id),
       now: t1,
     });
@@ -846,6 +933,7 @@ Deno.test("PageService explores normalized name queries with visitor-safe result
   const explored = await service.explore_public({
     namespace_query: "  ALI ",
     page_name_query: " NOTE ",
+    tag: " DENO ",
     limit: 10,
   });
   assert(explored.ok);
@@ -855,7 +943,7 @@ Deno.test("PageService explores normalized name queries with visitor-safe result
   );
   assert(
     explored.pages.every((page) =>
-      page.stewardship === "managed" &&
+      page.stewardship === "managed" && page.tags.includes("deno") &&
       !("page_id" in page) && !("revision" in page) && !("access" in page)
     ),
   );
@@ -877,6 +965,10 @@ Deno.test("PageService explores normalized name queries with visitor-safe result
       namespace_query: "x".repeat(101),
       limit: 10,
     }),
+    { ok: false, reason: "invalid_query" },
+  );
+  assertEquals(
+    await service.explore_public({ tag: "bad tag!", limit: 10 }),
     { ok: false, reason: "invalid_query" },
   );
   assertEquals(

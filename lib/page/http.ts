@@ -616,6 +616,7 @@ function create_failure_response(
       );
     case "invalid_locator":
     case "invalid_access":
+    case "invalid_tags":
       return error_response(422, result.reason, "page input is invalid");
     case "unknown_content_type":
       return error_response(
@@ -647,6 +648,8 @@ function list_failure_response(
         result.reason,
         "namespace cannot be mapped to a direct URL",
       );
+    case "invalid_filter":
+      return error_response(400, result.reason, "page filter is invalid");
     case "invalid_cursor":
       return error_response(400, result.reason, "cursor is invalid");
   }
@@ -676,14 +679,17 @@ function update_failure_response(
       return error_response(
         400,
         result.reason,
-        "PATCH must include access, content, or both",
+        "PATCH must include access, tags, content, or a combination",
       );
     case "invalid_access":
+    case "invalid_tags":
     case "invalid_input":
       return error_response(
         422,
         result.reason,
-        result.reason === "invalid_input" ? result.detail : "access is invalid",
+        result.reason === "invalid_input"
+          ? result.detail
+          : "page metadata is invalid",
       );
     case "unknown_content_type":
       return error_response(

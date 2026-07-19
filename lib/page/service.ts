@@ -6,7 +6,10 @@ import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
 } from "../random-name.ts";
-import { max_public_exploration_query_length } from "./interfaces.ts";
+import {
+  max_managed_page_name_query_length,
+  max_public_exploration_query_length,
+} from "./interfaces.ts";
 import type {
   CreateManagedPageRequest,
   CreateManagedPageResult,
@@ -55,6 +58,8 @@ import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  normalize_page_tag,
+  normalize_page_tags,
   page_record_violation,
   type PageContent,
   type PageRecord,
@@ -204,6 +209,8 @@ export class PageService
     if (!is_valid_page_access(request.access)) {
       return { ok: false, reason: "invalid_access" };
     }
+    const tags = normalize_page_tags(request.tags ?? []);
+    if (tags === null) return { ok: false, reason: "invalid_tags" };
     const authority = await this.#namespace_authority.resolve(
       request.actor,
       request.locator.namespace,
@@ -224,6 +231,7 @@ export class PageService
         locator: request.locator,
         owner_user_id: request.actor.user_id,
         access: request.access,
+        tags,
         content: prepared.content,
         now,
       });
@@ -267,9 +275,23 @@ export class PageService
       }
       namespace = validation.locator.namespace;
     }
+    const page_name_query = normalize_optional_query(
+      request.page_name_query,
+      max_managed_page_name_query_length,
+    );
+    const tag = normalize_tag_filter(request.tag);
+    if (
+      page_name_query === null || tag === null ||
+      (request.access !== undefined && !is_valid_page_access(request.access))
+    ) {
+      return { ok: false, reason: "invalid_filter" };
+    }
     const listed = await this.#repository.list_managed({
       owner_user_id: request.actor.user_id,
-      namespace,
+      ...(namespace === undefined ? {} : { namespace }),
+      ...(page_name_query === undefined ? {} : { page_name_query }),
+      ...(request.access === undefined ? {} : { access: request.access }),
+      ...(tag === undefined ? {} : { tag }),
       limit: request.limit,
       cursor: request.cursor,
     });
@@ -301,13 +323,16 @@ export class PageService
       throw new Error("expected_revision must be a positive safe integer");
     }
     const has_access = request.patch.access !== undefined;
+    const has_tags = request.patch.tags !== undefined;
     const has_content = request.patch.content !== undefined;
-    if (!has_access && !has_content) {
+    if (!has_access && !has_tags && !has_content) {
       return { ok: false, reason: "empty_patch" };
     }
     if (has_access && !is_valid_page_access(request.patch.access)) {
       return { ok: false, reason: "invalid_access" };
     }
+    const tags = has_tags ? normalize_page_tags(request.patch.tags) : undefined;
+    if (tags === null) return { ok: false, reason: "invalid_tags" };
     const page = await this.#find_authorized_page(
       request.actor,
       request.page_id,
@@ -336,6 +361,7 @@ export class PageService
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
       access: request.patch.access ?? page.access,
+      tags,
       content,
       now: this.#operation_time(),
     });
@@ -550,12 +576,14 @@ export class PageService
     const page_name_query = normalize_exploration_query(
       request.page_name_query,
     );
-    if (namespace_query === null || page_name_query === null) {
+    const tag = normalize_tag_filter(request.tag);
+    if (namespace_query === null || page_name_query === null || tag === null) {
       return { ok: false, reason: "invalid_query" };
     }
     const explored = await this.#repository.explore_public({
       ...(namespace_query === undefined ? {} : { namespace_query }),
       ...(page_name_query === undefined ? {} : { page_name_query }),
+      ...(tag === undefined ? {} : { tag }),
       limit: request.limit,
       cursor: request.cursor,
     });
@@ -660,6 +688,7 @@ export class PageService
       content_type: page.content.content_type,
       media_type: page.content.meta.media_type,
       size_bytes: page.content.meta.size_bytes,
+      tags: [...page.tags],
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
     };
@@ -673,6 +702,7 @@ export class PageService
       access: page.access,
       content_type: page.content.content_type,
       size_bytes: page.content.meta.size_bytes,
+      tags: [...page.tags],
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
       revision: page.revision,
@@ -719,14 +749,27 @@ export class PageService
   }
 }
 
-function normalize_exploration_query(
+function normalize_optional_query(
   value: string | undefined,
+  max_length: number,
 ): string | undefined | null {
   if (value === undefined) return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === "") return undefined;
-  if (normalized.length > max_public_exploration_query_length) return null;
-  return normalized;
+  return normalized.length > max_length ? null : normalized;
+}
+
+function normalize_exploration_query(
+  value: string | undefined,
+): string | undefined | null {
+  return normalize_optional_query(value, max_public_exploration_query_length);
+}
+
+function normalize_tag_filter(
+  value: string | undefined,
+): string | undefined | null {
+  if (value === undefined || value.trim() === "") return undefined;
+  return normalize_page_tag(value);
 }
 
 /** Delivery metadata derived from the deterministic rendered representation. */

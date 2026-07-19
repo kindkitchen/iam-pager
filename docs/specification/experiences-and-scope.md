@@ -33,21 +33,22 @@ creator listing; private and missing pages receive the same real 404.
 
 ## EX-EXPLORE — Explorer finds public pages
 
-The site exposes a bounded browse list of public creator-backed pages. An
-explorer can narrow it by a case-insensitive namespace substring, a page-name
-substring, or both; two supplied fields use AND semantics. Results preserve the
-creator's locator casing and open the thin site view, from which direct content,
-the creator's default page when present, and other public pages remain
-available. Opaque continuation keeps the active search fields attached to the
-next result page.
+The site exposes a bounded browse list of public creator-backed pages. Its
+current form narrows by a case-insensitive namespace substring, a page-name
+substring, or both. The underlying explorer also accepts one exact canonical
+tag; all supplied fields use AND semantics. Results preserve the creator's
+locator casing and open the thin site view, from which direct content, the
+creator's default page when present, and other public pages remain available.
+Opaque continuation keeps the active search fields attached to the next result
+page.
 
 Private pages and guest trials are excluded by the page capability and both
 storage implementations, not by the web component. A current public-to-private
 change removes a page from subsequent browse and search results immediately.
 Guest pages remain reachable only by known direct or site-view locators.
 
-Tags follow the page-management tag capability. Text-content extraction and
-indexing remain later scope.
+Tag filtering is implemented in the HTTP-independent explorer but not yet in the
+site form. Text-content extraction and indexing remain later scope.
 
 ## EX-PUBLISH — Publisher creates a page
 
@@ -81,13 +82,14 @@ Within a reserved namespace, the creator can:
 
 A name conflict within the reserved namespace is reported instead of replacing
 an authenticated page. The HTTP-independent core provides individual create,
-list, inspect, content/access update, delete, revision-bound same-namespace
-rename, and generated-name duplicate operations. Rename retains the page ID and
-may replace only an old trial; duplicate copies the selected source revision to
-a fresh ID. Memory and Deno KV enforce these rules atomically. The current API
-and site management panel still expose only create/list/inspect/update/delete;
-rename and duplicate transport/UI, filters, tags, and bulk actions remain later
-scope.
+list, inspect, content/access/tag update, delete, revision-bound same-namespace
+rename, and generated-name duplicate operations. Tags are normalized into a
+bounded canonical set; managed lists can AND-combine page-name substring,
+access, and tag filters, and duplicate copies the selected source revision
+including tags to a fresh ID. Memory and Deno KV enforce these rules atomically.
+The current API and site management panel still expose only create, list,
+inspect, update, and delete without tag or filter fields; rename, duplicate,
+tag/filter transport and UI, and bulk actions remain later scope.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

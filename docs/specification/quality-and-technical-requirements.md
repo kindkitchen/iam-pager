@@ -327,13 +327,23 @@ locator-only application/storage path have been removed.
 The first implementation searches current page state rather than a secondary
 index, so public-to-private changes are reflected in the next query with no
 indexing delay. Namespace and page-name matching uses normalized lowercase
-substrings and AND semantics when both are present. Results follow the existing
-locale-independent locator order and are bounded by opaque cursors tied to the
-normalized query pair. Both repositories run the same eligibility, filtering,
-pagination, and cursor-isolation conformance cases. The memory adapter filters
-its current records; Deno KV scans its ordered locator index and re-resolves
-each candidate's current envelope before eligibility. The contract deliberately
-does not expose that implementation choice, allowing tags or a text index later.
+substrings; tag matching is exact against the canonical stored set; supplied
+fields use AND semantics. Results follow the existing locale-independent locator
+order and are bounded by opaque cursors tied to the complete query scope. Both
+repositories run the same eligibility, filtering, pagination, and
+cursor-isolation conformance cases. The memory adapter filters its current
+records; Deno KV scans its ordered locator index and re-resolves each
+candidate's current envelope before eligibility. The contract deliberately does
+not expose that implementation choice, allowing a secondary tag or text index
+later.
+
+Managed tag input is bounded before deduplication to ten values. The service
+trims and lowercases 1–32 character ASCII tags, rejects characters outside
+alphanumerics/`-`/`_`, and stores a sorted unique set. Replacing or clearing
+tags uses the same exact-revision mutation as content/access; managed filter
+cursors bind namespace, page-name substring, access, and tag together. Deno KV
+persists tags in schema-v1 envelopes while reading older envelopes without the
+optional field as untagged.
 
 ## QT-VERIFY — Verification
 
@@ -353,7 +363,8 @@ Tests should cover the behavior that defines the product:
   else;
 - the same identity, index, concurrency, and binary/large-content repository
   contract against memory and Deno KV;
-- exclusion of private and guest pages from exploration.
+- canonical bounded tag mutation and tag/name/access filter cursor isolation;
+- exclusion of private and guest pages from exploration, including tag queries.
 
 The page-management and exploration suites cover these domain, repository,
 service, presenter, component, composition, HTTP, and direct-delivery

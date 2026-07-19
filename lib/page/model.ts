@@ -6,6 +6,59 @@ export type PageId = string;
 
 export type PageAccess = "public" | "private";
 
+/** Canonical lowercase tag attached to a managed page. */
+export type PageTag = string;
+
+export const max_page_tags = 10;
+export const max_page_tag_length = 32;
+const page_tag_pattern = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
+
+/** Normalize one user-supplied tag, or return null when it is not tag-safe. */
+export function normalize_page_tag(value: unknown): PageTag | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "" || normalized.length > max_page_tag_length ||
+    !page_tag_pattern.test(normalized)
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+/**
+ * Normalize a bounded tag set into deterministic sorted unique storage form.
+ * Input count is bounded before deduplication so oversized requests stay
+ * bounded even when they repeat one tag.
+ */
+export function normalize_page_tags(value: unknown): PageTag[] | null {
+  if (!Array.isArray(value) || value.length > max_page_tags) return null;
+  const normalized = new Set<PageTag>();
+  for (const candidate of value) {
+    const tag = normalize_page_tag(candidate);
+    if (tag === null) return null;
+    normalized.add(tag);
+  }
+  return [...normalized].sort();
+}
+
+/** True only for the canonical sorted unique representation repositories use. */
+export function is_valid_page_tags(value: unknown): value is PageTag[] {
+  if (!Array.isArray(value) || value.length > max_page_tags) return false;
+  let previous: string | null = null;
+  for (const candidate of value) {
+    if (
+      typeof candidate !== "string" ||
+      normalize_page_tag(candidate) !== candidate ||
+      (previous !== null && candidate <= previous)
+    ) {
+      return false;
+    }
+    previous = candidate;
+  }
+  return true;
+}
+
 /**
  * Who stands behind a page. `trial` content is unowned guest output with no
  * guarantee; `managed` content carries the server-resolved creator identity
@@ -36,6 +89,8 @@ export interface PageRecord<Data = unknown> {
   locator: Locator;
   stewardship: PageStewardship;
   access: PageAccess;
+  /** Canonical sorted unique tags; trial pages always carry an empty set. */
+  tags: PageTag[];
   /** Positive safe integer, starting at 1, incremented once per mutation. */
   revision: number;
   content: PageContent<Data>;
@@ -82,6 +137,9 @@ export function page_record_violation(record: PageRecord): string | null {
   if (!is_valid_page_access(record.access)) {
     return "access must be public or private";
   }
+  if (!is_valid_page_tags(record.tags)) {
+    return "tags must be a bounded canonical sorted unique set";
+  }
   if (
     record.stewardship.kind !== "trial" &&
     record.stewardship.kind !== "managed"
@@ -90,6 +148,9 @@ export function page_record_violation(record: PageRecord): string | null {
   }
   if (record.stewardship.kind === "trial" && record.access !== "public") {
     return "trial pages must be public";
+  }
+  if (record.stewardship.kind === "trial" && record.tags.length !== 0) {
+    return "trial pages must not have tags";
   }
   if (
     record.stewardship.kind === "managed" &&

@@ -1,10 +1,13 @@
 import { type Locator } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_managed_page_list_cursor,
   decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_managed_page_list_cursor,
   encode_page_exploration_cursor,
   encode_page_list_cursor,
+  type ManagedPageListCursorScope,
   page_sort_key,
   type PageExplorationCursorScope,
   type PageSortKey,
@@ -34,6 +37,7 @@ import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  is_valid_page_tags,
   page_record_violation,
   type PageContent,
   type PageRecord,
@@ -73,6 +77,8 @@ interface StoredPageEnvelope {
   readonly stewardship: "trial" | "managed";
   readonly owner_user_id?: string;
   readonly access: "public" | "private";
+  /** Optional for backwards-compatible reads of pre-tag schema-v1 records. */
+  readonly tags?: readonly string[];
   readonly revision: number;
   readonly content_type: string;
   readonly media_type: string;
@@ -107,6 +113,40 @@ function is_valid_time(value: Date): boolean {
   return value instanceof Date && Number.isFinite(value.getTime());
 }
 
+function require_normalized_managed_list_request(
+  request: ListManagedRequest,
+): void {
+  if (request.page_name_query !== undefined) {
+    require(
+      request.page_name_query !== "" &&
+        request.page_name_query === request.page_name_query.trim() &&
+        request.page_name_query === request.page_name_query.toLowerCase(),
+      "page_name_query must be a normalized lowercase substring when present",
+    );
+  }
+  require(
+    request.access === undefined || is_valid_page_access(request.access),
+    "access filter must be public or private when present",
+  );
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag filter must be canonical when present",
+  );
+}
+
+function matches_managed_list(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: ManagedPageListCursorScope,
+): boolean {
+  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.access === null || record.access === scope.access) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
+}
+
 function require_normalized_exploration_request(
   request: ExplorePublicRequest,
 ): void {
@@ -127,9 +167,14 @@ function require_normalized_exploration_request(
       `${name} must be a normalized lowercase substring when present`,
     );
   }
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag must be canonical when present",
+  );
 }
 
 function matches_exploration(
+  record: PageRecord,
   key: PageSortKey,
   scope: PageExplorationCursorScope,
 ): boolean {
@@ -137,7 +182,8 @@ function matches_exploration(
     key.namespace_key.includes(scope.namespace_query)) &&
     (scope.page_name_query === null ||
       (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query)));
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
 }
 
 function normalized_locator(locator: Locator): {
@@ -287,6 +333,7 @@ function deserialize_envelope(value: unknown): StoredPageEnvelope {
       "page_name",
       "owner_user_id",
       "download_filename",
+      "tags",
     ]) ||
     stored.schema_version !== storage_schema_version ||
     typeof stored.page_id !== "string" ||
@@ -302,6 +349,9 @@ function deserialize_envelope(value: unknown): StoredPageEnvelope {
         stored.owner_user_id === "")) ||
     !is_valid_page_access(stored.access) ||
     (stored.stewardship === "trial" && stored.access !== "public") ||
+    !is_valid_page_tags(stored.tags ?? []) ||
+    (stored.stewardship === "trial" && Array.isArray(stored.tags) &&
+      stored.tags.length !== 0) ||
     !is_valid_page_revision(stored.revision) ||
     typeof stored.content_type !== "string" ||
     stored.content_type === "" ||
@@ -358,6 +408,7 @@ function serialize_envelope(
       ? { owner_user_id: page.stewardship.owner_user_id }
       : {}),
     access: page.access,
+    tags: [...page.tags],
     revision: page.revision,
     content_type: page.content.content_type,
     media_type: page.content.meta.media_type,
@@ -385,6 +436,7 @@ function envelope_page(
       ? { kind: "trial" }
       : { kind: "managed", owner_user_id: envelope.owner_user_id! },
     access: envelope.access,
+    tags: [...(envelope.tags ?? [])],
     revision: envelope.revision,
     content: {
       content_type: envelope.content_type,
@@ -724,12 +776,16 @@ export class DenoKvPageRepository implements PageRepository {
         (typeof request.namespace === "string" && request.namespace !== ""),
       "namespace filter must be non-empty when present",
     );
-    const filter = request.namespace === undefined
-      ? null
-      : request.namespace.toLowerCase();
+    require_normalized_managed_list_request(request);
+    const scope: ManagedPageListCursorScope = {
+      namespace: request.namespace?.toLowerCase() ?? null,
+      page_name_query: request.page_name_query ?? null,
+      access: request.access ?? null,
+      tag: request.tag ?? null,
+    };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
-      after = decode_page_list_cursor(request.cursor, filter);
+      after = decode_managed_page_list_cursor(request.cursor, scope);
       if (after === null) return { ok: false, reason: "invalid_cursor" };
     }
     const prefix = owner_prefix(request.owner_user_id, request.namespace);
@@ -741,7 +797,6 @@ export class DenoKvPageRepository implements PageRepository {
     for await (
       const entry of this.#kv.list<unknown>(
         start === undefined ? { prefix } : { prefix, start },
-        { limit: request.limit + 2 },
       )
     ) {
       if (start !== undefined && key_equals(entry.key, start)) continue;
@@ -757,18 +812,18 @@ export class DenoKvPageRepository implements PageRepository {
         page.stewardship.owner_user_id !== request.owner_user_id ||
         page.revision !== index.revision ||
         !key_equals(entry.key, owner_key(page)) ||
-        (filter !== null && page_sort_key(page).namespace_key !== filter)
+        (scope.namespace !== null &&
+          page_sort_key(page).namespace_key !== scope.namespace)
       ) {
         const current = await this.#kv.get<unknown>(entry.key);
         if (current.versionstamp !== entry.versionstamp) continue;
         invariant_violation();
       }
-      if (
-        after !== null &&
-        compare_page_sort_keys(page_sort_key(page), after) <= 0
-      ) {
+      const key = page_sort_key(page);
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) {
         invariant_violation();
       }
+      if (!matches_managed_list(page, key, scope)) continue;
       if (pages.length === request.limit) {
         has_more = true;
         break;
@@ -779,9 +834,9 @@ export class DenoKvPageRepository implements PageRepository {
       ok: true,
       pages,
       next_cursor: has_more
-        ? encode_page_list_cursor(
+        ? encode_managed_page_list_cursor(
           page_sort_key(pages[pages.length - 1]),
-          filter,
+          scope,
         )
         : null,
     };
@@ -858,6 +913,7 @@ export class DenoKvPageRepository implements PageRepository {
     const scope: PageExplorationCursorScope = {
       namespace_query: request.namespace_query ?? null,
       page_name_query: request.page_name_query ?? null,
+      tag: request.tag ?? null,
     };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
@@ -894,7 +950,7 @@ export class DenoKvPageRepository implements PageRepository {
       }
       if (
         page.stewardship.kind !== "managed" || page.access !== "public" ||
-        !matches_exploration(key, scope)
+        !matches_exploration(page, key, scope)
       ) {
         continue;
       }
@@ -965,6 +1021,7 @@ export class DenoKvPageRepository implements PageRepository {
           locator: structuredClone(request.locator),
           stewardship: { kind: "trial" },
           access: "public",
+          tags: [],
           revision: 1,
           content: structuredClone(request.content),
           created_at: request.now,
@@ -975,6 +1032,7 @@ export class DenoKvPageRepository implements PageRepository {
           locator: structuredClone(request.locator),
           stewardship: { kind: "trial" },
           access: "public",
+          tags: [],
           revision: existing.envelope.revision + 1,
           content: structuredClone(request.content),
           created_at: stored_date(existing.envelope.created_at),
@@ -1026,6 +1084,10 @@ export class DenoKvPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      is_valid_page_tags(request.tags ?? []),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const bytes = serialize_data(request.content);
     const chunks = split_chunks(bytes);
@@ -1071,6 +1133,7 @@ export class DenoKvPageRepository implements PageRepository {
           owner_user_id: request.owner_user_id,
         },
         access: request.access,
+        tags: [...(request.tags ?? [])],
         revision: 1,
         content: structuredClone(request.content),
         created_at: request.now,
@@ -1126,6 +1189,10 @@ export class DenoKvPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      request.tags === undefined || is_valid_page_tags(request.tags),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const serialized = request.content === undefined
       ? null
@@ -1175,6 +1242,9 @@ export class DenoKvPageRepository implements PageRepository {
       const page: PageRecord = {
         ...existing_page,
         access: request.access,
+        tags: request.tags === undefined
+          ? existing_page.tags
+          : structuredClone(request.tags),
         revision: envelope.revision + 1,
         content: request.content === undefined
           ? existing_page.content
@@ -1460,6 +1530,7 @@ export class DenoKvPageRepository implements PageRepository {
         locator: structuredClone(request.locator),
         stewardship: structuredClone(source_page.stewardship),
         access: source_page.access,
+        tags: structuredClone(source_page.tags),
         revision: 1,
         content: structuredClone(source_page.content),
         created_at: request.now,

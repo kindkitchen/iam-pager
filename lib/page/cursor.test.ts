@@ -1,7 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
 import {
   compare_page_sort_keys,
+  decode_managed_page_list_cursor,
+  decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_managed_page_list_cursor,
+  encode_page_exploration_cursor,
   encode_page_list_cursor,
   max_page_list_cursor_length,
   page_sort_key,
@@ -19,6 +23,7 @@ function make_record(
     locator: page_name === undefined ? { namespace } : { namespace, page_name },
     stewardship: { kind: "trial" },
     access: "public",
+    tags: [],
     revision: 1,
     content: {
       content_type: "md-page",
@@ -88,6 +93,52 @@ Deno.test("cursor round-trips with and without a namespace filter", () => {
   };
   const encoded = encode_page_list_cursor(default_key, null);
   assertEquals(decode_page_list_cursor(encoded, null), default_key);
+});
+
+Deno.test("managed cursor binds every active filter", () => {
+  const key: PageSortKey = {
+    namespace_key: "alice",
+    default_rank: 1,
+    page_name_key: "notes",
+    page_id: "id-1",
+  };
+  const scope = {
+    namespace: "alice",
+    page_name_query: "note",
+    access: "public" as const,
+    tag: "deno",
+  };
+  const encoded = encode_managed_page_list_cursor(key, scope);
+  assertEquals(decode_managed_page_list_cursor(encoded, scope), key);
+  assertEquals(
+    decode_managed_page_list_cursor(encoded, { ...scope, tag: "news" }),
+    null,
+  );
+  assertEquals(
+    decode_managed_page_list_cursor(encoded, { ...scope, access: "private" }),
+    null,
+  );
+});
+
+Deno.test("exploration cursor binds the exact tag and name query scope", () => {
+  const key: PageSortKey = {
+    namespace_key: "alice",
+    default_rank: 1,
+    page_name_key: "notes",
+    page_id: "id-1",
+  };
+  const scope = {
+    namespace_query: "ali",
+    page_name_query: "note",
+    tag: "deno",
+  };
+  const encoded = encode_page_exploration_cursor(key, scope);
+  assertEquals(decode_page_exploration_cursor(encoded, scope), key);
+  assertEquals(
+    decode_page_exploration_cursor(encoded, { ...scope, tag: null }),
+    null,
+  );
+  assertEquals(decode_page_list_cursor(encoded, null), null);
 });
 
 Deno.test("decode rejects malformed or incoherent cursors", () => {

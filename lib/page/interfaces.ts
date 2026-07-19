@@ -1,6 +1,12 @@
 import type { DeliveryPayload } from "../content/model.ts";
 import type { Locator } from "../locator/model.ts";
-import type { PageAccess, PageContent, PageId, PageRecord } from "./model.ts";
+import type {
+  PageAccess,
+  PageContent,
+  PageId,
+  PageRecord,
+  PageTag,
+} from "./model.ts";
 
 /** HTTP-independent caller authority, derived by an outer transport boundary. */
 export type PageActor = GuestPageActor | UserPageActor;
@@ -37,13 +43,17 @@ export interface PageIdGenerator {
 
 /**
  * Bounded listing of one owner's managed pages. The owner id is always
- * server-derived; `namespace` filters case-insensitively; `cursor` is an
- * opaque continuation token from a previous result issued with the same
- * filter.
+ * server-derived. Namespace is an exact case-insensitive filter; page name is
+ * a normalized case-insensitive substring; access and tag are exact. Supplied
+ * filters use AND semantics. `cursor` is an opaque continuation token from a
+ * previous result issued with the same complete filter scope.
  */
 export interface ListManagedRequest {
   owner_user_id: string;
   namespace?: string;
+  page_name_query?: string;
+  access?: PageAccess;
+  tag?: PageTag;
   /** Maximum records to return; a positive safe integer (HTTP bounds 1-100). */
   limit: number;
   cursor?: string;
@@ -74,16 +84,18 @@ export type ListPublicResult =
 
 /**
  * Cross-namespace public exploration storage request (DS-EXPLORE). Query
- * values are optional normalized lowercase substrings; when both are present,
- * a page must match both. A page-name query never matches a default page.
- * Private and trial pages never appear.
+ * name values are optional normalized lowercase substrings and tag is an
+ * optional canonical exact match. All supplied fields use AND semantics. A
+ * page-name query never matches a default page. Private and trial pages never
+ * appear.
  */
 export interface ExplorePublicRequest {
   namespace_query?: string;
   page_name_query?: string;
+  tag?: PageTag;
   /** Maximum records to return; a positive safe integer. */
   limit: number;
-  /** Opaque continuation bound to both active query values. */
+  /** Opaque continuation bound to the complete active query scope. */
   cursor?: string;
 }
 
@@ -119,6 +131,8 @@ export interface CreateManagedRequest {
   locator: Locator;
   owner_user_id: string;
   access: PageAccess;
+  /** Canonical tags; omission creates an untagged page. */
+  tags?: readonly PageTag[];
   content: PageContent;
   now: Date;
 }
@@ -131,14 +145,16 @@ export type CreateManagedResult =
  * Revision-bound managed replacement. Succeeds only when the page exists, is
  * managed, is owned by `owner_user_id`, and its revision equals
  * `expected_revision`; then increments the revision exactly once. Locator,
- * stewardship, and creation time never change. Omitted `content` preserves
- * the stored content exactly (access-only update).
+ * stewardship, and creation time never change. Omitted `content` or `tags`
+ * preserve the corresponding stored value for metadata-only updates.
  */
 export interface ReplaceManagedRequest {
   page_id: PageId;
   owner_user_id: string;
   expected_revision: number;
   access: PageAccess;
+  /** Omission preserves tags; an empty set clears them. */
+  tags?: readonly PageTag[];
   content?: PageContent;
   now: Date;
 }
@@ -149,7 +165,7 @@ export type ReplaceManagedResult =
 
 /**
  * Revision-bound locator move within the page's current namespace. The page id,
- * content, access, stewardship, and creation time stay stable. A target trial
+ * content, access, tags, stewardship, and creation time stay stable. A target trial
  * may be retired, but another managed page is always a conflict.
  */
 export interface RenameManagedRequest {
@@ -174,7 +190,7 @@ export type RenameManagedResult =
 /**
  * Revision-bound copy from one managed source into a generated locator in the
  * same namespace. The source is unchanged; the copy receives a fresh id,
- * creation timestamp, and revision 1 while retaining content and access.
+ * creation timestamp, and revision 1 while retaining content, access, and tags.
  */
 export interface DuplicateManagedRequest {
   source_page_id: PageId;
@@ -213,8 +229,8 @@ export type DeleteManagedResult =
 
 /**
  * Storage for pages (DS-PROTECT, DS-MANAGE). Implementations own atomic
- * identity/index/revision/locator conditions; services own validation, authorization,
- * derivation, and business results.
+ * identity/index/revision/locator conditions; services own validation,
+ * authorization, derivation, tag normalization, and business results.
  *
  * Missing, trial, and foreign pages collapse into one non-disclosing
  * `not_found` result for managed mutations, so callers cannot probe
@@ -245,7 +261,8 @@ export interface PageRepository {
 /**
  * Visitor-safe public representation (DS-VIEW): no page id, owner identity,
  * or revision leaves the contract. `stewardship` only distinguishes
- * creator-backed pages from unowned trial output.
+ * creator-backed pages from unowned trial output. Tags are creator-supplied
+ * discovery metadata and trial summaries always carry an empty set.
  */
 export interface PublicPageSummary {
   locator: Locator;
@@ -254,6 +271,7 @@ export interface PublicPageSummary {
   content_type: string;
   media_type: string;
   size_bytes: number;
+  tags: PageTag[];
   created_at: Date;
   updated_at: Date;
 }
@@ -266,6 +284,7 @@ export interface PageSummary {
   access: PageAccess;
   content_type: string;
   size_bytes: number;
+  tags: PageTag[];
   created_at: Date;
   updated_at: Date;
   revision: number;
@@ -313,6 +332,7 @@ export interface CreateManagedPageRequest {
   actor: UserPageActor;
   locator: Locator;
   access: PageAccess;
+  tags?: readonly string[];
   content: PageContentCommand;
 }
 
@@ -328,6 +348,7 @@ export type CreateManagedPageResult =
       | "forbidden_namespace"
       | "invalid_locator"
       | "invalid_access"
+      | "invalid_tags"
       | "namespace_not_reserved"
       | "namespace_reserved"
       | "page_exists"
@@ -336,9 +357,14 @@ export type CreateManagedPageResult =
   }
   | { ok: false; reason: "invalid_input"; detail: string };
 
+export const max_managed_page_name_query_length = 100;
+
 export interface ListManagedPagesRequest {
   actor: UserPageActor;
   namespace?: string;
+  page_name_query?: string;
+  access?: PageAccess;
+  tag?: string;
   limit: number;
   cursor?: string;
 }
@@ -351,6 +377,7 @@ export type ListManagedPagesResult =
       | "forbidden_namespace"
       | "invalid_namespace"
       | "namespace_not_owned"
+      | "invalid_filter"
       | "invalid_cursor";
   };
 
@@ -369,6 +396,7 @@ export interface UpdateManagedPageRequest {
   expected_revision: number;
   patch: {
     access?: PageAccess;
+    tags?: readonly string[];
     content?: PageContentCommand;
   };
 }
@@ -383,6 +411,7 @@ export type UpdateManagedPageResult =
       | "revision_exhausted"
       | "empty_patch"
       | "invalid_access"
+      | "invalid_tags"
       | "unknown_content_type";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -472,6 +501,7 @@ export const max_public_exploration_query_length = 100;
 export interface ExplorePublicPagesRequest {
   namespace_query?: string;
   page_name_query?: string;
+  tag?: string;
   limit: number;
   cursor?: string;
 }
@@ -559,8 +589,9 @@ export interface PublicPageLister {
 
 /**
  * Browses and searches public managed pages across namespaces (CP-EXPLORE).
- * Search is case-insensitive substring matching; supplying both query fields
- * applies AND semantics. Results remain visitor-safe and cursor-bounded.
+ * Name search is case-insensitive substring matching and tag filtering is an
+ * exact canonical match. All supplied fields use AND semantics. Results remain
+ * visitor-safe and cursor-bounded.
  */
 export interface PublicPageExplorer {
   explore_public(

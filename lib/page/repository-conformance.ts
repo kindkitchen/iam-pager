@@ -51,12 +51,14 @@ async function seed_managed(
   page_name: string | undefined,
   marker: string,
   access: PageAccess = "public",
+  tags: readonly string[] = [],
 ): Promise<PageRecord> {
   const result = await repository.create_managed({
     page_id,
     locator: page_name === undefined ? { namespace } : { namespace, page_name },
     owner_user_id,
     access,
+    tags,
     content: make_page_content(marker),
     now: t1,
   });
@@ -113,6 +115,7 @@ export function test_page_repository_conformance(
         locator: { namespace: "Alice", page_name: "Notes/Today" },
         stewardship: { kind: "trial" },
         access: "public",
+        tags: [],
         revision: 1,
         content: make_page_content("v1"),
         created_at: t1,
@@ -261,6 +264,7 @@ export function test_page_repository_conformance(
         locator: { namespace: "Alice", page_name: "Secret" },
         stewardship: { kind: "managed", owner_user_id: "owner-1" },
         access: "private",
+        tags: [],
         revision: 1,
         content: make_page_content("v1"),
         created_at: t1,
@@ -438,6 +442,43 @@ export function test_page_repository_conformance(
       assertEquals(replaced.page.access, "private");
       assertEquals(replaced.page.revision, 2);
       assertEquals(replaced.page.content, make_page_content("kept"));
+    },
+  );
+
+  conformance_test(
+    "replace_managed updates and clears canonical tags without replacing content",
+    async (repository) => {
+      const created = await seed_managed(
+        repository,
+        "managed-tags",
+        "owner-1",
+        "alice",
+        "notes",
+        "kept",
+        "public",
+        ["deno", "news"],
+      );
+      const updated = await repository.replace_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        access: "public",
+        tags: ["archive"],
+        now: t2,
+      });
+      assert(updated.ok);
+      assertEquals(updated.page.tags, ["archive"]);
+      assertEquals(updated.page.content, created.content);
+      const cleared = await repository.replace_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 2,
+        access: "public",
+        tags: [],
+        now: t3,
+      });
+      assert(cleared.ok);
+      assertEquals(cleared.page.tags, []);
     },
   );
 
@@ -680,6 +721,7 @@ export function test_page_repository_conformance(
         "notes",
         "source",
         "private",
+        ["draft", "reference"],
       );
       const duplicated = await repository.duplicate_managed({
         source_page_id: "source",
@@ -986,6 +1028,88 @@ export function test_page_repository_conformance(
     },
   );
 
+  conformance_test(
+    "list_managed AND-filters page name, access, and tag across pagination gaps",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "alpha-default",
+        "owner-1",
+        "alpha",
+        undefined,
+        "m1",
+        "public",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "alpha-notes",
+        "owner-1",
+        "alpha",
+        "Release notes",
+        "m2",
+        "public",
+        ["deno", "news"],
+      );
+      await seed_managed(
+        repository,
+        "alpha-private",
+        "owner-1",
+        "alpha",
+        "Release private",
+        "m3",
+        "private",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "beta-release",
+        "owner-1",
+        "beta",
+        "Release plan",
+        "m4",
+        "public",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "beta-other-tag",
+        "owner-1",
+        "beta",
+        "Release report",
+        "m5",
+        "public",
+        ["other"],
+      );
+      const scope = {
+        owner_user_id: "owner-1",
+        page_name_query: "release",
+        access: "public" as const,
+        tag: "deno",
+      };
+      const first = await repository.list_managed({ ...scope, limit: 1 });
+      assert(first.ok && first.next_cursor !== null);
+      assertEquals(first.pages.map((page) => page.page_id), ["alpha-notes"]);
+      const second = await repository.list_managed({
+        ...scope,
+        limit: 1,
+        cursor: first.next_cursor,
+      });
+      assert(second.ok);
+      assertEquals(second.pages.map((page) => page.page_id), ["beta-release"]);
+      assertEquals(second.next_cursor, null);
+      assertEquals(
+        await repository.list_managed({
+          ...scope,
+          tag: "news",
+          limit: 1,
+          cursor: first.next_cursor,
+        }),
+        { ok: false, reason: "invalid_cursor" },
+      );
+    },
+  );
+
   conformance_test("list_managed paginates with a continuation cursor", async (
     repository,
   ) => {
@@ -1254,6 +1378,8 @@ export function test_page_repository_conformance(
         "Alice",
         undefined,
         "m1",
+        "public",
+        ["featured"],
       );
       await seed_managed(
         repository,
@@ -1262,6 +1388,8 @@ export function test_page_repository_conformance(
         "alice",
         "Notes",
         "m2",
+        "public",
+        ["deno", "featured"],
       );
       await seed_managed(
         repository,
@@ -1270,6 +1398,8 @@ export function test_page_repository_conformance(
         "Alicia",
         "Notebook",
         "m3",
+        "public",
+        ["deno"],
       );
       await seed_managed(
         repository,
@@ -1278,6 +1408,8 @@ export function test_page_repository_conformance(
         "Beta",
         "Release",
         "m4",
+        "public",
+        ["release"],
       );
       await seed_managed(
         repository,
@@ -1287,6 +1419,7 @@ export function test_page_repository_conformance(
         "Private notes",
         "m5",
         "private",
+        ["deno"],
       );
       await repository.put_trial({
         page_id: "hidden-trial",
@@ -1338,6 +1471,27 @@ export function test_page_repository_conformance(
         ["alice-notes"],
       );
 
+      const by_tag = await repository.explore_public({
+        tag: "deno",
+        limit: 20,
+      });
+      assert(by_tag.ok);
+      assertEquals(
+        by_tag.pages.map((page) => page.page_id),
+        ["alice-notes", "alicia-notebook"],
+      );
+      const by_names_and_tag = await repository.explore_public({
+        namespace_query: "alice",
+        page_name_query: "note",
+        tag: "featured",
+        limit: 20,
+      });
+      assert(by_names_and_tag.ok);
+      assertEquals(
+        by_names_and_tag.pages.map((page) => page.page_id),
+        ["alice-notes"],
+      );
+
       const made_private = await repository.replace_managed({
         page_id: "alice-notes",
         owner_user_id: "owner-1",
@@ -1370,6 +1524,8 @@ export function test_page_repository_conformance(
           `Team-${index}`,
           `Release-${index}`,
           `m${index}`,
+          "public",
+          ["release"],
         );
         await seed_managed(
           repository,
@@ -1398,6 +1554,7 @@ export function test_page_repository_conformance(
         const explored = await repository.explore_public({
           namespace_query: "team-",
           page_name_query: "release-",
+          tag: "release",
           limit: 2,
           ...(cursor === undefined ? {} : { cursor }),
         });
@@ -1819,6 +1976,17 @@ export function test_page_repository_conformance(
         })
       );
       await assertRejects(() =>
+        repository.create_managed({
+          page_id: "ok-id",
+          locator: { namespace: "ns" },
+          owner_user_id: "owner-1",
+          access: "public",
+          tags: ["news", "deno"],
+          content,
+          now: t1,
+        })
+      );
+      await assertRejects(() =>
         repository.replace_managed({
           page_id: "ok-id",
           owner_user_id: "owner-1",
@@ -1868,6 +2036,20 @@ export function test_page_repository_conformance(
         })
       );
       await assertRejects(() =>
+        repository.list_managed({
+          owner_user_id: "owner-1",
+          page_name_query: "Notes",
+          limit: 10,
+        })
+      );
+      await assertRejects(() =>
+        repository.list_managed({
+          owner_user_id: "owner-1",
+          tag: "News",
+          limit: 10,
+        })
+      );
+      await assertRejects(() =>
         repository.list_public({ namespace: "", limit: 10 })
       );
       await assertRejects(() =>
@@ -1879,6 +2061,9 @@ export function test_page_repository_conformance(
       );
       await assertRejects(() =>
         repository.explore_public({ page_name_query: "", limit: 10 })
+      );
+      await assertRejects(() =>
+        repository.explore_public({ tag: "News", limit: 10 })
       );
     },
   );

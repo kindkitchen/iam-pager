@@ -172,11 +172,12 @@ The first publishing slice currently provides:
   remain reserved as namespaces;
 - public exploration on `/` and `/site`: an HTTP-independent
   `PublicPageExplorer` browses current public managed pages or applies
-  case-insensitive namespace/page-name substring filters separately or with AND
-  semantics. Results are deterministically cursor-paginated and open the public
-  wrapper or direct content; memory and Deno KV satisfy the same exclusion and
-  cursor conformance, so private and guest pages never cross the contract. Tags
-  and text-content search remain later work;
+  case-insensitive namespace/page-name substring filters plus an exact tag
+  filter with AND semantics. Results are deterministically cursor-paginated and
+  open the public wrapper or direct content; memory and Deno KV satisfy the same
+  exclusion and cursor conformance, so private and guest pages never cross the
+  contract. The current web form exposes the name fields only; tag controls and
+  text-content search remain later work;
 - `GET`/`POST /api/pages` and `GET`/`PATCH`/`DELETE /api/pages/:page_id` for
   trial creation and authenticated page management, including pagination,
   owner-safe source inspection, CSRF, and revision ETags;
@@ -191,11 +192,12 @@ Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
 sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
-replaceable by anyone. Rename and duplicate now exist in the HTTP-independent
-core but are not yet exposed through the API or site. Total page capacity,
-publishing frequency, guest expiry, tags/filters/bulk operations, exploration
-text indexing/relevance, and backend migration are not implemented; these
-endpoints are not ready for untrusted public traffic.
+replaceable by anyone. Rename, duplicate, bounded tags, managed name/access/tag
+filtering, and public tag exploration now exist in the HTTP-independent core but
+are not yet exposed through the API or site. Total page capacity, publishing
+frequency, guest expiry, bulk operations, exploration text indexing/relevance,
+and backend migration are not implemented; these endpoints are not ready for
+untrusted public traffic.
 
 ## Local development
 
@@ -216,9 +218,10 @@ authenticated header shows only signed-in state and the CSRF-protected
 rotates the browser to a distinct guest session. Signed-in creators can reserve
 and list namespaces through the creator panel, then publish into their own
 claim. The creator management panel lists, inspects, edits, changes access, and
-deletes their pages over the revision-bound management API. Core rename and
-generated-name duplicate contracts are implemented, but their API and site
-controls plus tags, filters, and bulk management remain future work.
+deletes their pages over the revision-bound management API. Core rename,
+generated-name duplicate, bounded tag mutation, managed name/access/tag
+filtering, and public tag-exploration contracts are implemented, but their API
+and site controls plus bulk management remain future work.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

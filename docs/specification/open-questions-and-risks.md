@@ -49,13 +49,14 @@ state; trial pages remain reachable only by a known direct or site-view locator.
 ### OQ-EXPLORE — Public exploration
 
 The first exploration version is settled as deterministic browse plus
-case-insensitive substring search over author namespaces and page names. Either
-field can be used alone; together they use AND semantics. Default pages have no
-page-name value and therefore match browsing or namespace search only. Private
-and guest pages are excluded from current storage state before results cross the
-public contract.
+case-insensitive substring search over author namespaces and page names and one
+optional exact canonical tag. Supplied fields use AND semantics. Default pages
+have no page-name value and therefore match only when that query is absent.
+Private and guest pages are excluded from current storage state before results
+cross the public contract.
 
-Tags join when expanded management supplies them. Text-content extraction and
+Tag filtering is now implemented in the HTTP-independent explorer and bound into
+its cursor scope; the site control remains pending. Text-content extraction and
 indexing, relevance ranking, and view-count sorting are not part of this MVP
 slice. The `PublicPageExplorer` boundary permits a later index without changing
 locators, site-view links, or visitor-safe result summaries.

@@ -51,6 +51,7 @@ function page_with_meta(
     locator: { namespace: "Ada", page_name: "notes" },
     stewardship: { kind: "trial" },
     access: "public",
+    tags: [],
     revision: 1,
     content: {
       content_type: "test",

@@ -23,6 +23,7 @@ Deno.test("public page wrapper isolates creator HTML and renders platform links"
       content_type: "md-page",
       media_type: "text/html; charset=utf-8",
       size_bytes: 42,
+      tags: [],
       created_at: new Date("2026-07-19T01:00:00.000Z"),
       updated_at: new Date("2026-07-19T02:00:00.000Z"),
     },

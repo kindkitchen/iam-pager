@@ -98,38 +98,43 @@ renders a creator management panel over these same contracts: a server presenter
 lists the first page of managed rows, and the island continues through
 `/api/pages` for pagination, inspection, editor-based content updates, access
 toggling, and deletion, always revision-bound via the published strong ETags.
-The first DS-MANAGE core now adds explicit `ManagedPageRenamer` and
-`ManagedPageDuplicator` contracts. Rename is revision-bound, keeps the stable
-page ID/content/access/creation time, atomically moves locator and owner
-indexes, and reports a managed destination conflict; duplicate copies one exact
-source revision under a bounded generated available name and fresh ID. A
-destination trial may be retired consistently with managed creation. Memory and
-Deno KV pass the same conformance and concurrent claims settle on one winner.
-HTTP endpoints and creator controls for these operations are still pending;
-tags, managed filters, and bulk actions remain later DS-MANAGE work.
+The DS-MANAGE core now adds explicit `ManagedPageRenamer` and
+`ManagedPageDuplicator` contracts plus bounded tag mutation and filtering.
+Rename is revision-bound, keeps stable identity and metadata, atomically moves
+locator and owner indexes, and reports a managed destination conflict; duplicate
+copies one exact source revision, including tags, under a bounded generated
+available name and fresh ID. Managed create/update normalize at most ten tags
+into a lowercase sorted unique set, while list supports AND-combined page-name
+substring, exact access, and exact tag filters. Public exploration accepts the
+same exact tag without disclosing private or guest pages. Memory and Deno KV
+pass common mutation/filter/cursor conformance, and old durable records without
+tags read as untagged. HTTP endpoints and creator controls for these operations
+are still pending; bulk actions remain later DS-MANAGE work.
 
 ## CP-EXPLORE — Public exploration
 
 The first exploration version can browse all eligible pages or search by
-case-insensitive namespace and page-name substrings, independently or together.
-When both fields are present a result must match both; default pages have no
-page name and therefore match only browsing or a namespace query. Results are
-ordered deterministically and cursor-paginated. They open the site-mediated
-view, which links onward to direct content, the creator's default page when it
-exists, and other public pages.
+case-insensitive namespace and page-name substrings, independently or together,
+and can require one exact canonical tag. All supplied fields use AND semantics;
+default pages match only when the page-name query is absent. Results are ordered
+deterministically and cursor-paginated. They open the site-mediated view, which
+links onward to direct content, the creator's default page when it exists, and
+other public pages.
 
 The capability is implemented through the HTTP-independent `PublicPageExplorer`
 interface over `PageService`. Memory and Deno KV repositories satisfy the same
 cross-namespace exploration conformance tests, and opaque continuations are
-bound to both normalized query values. Visitor summaries expose no page ID,
-revision, access field, or owner identity. Eligibility is read from current page
-state, so private pages and guest trials never enter browsing or search and a
-public-to-private change disappears immediately. The site projects the model as
-a bounded GET search form and result list.
+bound to both normalized query values and the optional exact tag. Visitor
+summaries expose no page ID, revision, access field, or owner identity.
+Eligibility is read from current page state, so private pages and guest trials
+never enter browsing or search and a public-to-private change disappears
+immediately. The site projects the model as a bounded GET search form and result
+list.
 
-Tags join after page management supplies them. Text-content extraction,
-indexing, relevance, and view-count sorting remain later work and can be added
-without changing page URLs or the visitor-facing contract.
+Tag filtering is available in the HTTP-independent explorer; its web search
+control remains pending. Text-content extraction, indexing, relevance, and
+view-count sorting remain later work and can be added without changing page URLs
+or the visitor-facing contract.
 
 ## CP-EXTERNAL — External content storage
 

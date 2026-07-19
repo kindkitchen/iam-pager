@@ -2,6 +2,16 @@
 
 ## 2026-07-19
 
+- Completed the second HTTP-independent DS-MANAGE milestone: managed pages now
+  carry at most ten normalized canonical tags, exact-revision updates can
+  replace or clear them, rename preserves them, and duplicate copies them.
+  Managed lists AND-combine page-name substring, access, tag, and existing
+  namespace filters; public exploration adds an exact tag filter; opaque cursors
+  bind every active field. Memory and Deno KV pass shared
+  mutation/filter/pagination conformance, and old schema-v1 durable envelopes
+  remain readable as untagged. API/site exposure and per-page-result bulk
+  access/delete remain next.
+
 - Activated DS-MANAGE and completed its first HTTP-independent
   locator-management foundation. Explicit revision-bound rename and duplicate
   contracts now run through `PageService`, memory, and Deno KV: rename preserves

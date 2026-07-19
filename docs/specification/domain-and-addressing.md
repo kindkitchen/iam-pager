@@ -28,9 +28,9 @@ namespace.
 
 A page is either a public, unowned trial or a managed page whose creator is
 recorded only by server-owned storage. Managed pages may be public or private.
-Their current representation has a positive revision, and content/access changes
-or deletion must match that revision so concurrent intent cannot be silently
-overwritten.
+Their current representation has a positive revision, and content/access/tag
+changes or deletion must match that revision so concurrent intent cannot be
+silently overwritten.
 
 ## DA-LOCATOR — Locator
 
@@ -75,6 +75,20 @@ Guest pages are publicly deliverable but never appear in exploration; a visitor
 must know the direct URL to open one for raw preview.
 
 Public does not imply that the platform created or endorses the content.
+
+## DA-TAGS — Managed page tags
+
+Tags are page metadata, not locator identity or creator content. Managed pages
+may carry at most ten tags; trial pages carry none. Input is trimmed and
+lowercased, duplicates collapse, and storage uses a sorted unique set. Each tag
+is 1–32 ASCII characters, starts and ends with an alphanumeric character, and
+uses only alphanumerics, `-`, or `_`. Tag replacement is revision-bound; rename
+preserves tags and duplicate copies them from the exact source revision.
+
+Managed listing uses exact tag matching alongside page-name substring and access
+filters. Public exploration exposes tags only for eligible public managed pages
+and can require one exact tag. Tags never make a private or trial page publicly
+discoverable.
 
 ## DA-LIFECYCLE — Replacement, rename, and deletion
 

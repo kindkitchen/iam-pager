@@ -1,10 +1,13 @@
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_managed_page_list_cursor,
   decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_managed_page_list_cursor,
   encode_page_exploration_cursor,
   encode_page_list_cursor,
+  type ManagedPageListCursorScope,
   page_sort_key,
   type PageExplorationCursorScope,
   type PageSortKey,
@@ -34,6 +37,7 @@ import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  is_valid_page_tags,
   page_record_violation,
   type PageId,
   type PageRecord,
@@ -97,6 +101,7 @@ export class MemoryPageRepository implements PageRepository {
         locator: clone(request.locator),
         stewardship: { kind: "trial" },
         access: "public",
+        tags: [],
         revision: existing.revision + 1,
         content: clone(request.content),
         created_at: existing.created_at,
@@ -115,6 +120,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: clone(request.locator),
       stewardship: { kind: "trial" },
       access: "public",
+      tags: [],
       revision: 1,
       content: clone(request.content),
       created_at: request.now,
@@ -143,6 +149,10 @@ export class MemoryPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      is_valid_page_tags(request.tags ?? []),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const key = locator_key(request.locator);
     const existing_id = this.#by_locator.get(key);
@@ -162,6 +172,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: clone(request.locator),
       stewardship: { kind: "managed", owner_user_id: request.owner_user_id },
       access: request.access,
+      tags: [...(request.tags ?? [])],
       revision: 1,
       content: clone(request.content),
       created_at: request.now,
@@ -199,6 +210,10 @@ export class MemoryPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      request.tags === undefined || is_valid_page_tags(request.tags),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const existing = this.#by_id.get(request.page_id);
     if (
@@ -216,6 +231,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: existing.locator,
       stewardship: existing.stewardship,
       access: request.access,
+      tags: request.tags === undefined ? existing.tags : clone(request.tags),
       revision: existing.revision + 1,
       content: request.content === undefined
         ? existing.content
@@ -346,6 +362,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: clone(request.locator),
       stewardship: clone(source.stewardship),
       access: source.access,
+      tags: clone(source.tags),
       revision: 1,
       content: clone(source.content),
       created_at: request.now,
@@ -411,12 +428,16 @@ export class MemoryPageRepository implements PageRepository {
         (typeof request.namespace === "string" && request.namespace !== ""),
       "namespace filter must be non-empty when present",
     );
-    const filter = request.namespace === undefined
-      ? null
-      : request.namespace.toLowerCase();
+    require_normalized_managed_list_request(request);
+    const scope: ManagedPageListCursorScope = {
+      namespace: request.namespace?.toLowerCase() ?? null,
+      page_name_query: request.page_name_query ?? null,
+      access: request.access ?? null,
+      tag: request.tag ?? null,
+    };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
-      after = decode_page_list_cursor(request.cursor, filter);
+      after = decode_managed_page_list_cursor(request.cursor, scope);
       if (after === null) return { ok: false, reason: "invalid_cursor" };
     }
     const candidates: { key: PageSortKey; record: PageRecord }[] = [];
@@ -424,14 +445,17 @@ export class MemoryPageRepository implements PageRepository {
       if (record.stewardship.kind !== "managed") continue;
       if (record.stewardship.owner_user_id !== request.owner_user_id) continue;
       const key = page_sort_key(record);
-      if (filter !== null && key.namespace_key !== filter) continue;
+      if (!matches_managed_list(record, key, scope)) continue;
       if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
       candidates.push({ key, record });
     }
     candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
     const selected = candidates.slice(0, request.limit);
     const next_cursor = candidates.length > request.limit
-      ? encode_page_list_cursor(selected[selected.length - 1].key, filter)
+      ? encode_managed_page_list_cursor(
+        selected[selected.length - 1].key,
+        scope,
+      )
       : null;
     return {
       ok: true,
@@ -485,6 +509,7 @@ export class MemoryPageRepository implements PageRepository {
     const scope: PageExplorationCursorScope = {
       namespace_query: request.namespace_query ?? null,
       page_name_query: request.page_name_query ?? null,
+      tag: request.tag ?? null,
     };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
@@ -496,7 +521,7 @@ export class MemoryPageRepository implements PageRepository {
       if (record.stewardship.kind !== "managed") continue;
       if (record.access !== "public") continue;
       const key = page_sort_key(record);
-      if (!matches_exploration(key, scope)) continue;
+      if (!matches_exploration(record, key, scope)) continue;
       if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
       candidates.push({ key, record });
     }
@@ -520,6 +545,40 @@ export class MemoryPageRepository implements PageRepository {
   }
 }
 
+function require_normalized_managed_list_request(
+  request: ListManagedRequest,
+): void {
+  if (request.page_name_query !== undefined) {
+    require(
+      request.page_name_query !== "" &&
+        request.page_name_query === request.page_name_query.trim() &&
+        request.page_name_query === request.page_name_query.toLowerCase(),
+      "page_name_query must be a normalized lowercase substring when present",
+    );
+  }
+  require(
+    request.access === undefined || is_valid_page_access(request.access),
+    "access filter must be public or private when present",
+  );
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag filter must be canonical when present",
+  );
+}
+
+function matches_managed_list(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: ManagedPageListCursorScope,
+): boolean {
+  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.access === null || record.access === scope.access) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
+}
+
 function require_normalized_exploration_request(
   request: ExplorePublicRequest,
 ): void {
@@ -540,9 +599,14 @@ function require_normalized_exploration_request(
       `${name} must be a normalized lowercase substring when present`,
     );
   }
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag must be canonical when present",
+  );
 }
 
 function matches_exploration(
+  record: PageRecord,
   key: PageSortKey,
   scope: PageExplorationCursorScope,
 ): boolean {
@@ -550,5 +614,6 @@ function matches_exploration(
     key.namespace_key.includes(scope.namespace_query)) &&
     (scope.page_name_query === null ||
       (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query)));
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
 }
