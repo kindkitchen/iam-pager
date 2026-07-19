@@ -88,6 +88,12 @@ export class MdPageHandler
     return { ok: true, value: css === undefined ? { md } : { md, css } };
   }
 
+  to_input(data: MdPageData): MdPageInput {
+    return data.css === undefined
+      ? { md: data.md }
+      : { md: data.md, css: data.css };
+  }
+
   derive(input: MdPageInput): MdPageData {
     const html = render_gfm(input.md);
     return input.css === undefined

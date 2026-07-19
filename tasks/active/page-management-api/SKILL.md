@@ -7,8 +7,12 @@ tags: [api, backend, security, storage]
 relates: []
 ---
 
-Active; implementing the plan in `003.plan.md`, currently at step 1
-(documentation correction and contract fixtures).
+Active; implementing the plan in `003.plan.md`. Steps 2-4 are delivered
+(005.log): `lib/page/` holds the page model with id/stewardship/access/
+revision invariants, the `PageRepository` contract with strict list cursors,
+the backend-neutral conformance suite, and the memory implementation;
+`ContentTypeHandler.to_input` returns editable source. Next: step 5, the
+`PageService` application layer, then the Deno KV repository (step 6).
 
 The specification already fixes the product boundary: creators manage default
 and named pages in reserved namespaces; managed pages can be public or private;
@@ -28,6 +32,6 @@ duplicate, bulk actions, tags, filters beyond namespace, search, and management
 UI remain later DS-MANAGE work, but the page ID/revision contracts are designed
 to extend to them.
 
-Baseline before implementation: `deno task check` and all 307 tests pass.
-Next: follow the plan's implementation sequence in order, keeping checks and
-tests green at each step.
+Gates after the storage fragment: check, build, and all 342 tests pass.
+Follow the plan's implementation sequence in order, keeping checks and tests
+green at each step.

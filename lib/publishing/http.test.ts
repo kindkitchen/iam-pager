@@ -19,6 +19,7 @@ const download_handler: ContentTypeHandler<string, string> = {
       : { ok: false, reason: "string required" };
   },
   derive: (input) => input,
+  to_input: (data) => data,
   render: (data) => ({
     body: data,
     media_type: "text/plain; charset=utf-8",

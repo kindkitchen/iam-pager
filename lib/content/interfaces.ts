@@ -19,6 +19,12 @@ export interface ContentTypeHandler<Input, Data> {
   validate(input: unknown): ContentResult<Input>;
   /** Derive the stored data from valid input (e.g. md -> md + html). */
   derive(input: Input): Data;
+  /**
+   * Recover the safe editable input from stored data: the representation a
+   * management client edits and resubmits through `validate`. Must never
+   * expose derived representations or backend-internal fields.
+   */
+  to_input(data: Data): Input;
   /** Produce the raw delivery payload for stored data. */
   render(data: Data): DeliveryPayload;
 }

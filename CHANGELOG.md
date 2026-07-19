@@ -2,14 +2,27 @@
 
 ## 2026-07-19
 
-- Planned and activated `page-management-api`, the DS-PROTECT continuation
-  after namespace reservation: API-first managed-page create, list, inspect,
+- Implemented the page-management storage foundation (`page-management-api` plan
+  steps 2-4): a new `lib/page/` module with the page domain model (stable opaque
+  page IDs, publisher-cased locators, trial/managed stewardship, public/private
+  access, positive revisions, page-level timestamps and invariant validation),
+  the atomic `PageRepository` contract (trial create-or-replace that can never
+  touch managed pages, managed creation that replaces trials and retires their
+  IDs, revision-bound replace/delete with non-disclosing not-found results,
+  bounded deterministic owner listing with strict base64url continuation
+  cursors), a 27-test backend-neutral conformance suite, and the memory
+  implementation passing it. Content handlers gained `to_input`, recovering
+  editable source (`md`/`css`, never derived html) from stored data. Check,
+  build, and all 342 tests pass.
+
+- Planned and activated `page-management-api`, the DS-PROTECT continuation after
+  namespace reservation: API-first managed-page create, list, inspect,
   revision-bound content/access update, and delete with stable opaque page IDs,
   explicit trial-versus-managed stewardship, and owner-only private direct
   delivery, all in interface-backed code with UI reduced to compatibility
   wiring. A narrower access-only exploration was discarded during planning; its
-  valid conclusions are folded into the task's analysis and plan. Baseline
-  check and all 307 tests pass.
+  valid conclusions are folded into the task's analysis and plan. Baseline check
+  and all 307 tests pass.
 
 ## 2026-07-18
 
