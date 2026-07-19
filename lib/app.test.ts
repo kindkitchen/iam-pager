@@ -1,6 +1,7 @@
 import {
   assertEquals,
   assertExists,
+  assertStrictEquals,
   assertStringIncludes,
   assertThrows,
 } from "@std/assert";
@@ -11,6 +12,7 @@ import {
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
   GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
+  MemoryIdentityRepository,
 } from "./auth/mod.ts";
 import {
   type AppServices,
@@ -19,8 +21,26 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
+import { MemoryContentRepository } from "./content/mod.ts";
+import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
+import {
+  hash_session_credential,
+  MemorySessionRepository,
+} from "./session/mod.ts";
 import { deliver_locator_path } from "./publishing/mod.ts";
+import {
+  CONTENT_STORAGE_BACKEND_ENV,
+  type ContentRepositoryFactory,
+  type ContentStorageConfig,
+  OWNERSHIP_DENO_KV_PATH_ENV,
+  OWNERSHIP_STORAGE_BACKEND_ENV,
+  type OwnershipRepositoryFactory,
+  type OwnershipStorageConfig,
+  SESSION_STORAGE_BACKEND_ENV,
+  type SessionRepositoryFactory,
+  type SessionStorageConfig,
+} from "./storage/mod.ts";
 
 Deno.test("composition root publishes and delivers an md page end to end", async () => {
   const { engine, publishing } = create_app_services();
@@ -55,6 +75,39 @@ Deno.test("composition root forbids platform route namespaces", async () => {
   }
 });
 
+Deno.test("composition root enforces namespace reservations on publishing", async () => {
+  const { publishing, namespaces } = create_app_services();
+  const reserved = await namespaces.reserve({
+    namespace: "Claimed",
+    owner_user_id: "owner-1",
+  });
+  assertEquals(reserved.ok, true);
+
+  const guest_write = await publishing.publish({
+    locator: { namespace: "claimed" },
+    content_type: "md-page",
+    input: { md: "# Takeover" },
+  });
+  assertEquals(guest_write, { ok: false, reason: "namespace_reserved" });
+
+  const owner_write = await publishing.publish({
+    locator: { namespace: "Claimed" },
+    content_type: "md-page",
+    input: { md: "# Mine" },
+    actor: { kind: "user", user_id: "owner-1" },
+  });
+  assertEquals(owner_write.ok, true);
+
+  assertEquals(
+    await namespaces.reserve({ namespace: "api", owner_user_id: "owner-1" }),
+    { ok: false, reason: "forbidden_namespace" },
+  );
+  assertEquals(
+    (await namespaces.list_owned("owner-1")).map((r) => r.namespace),
+    ["Claimed"],
+  );
+});
+
 Deno.test("composition root wires interface-backed identity services", async () => {
   const services = create_app_services();
   assertEquals(services.authentication_strategies.resolve("google"), null);
@@ -87,6 +140,173 @@ Deno.test("configured composition registers the selected Google strategy", async
     "google",
   );
   assertEquals(services.authentication_strategies.resolve("unknown"), null);
+});
+
+Deno.test("configured composition selects linked ownership storage at its factory boundary", async () => {
+  const selected_identity_repository = new MemoryIdentityRepository({
+    generate: () => "user-a",
+  });
+  const selected_namespace_repository = new MemoryNamespaceRepository();
+  let selected_config: OwnershipStorageConfig | undefined;
+  const ownership_repository_factory: OwnershipRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve({
+        identity_repository: selected_identity_repository,
+        namespace_repository: selected_namespace_repository,
+      });
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    { ownership_repository_factory },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  assertStrictEquals(
+    services.identity_repository,
+    selected_identity_repository,
+  );
+  assertStrictEquals(
+    services.namespace_repository,
+    selected_namespace_repository,
+  );
+  const identity = await services.identity_repository.find_or_create({
+    strategy_id: "google",
+    provider_subject: "provider-user",
+    email: "person@example.com",
+    observed_at: new Date("2026-07-18T00:00:00.000Z"),
+  });
+  const reserved = await services.namespaces.reserve({
+    namespace: "Selected",
+    owner_user_id: identity.user.user_id,
+  });
+  assertEquals(reserved.ok, true);
+  assertEquals(
+    (await selected_namespace_repository.find("selected"))?.owner_user_id,
+    identity.user.user_id,
+  );
+});
+
+Deno.test("configured composition selects referentially safe session storage", async () => {
+  const selected_session_repository = new MemorySessionRepository();
+  let selected_config: SessionStorageConfig | undefined;
+  const session_repository_factory: SessionRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve(selected_session_repository);
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+    [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    {
+      ownership_repository_factory: {
+        create: () =>
+          Promise.resolve({
+            identity_repository: new MemoryIdentityRepository({
+              generate: () => "user-a",
+            }),
+            namespace_repository: new MemoryNamespaceRepository(),
+          }),
+      },
+      session_repository_factory,
+    },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  const resolution = await services.session.resolve();
+  assertExists(resolution.credential_to_set);
+  assertEquals(
+    (
+      await selected_session_repository.find_by_credential_hash(
+        await hash_session_credential(resolution.credential_to_set.value),
+      )
+    )?.session_id,
+    resolution.session.session_id,
+  );
+});
+
+Deno.test("configured composition selects referentially safe content storage", async () => {
+  const selected_content_repository = new MemoryContentRepository();
+  let selected_config: ContentStorageConfig | undefined;
+  const content_repository_factory: ContentRepositoryFactory = {
+    create: (config) => {
+      selected_config = config;
+      return Promise.resolve(selected_content_repository);
+    },
+  };
+  const values: Readonly<Record<string, string>> = {
+    [GOOGLE_AUTH_MODE_ENV]: "local",
+    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+      "http://localhost:5173/auth/google/callback",
+    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
+      "http://localhost:5173/auth/google/mock-consent",
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
+    [CONTENT_STORAGE_BACKEND_ENV]: "deno-kv",
+  };
+
+  const services = await create_configured_app_services(
+    { get: (name) => values[name] },
+    {
+      ownership_repository_factory: {
+        create: () =>
+          Promise.resolve({
+            identity_repository: new MemoryIdentityRepository({
+              generate: () => "user-a",
+            }),
+            namespace_repository: new MemoryNamespaceRepository(),
+          }),
+      },
+      content_repository_factory,
+    },
+  );
+
+  assertEquals(selected_config, {
+    backend: "deno-kv",
+    path: "/data/iam-pager.kv",
+  });
+  assertStrictEquals(services.repository, selected_content_repository);
+  const published = await services.publishing.publish({
+    locator: { namespace: "Durable", page_name: "hello" },
+    content_type: "md-page",
+    input: { md: "# Durable" },
+  });
+  assertEquals(published.ok, true);
+  assertEquals(
+    (await selected_content_repository.get({
+      namespace: "durable",
+      page_name: "hello",
+    }))?.content.content_type,
+    "md-page",
+  );
 });
 
 Deno.test("configured original Google flow prefers an allowlisted request host", async () => {

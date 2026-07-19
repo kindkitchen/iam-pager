@@ -31,6 +31,51 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
+## QT-STORAGE — Repository persistence
+
+Each durable adapter must preserve its repository contract and pass the same
+implementation-agnostic conformance suite as the in-memory reference. Storage
+keys, indexes, serialization versions, transactions, and drivers remain inside
+the adapter; services and domain models do not depend on them.
+
+The first durable option is an ownership bundle backed by Deno KV. It persists
+application users and provider identities atomically and persists a namespace
+claim with its owner index in one atomic commit. These repositories are selected
+together because a durable namespace claim pointing at a process-local user ID
+would become orphaned after restart. Unset configuration retains both in-memory
+repositories.
+
+Session persistence is a separate opt-in behind the same `SessionRepository`
+contract, but a Deno KV session must inherit a configured Deno KV ownership
+database. Startup rejects durable sessions with memory ownership, preventing an
+authenticated session from outliving its user. Session creation, renewal,
+one-use authentication attempts, credential rotation, logout, and revocation
+remain atomic. Records and credential-hash indexes carry the absolute-session
+TTL; service checks remain authoritative because KV expiration is lazy.
+
+Page content is a third opt-in behind the same `ContentRepository` contract and
+follows the session rule: durable content requires the configured Deno KV
+ownership database, because a page in a reserved namespace must not outlive the
+reservation and user that authorize it. The adapter stores one envelope record
+per locator plus immutable generation chunks, since a page's source and derived
+data can exceed a single KV value. Every replacement writes a fresh generation
+before atomically flipping the envelope and deleting the replaced generation, so
+readers always observe one complete page and concurrent replacements settle on
+exactly one winner. Stored content data must be JSON-serializable; the envelope
+names its codec so later versions can add encodings without a key migration.
+Neither ownership nor session settings alone imply that pages survive a restart;
+unset content configuration keeps pages process-local.
+
+Deno KV ownership records have no application expiry or deletion workflow yet.
+Changing backend or database path performs no migration, and backup/recovery is
+the responsibility of the configured KV service or deployment operator. Session
+records expire through their bounded lifecycle, and page records live until
+replaced or deleted through publishing. A crash between chunk writes and the
+envelope flip can orphan chunks of a never-referenced generation; they are
+invisible to readers and harmless, but no sweeper reclaims them yet. These
+operational limits must remain visible until broader lifecycle and migration
+behavior is delivered.
+
 ## QT-ROUTING — Routing and HTTP behavior
 
 - Namespace and page matching must follow `DA-LOCATOR` consistently during
@@ -191,10 +236,16 @@ complete model from an interface-backed server presenter: guests get a Google
 start link with a validated local return, while authenticated sessions get only
 signed-in state and the fixed CSRF-protected logout form. UI components receive
 neither session/user IDs nor responsibility for deciding the available action.
-The current in-memory repository is process-local and invalidates sessions on
-restart. Authentication establishes user identity only: it does not reserve a
-namespace or authorize publishing. Concurrency-safe namespace ownership and its
-mutation policy remain the next implementation boundary. See
+The default session repository is process-local and invalidates sessions on
+restart; configured Deno KV can preserve sessions only alongside durable
+ownership. Authentication establishes user identity only: namespace reservation
+and publishing authorization remain explicit services above it. Those services
+now enforce concurrency-safe ownership, and configured Deno KV can preserve the
+provider identity, application user, namespace claim, and opted-in session
+across restarts. An authenticated JSON API and server-owned site presenter
+expose reservation listing and CSRF-protected claiming; publishing derives the
+actor from the resolved request session so only the owner can write into a
+reserved namespace. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication
@@ -216,12 +267,25 @@ buttons. The current overwriteable guest flow has no locator availability
 endpoint, so numeric fallback only avoids a combination already generated in the
 local UI.
 
-The current guest API is `POST /api/pages` with an `application/json` body:
+The publishing API is `POST /api/pages` with an `application/json` body:
 `namespace` and `md` are required strings; `page_name` and `css` are optional
-strings. Success returns `201`, a relative `Location` header, and JSON
-containing `path` and absolute `url`. Malformed requests return `400`, oversized
-request bodies `413`, unsupported media types `415`, reserved namespaces `403`,
-and locator or content validation failures `422`. Responses use `no-store`.
+strings. A guest request remains unowned; an authenticated request derives its
+creator actor from the resolved server session and can write into that creator's
+reserved namespace. Success returns `201`, a relative `Location` header, and
+JSON containing `path` and absolute `url`. Malformed requests return `400`,
+oversized request bodies `413`, unsupported media types `415`, reserved
+namespaces `403`, and locator or content validation failures `422`. Responses
+use `no-store`.
+
+Authenticated namespace ownership uses `GET /api/namespaces` to list the
+caller's claims and `POST /api/namespaces` with required string `namespace` and
+`csrf_token` fields to claim one. The synchronizer token must match the resolved
+authenticated session. Creation returns `201`, a direct-path `Location`, and a
+reservation with its namespace, path, and ISO timestamp. Unauthenticated calls
+return `401`; invalid CSRF and platform namespaces return `403`; malformed and
+oversized bodies return `400`/`413`; unsupported media types return `415`; taken
+names return `409`; invalid locator names return `422`. Responses use
+`no-store`.
 
 ## QT-SEARCH — Search and privacy
 

@@ -2,7 +2,12 @@ import {
   is_json_media_type,
   read_bounded_request_text,
 } from "../http/request-body.ts";
-import type { PagePublisher, PublishResult } from "./interfaces.ts";
+import type { Session } from "../session/model.ts";
+import type {
+  PagePublisher,
+  PublishActor,
+  PublishResult,
+} from "./interfaces.ts";
 
 /** Keeps unauthenticated JSON parsing bounded before content validation runs. */
 export const guest_publish_request_max_bytes = 96 * 1024;
@@ -19,13 +24,26 @@ type BodyDecodeResult =
   | { ok: false; detail: string };
 
 /**
- * HTTP adapter for unauthenticated MdPage placement (EX-PUBLISH, QT-API).
- * All content and locator rules remain in PagePublisher; this boundary only
+ * Derive the publishing actor from the request session (DA-NAMESPACE): an
+ * authenticated creator publishes as itself and may write into its own
+ * reserved namespaces; everything else stays a guest.
+ */
+export function publish_actor_from_session(session: Session): PublishActor {
+  return session.kind === "authenticated"
+    ? { kind: "user", user_id: session.user_id }
+    : { kind: "guest" };
+}
+
+/**
+ * HTTP adapter for guest-shaped MdPage placement (EX-PUBLISH, QT-API). All
+ * content and locator rules remain in PagePublisher; this boundary only
  * enforces the JSON contract, bounds request buffering, and maps outcomes.
+ * The caller supplies the session-derived actor; absent means guest.
  */
 export async function publish_guest_md_page_request(
   request: Request,
   publisher: PagePublisher,
+  actor: PublishActor = { kind: "guest" },
 ): Promise<Response> {
   if (!is_json_media_type(request.headers.get("content-type"))) {
     return error_response(
@@ -75,6 +93,7 @@ export async function publish_guest_md_page_request(
     input: decoded.value.css === undefined
       ? { md: decoded.value.md }
       : { md: decoded.value.md, css: decoded.value.css },
+    actor,
   });
   return publish_result_response(request.url, result);
 }
@@ -128,6 +147,12 @@ function publish_result_response(
         403,
         result.reason,
         "namespace is reserved by the platform",
+      );
+    case "namespace_reserved":
+      return error_response(
+        403,
+        result.reason,
+        "namespace is reserved by a creator",
       );
     case "invalid_locator":
       return error_response(

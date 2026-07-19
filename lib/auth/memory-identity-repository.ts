@@ -1,13 +1,19 @@
 import type { IdentityRepository, UserIdGenerator } from "./interfaces.ts";
 import {
-  type ApplicationUser,
-  type ExternalIdentity,
-  type ExternalIdentityObservation,
-  type IdentityResolution,
-  is_authentication_strategy_id,
+  clone_identity,
+  clone_identity_observation,
+  clone_user,
+  create_identity_records,
+  MAX_ID_GENERATION_ATTEMPTS,
+  update_identity,
+  validate_identity_observation,
+} from "./identity-repository-common.ts";
+import type {
+  ApplicationUser,
+  ExternalIdentity,
+  ExternalIdentityObservation,
+  IdentityResolution,
 } from "./model.ts";
-
-const MAX_ID_GENERATION_ATTEMPTS = 8;
 
 /** Process-local identity storage. A restart loses every user and identity. */
 export class MemoryIdentityRepository implements IdentityRepository {
@@ -22,10 +28,11 @@ export class MemoryIdentityRepository implements IdentityRepository {
   find_or_create(
     observation: ExternalIdentityObservation,
   ): Promise<IdentityResolution> {
-    validate_observation(observation);
+    validate_identity_observation(observation);
+    const observed_identity = clone_identity_observation(observation);
     const key = identity_key(
-      observation.strategy_id,
-      observation.provider_subject,
+      observed_identity.strategy_id,
+      observed_identity.provider_subject,
     );
     const existing = this.#identities.get(key);
     if (existing !== undefined) {
@@ -33,9 +40,9 @@ export class MemoryIdentityRepository implements IdentityRepository {
       if (user === undefined) {
         throw new Error("identity repository invariant violated");
       }
-      const identity = observation.observed_at < existing.updated_at
+      const identity = observed_identity.observed_at < existing.updated_at
         ? existing
-        : updated_identity(existing, observation);
+        : update_identity(existing, observed_identity);
       this.#identities.set(key, identity);
       return Promise.resolve({
         user: clone_user(user),
@@ -51,25 +58,12 @@ export class MemoryIdentityRepository implements IdentityRepository {
       }
       if (this.#users.has(user_id)) continue;
 
-      const user: ApplicationUser = {
-        user_id,
-        created_at: new Date(observation.observed_at),
-      };
-      const identity: ExternalIdentity = {
-        user_id,
-        strategy_id: observation.strategy_id,
-        provider_subject: observation.provider_subject,
-        email: observation.email,
-        display_name: observation.display_name,
-        picture_url: observation.picture_url,
-        created_at: new Date(observation.observed_at),
-        updated_at: new Date(observation.observed_at),
-      };
-      this.#users.set(user_id, user);
-      this.#identities.set(key, identity);
+      const records = create_identity_records(user_id, observed_identity);
+      this.#users.set(user_id, records.user);
+      this.#identities.set(key, records.identity);
       return Promise.resolve({
-        user: clone_user(user),
-        identity: clone_identity(identity),
+        user: clone_user(records.user),
+        identity: clone_identity(records.identity),
         created: true,
       });
     }
@@ -104,51 +98,4 @@ export class MemoryIdentityRepository implements IdentityRepository {
 
 function identity_key(strategy_id: string, provider_subject: string): string {
   return JSON.stringify([strategy_id, provider_subject]);
-}
-
-function updated_identity(
-  existing: ExternalIdentity,
-  observation: ExternalIdentityObservation,
-): ExternalIdentity {
-  return {
-    ...existing,
-    email: observation.email,
-    display_name: observation.display_name,
-    picture_url: observation.picture_url,
-    updated_at: new Date(observation.observed_at),
-  };
-}
-
-function validate_observation(
-  observation: ExternalIdentityObservation,
-): void {
-  if (!is_authentication_strategy_id(observation.strategy_id)) {
-    throw new TypeError("strategy_id must be a lowercase route-safe ID");
-  }
-  if (observation.provider_subject.length === 0) {
-    throw new TypeError("provider_subject must not be empty");
-  }
-  if (observation.email.length === 0) {
-    throw new TypeError("email must not be empty");
-  }
-  if (Number.isNaN(observation.observed_at.getTime())) {
-    throw new TypeError("observed_at must be a valid date");
-  }
-}
-
-function clone_user(user: ApplicationUser): ApplicationUser {
-  return { user_id: user.user_id, created_at: new Date(user.created_at) };
-}
-
-function clone_identity(identity: ExternalIdentity): ExternalIdentity {
-  return {
-    user_id: identity.user_id,
-    strategy_id: identity.strategy_id,
-    provider_subject: identity.provider_subject,
-    email: identity.email,
-    display_name: identity.display_name,
-    picture_url: identity.picture_url,
-    created_at: new Date(identity.created_at),
-    updated_at: new Date(identity.updated_at),
-  };
 }

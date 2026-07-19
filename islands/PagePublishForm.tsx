@@ -30,12 +30,14 @@ const initial_markdown = `# Your page
 
 Write. Style. Preview. Publish.`;
 
-export interface GuestPublishFormProps {
+export interface PagePublishFormProps {
   /** Generated once on the server so hydration keeps the visible suggestion. */
   initial_namespace: string;
+  /** Controls copy only; authority is derived again from the server session. */
+  publisher_kind: "guest" | "creator";
 }
 
-export default function GuestPublishForm(props: GuestPublishFormProps) {
+export default function PagePublishForm(props: PagePublishFormProps) {
   const random_name_generator: RandomNameGenerator = useMemo(
     () => new FourWordRandomNameGenerator(),
     [],
@@ -106,11 +108,17 @@ export default function GuestPublishForm(props: GuestPublishFormProps) {
   return (
     <section class="publish-panel" aria-labelledby="publish-heading">
       <div class="section-heading">
-        <p class="eyebrow">Guest publishing</p>
+        <p class="eyebrow">
+          {props.publisher_kind === "creator"
+            ? "Creator publishing"
+            : "Guest publishing"}
+        </p>
         <h2 id="publish-heading">Create a page</h2>
         <p>
           Choose its direct path. A page name is optional; omit it to publish
-          the namespace's default page.
+          the namespace's default page. {props.publisher_kind === "creator"
+            ? "Pages in your reserved namespaces are protected."
+            : "Guest paths remain unprotected."}
         </p>
       </div>
 

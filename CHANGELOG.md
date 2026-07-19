@@ -2,6 +2,83 @@
 
 ## 2026-07-18
 
+- Delivered the namespace-reservation HTTP/UI slice: authenticated creators can
+  list and atomically reserve namespaces through `GET`/`POST /api/namespaces`,
+  with bounded JSON parsing, synchronizer-token CSRF protection, stable response
+  ordering, typed status mapping, and no-store responses. Added an
+  interface-backed server presenter and creator panel for owned claims and the
+  reserve form. Publishing now derives its actor from the resolved session, so
+  owners can publish into their claims while guest and cross-creator writes stay
+  blocked; the publishing UI and protection notice reflect guest versus creator
+  state. Updated README and API requirements. Added 17 tests (307 total).
+
+- Delivered the durable-content storage slice: `DenoKvContentRepository` stores
+  each page as a versioned envelope record plus immutable generation chunks, so
+  source and derived data are not capped by one KV value. Replacement writes the
+  new generation before atomically flipping the envelope and deleting the
+  replaced generation; readers always reassemble one complete page, concurrent
+  replacements settle on one winner without leaked chunks, and corruption is
+  distinguished from contention. Extracted the `ContentRepository` conformance
+  suite from the memory tests and ran memory and Deno KV through it, including
+  multi-chunk and concurrency cases. `IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv`
+  requires Deno KV ownership and inherits its database so persisted pages cannot
+  outlive their namespace reservations; unset keeps pages process-local. Updated
+  README and specification retention guidance. Added 29 tests (290 total).
+
+- Delivered the durable-session storage slice: `DenoKvSessionRepository` uses
+  versioned serialization, absolute-lifetime KV TTLs, and native atomic commits
+  for ID/credential uniqueness, renewal, bounded one-use authentication
+  attempts, credential rotation, CSRF-bound logout, and revocation. A shared
+  implementation-agnostic conformance suite now covers both memory and Deno KV
+  repositories, including concurrency. Environment composition keeps memory as
+  the default and allows `IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv` only with
+  Deno KV ownership, inheriting the ownership database so authenticated sessions
+  cannot outlive their users. Added 32 tests (261 total); page content remains
+  process-local and `durable-storage` remains active for its next slice.
+
+- Delivered the first durable-storage vertical slice: `DenoKvIdentityRepository`
+  and `DenoKvNamespaceRepository` use versioned serialization and native atomic
+  commits, with identity find-or-create/profile ordering and case-insensitive
+  namespace claiming covered by shared implementation-agnostic conformance
+  suites. Environment-driven composition switches application users, external
+  identities, and namespace reservations together so durable claims cannot be
+  orphaned by process-local user IDs; unset remains memory, while content and
+  sessions remain explicitly process-local. Documented no automatic migration,
+  deletion, expiry, or application-managed backup. Added 26 tests (229 total).
+  `durable-storage` remains active for the next repository slice.
+
+- Delivered namespace-reservation step 2 (DS-PROTECT business core):
+  `NamespaceReservationService` behind the new `NamespaceReservationManager`
+  contract validates candidate namespaces through the locator engine (typed
+  `invalid_namespace` / `forbidden_namespace` / `taken` results) before
+  atomically reserving, and lists a user's reservations; publishing now takes an
+  optional `PublishActor` (absent = guest) and consults a `PublishingAuthorizer`
+  — implemented by `NamespacePublishingAuthorizer` over `NamespaceRepository` —
+  so guest and cross-user writes into reserved namespaces are rejected with
+  typed `namespace_reserved` (403 on the guest API) while owners and unreserved
+  namespaces keep current behavior; `ContentRepository` stays protection-free by
+  contract. Wired in the composition root; 17 new tests (203 total). Completed
+  `namespace-reservation-service`; step 3 (HTTP API + site UI) is next.
+
+- Delivered namespace-reservation step 1 (DS-PROTECT contracts): new
+  `lib/namespace/` with the `NamespaceReservation` model, a
+  `NamespaceRepository` contract documenting atomic reserve (exactly one winner
+  under concurrent attempts, typed `taken` for losers) and case-insensitive
+  identity derived through the locator key so reservation and locator rules
+  cannot diverge, an in-memory implementation, and an implementation-agnostic
+  conformance suite that durable backends reuse unchanged (9 tests, 186 total).
+  Completed `namespace-reservation-contracts`; queued
+  `namespace-reservation-service` (step 2: reservation service + publishing
+  authorization).
+
+- Planned the next delivery step as two focused tasks: activated
+  `namespace-reservation-contracts`, step 1 of the four-step DS-PROTECT
+  namespace direction (spec-priority policy: divergent implementation is
+  rejected, direction changes update the spec first), and queued the
+  `durable-storage` backlog task on purpose - interface-pattern persistence with
+  switchable backends (Postgres, MongoDB, Deno KV, ...) while in-memory remains
+  the first legitimate implementation.
+
 - Simplified dynamic local Google authentication configuration: a configured
   request-host pattern now takes precedence immediately, so request-derived
   callback and mock-consent URLs no longer require inherited static URL

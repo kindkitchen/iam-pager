@@ -1,6 +1,6 @@
 {
   "nodeModulesDir": "manual",
-  "unstable": ["fmt-component"],
+  "unstable": ["fmt-component", "kv"],
   "tasks": {
     "check": "deno fmt --check . && deno lint . && deno check",
     "test": "deno test --allow-env lib",
@@ -29,7 +29,13 @@
     "@types/babel__core": "npm:@types/babel__core@^7.20.5"
   },
   "compilerOptions": {
-    "lib": ["dom", "dom.asynciterable", "dom.iterable", "deno.ns"],
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns",
+      "deno.unstable"
+    ],
     "jsx": "precompile",
     "jsxImportSource": "preact",
     "jsxPrecompileSkipElements": [
