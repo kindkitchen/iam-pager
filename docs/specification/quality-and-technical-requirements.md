@@ -31,6 +31,14 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
+The new `PageService` is the HTTP/session-independent application boundary for
+trial and managed page behavior. It receives a typed actor and resolves
+namespace authority through an interface, while repositories alone own atomic
+locator, ID, and revision conditions. Owner-safe summaries and inspection input
+exclude stewardship IDs and stored derivations. This service currently runs
+against the memory page repository; route composition and the Deno KV page
+adapter remain the next fragments.
+
 ## QT-STORAGE — Repository persistence
 
 Each durable adapter must preserve its repository contract and pass the same

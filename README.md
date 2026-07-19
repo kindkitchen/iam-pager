@@ -137,6 +137,14 @@ The first publishing slice currently provides:
   cross-user writes into reserved namespaces while allowing the owner; ownership
   is in-memory by default, or Deno KV can atomically persist users, external
   identities, and namespace claims together;
+- the next page-management core under `lib/page/`: stable opaque page IDs,
+  trial/managed stewardship, access and revision invariants, an atomic
+  repository contract with deterministic owner pagination, its memory backend,
+  and an HTTP-independent `PageService` for trial publish plus managed create,
+  list, source inspection, content/access update, deletion, and owner-only
+  private delivery. This core is tested but is not composed into the current
+  routes yet; the existing endpoint behavior below remains authoritative until
+  the HTTP/storage migration lands;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - interface-backed create-or-replace content storage, in memory by default or
   optionally persisted in linked Deno KV generation chunks;

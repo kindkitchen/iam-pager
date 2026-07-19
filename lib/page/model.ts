@@ -81,6 +81,12 @@ export function page_record_violation(record: PageRecord): string | null {
   if (!is_valid_page_access(record.access)) {
     return "access must be public or private";
   }
+  if (
+    record.stewardship.kind !== "trial" &&
+    record.stewardship.kind !== "managed"
+  ) {
+    return "stewardship kind must be trial or managed";
+  }
   if (record.stewardship.kind === "trial" && record.access !== "public") {
     return "trial pages must be public";
   }

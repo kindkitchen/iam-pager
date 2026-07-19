@@ -254,8 +254,9 @@ remains only until its absolute-lifetime TTL.
 
 Changing backend or ownership path does not migrate sessions. Backup and
 recovery follow the selected KV provider or deployment operator. Page content
-remains process-local. Repository interfaces remain the replacement boundaries,
-and cookie transport remains independent from session storage.
+separately remains memory-backed by default and can opt into the linked Deno KV
+ownership database. Repository interfaces remain the replacement boundaries, and
+cookie transport remains independent from session storage.
 
 ## Next boundary
 
@@ -266,8 +267,10 @@ provider-owned recovery, in-place guest upgrade, and logout revocation.
 Authentication does not itself confer namespace or publishing authority.
 
 Namespace reservation and publishing authorization now exist as server-owned
-business services, with optional Deno KV persistence for the linked identity and
-claim records. Their authenticated HTTP/API and site surfaces, including wiring
-the resolved session user as the publishing actor, are the next product
-boundary. Profile/account/settings navigation remains optional follow-up UI work
-and must not substitute for that authority.
+business services with optional Deno KV persistence, authenticated HTTP APIs,
+and a site reservation panel; publishing already receives the resolved session
+actor. The HTTP-independent managed-page service is also implemented against the
+new page repository contract. Its Deno KV adapter, HTTP/API composition, and
+private direct-delivery route wiring are the next product boundary.
+Profile/account/settings navigation remains optional follow-up UI work and must
+not substitute for that authority.

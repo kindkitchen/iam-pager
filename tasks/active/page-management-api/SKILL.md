@@ -7,31 +7,25 @@ tags: [api, backend, security, storage]
 relates: []
 ---
 
-Active; implementing the plan in `003.plan.md`. Steps 2-4 are delivered
-(005.log): `lib/page/` holds the page model with id/stewardship/access/
-revision invariants, the `PageRepository` contract with strict list cursors,
-the backend-neutral conformance suite, and the memory implementation;
-`ContentTypeHandler.to_input` returns editable source. Next: step 5, the
-`PageService` application layer, then the Deno KV repository (step 6).
+Active; implementing `003.plan.md`. Steps 2-5 are delivered (`005.log`,
+`006.log`): `lib/page/` now holds the invariant-checked page model, atomic
+repository contract, strict list cursors, backend-neutral conformance suite,
+memory adapter, repository-backed namespace-authority resolver, and the
+HTTP/session-independent `PageService`.
 
-The specification already fixes the product boundary: creators manage default
-and named pages in reserved namespaces; managed pages can be public or private;
-private direct requests look missing to non-owners; guests publish only public
-trial content without guarantees. The next task implements the DS-PROTECT core
-through interface-backed application services and an explicit HTTP API. UI is
-not an acceptance source and receives only minimal compatibility wiring.
+The service covers public-only trial create/replace; managed create over an
+owned reservation (including atomic trial replacement); owner-safe bounded
+list and editable-source inspection; revision-bound content/access update and
+deletion; and public/owner-private delivery. It retries generated-ID collisions
+within a fixed bound, never exposes owner IDs or stored derivations in management
+representations, and authorizes private delivery before handler lookup.
 
-The planned API creates managed resources, lists and inspects owner-visible
-source, atomically patches content/access with revisions, and deletes. Stable
-opaque page IDs keep management identity independent from renameable direct
-locators. Trial writes can replace only trial pages; managed creation replaces a
-trial at its locator; no trial write can replace a managed page.
+Next: step 6, implement the Deno KV `PageRepository` with fresh page keyspace,
+chunked content, coherent ID/locator/owner indexes, conditional revisions,
+corruption checks, and the unchanged conformance suite. Then proceed to HTTP
+primitives/adapter and composition in plan order.
 
 No production-data migration or legacy API compatibility is required. Rename,
 duplicate, bulk actions, tags, filters beyond namespace, search, and management
-UI remain later DS-MANAGE work, but the page ID/revision contracts are designed
-to extend to them.
-
-Gates after the storage fragment: check, build, and all 342 tests pass.
-Follow the plan's implementation sequence in order, keeping checks and tests
-green at each step.
+UI remain later DS-MANAGE work. Current gates: check, build, and all 359 tests
+pass.

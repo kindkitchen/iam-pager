@@ -1,4 +1,4 @@
-import type { PageIdGenerator } from "./interfaces.ts";
+import type { PageClock, PageIdGenerator } from "./interfaces.ts";
 
 /** 128-bit random id encoded as unpadded base64url: 22 route-safe chars. */
 export class CryptoPageIdGenerator implements PageIdGenerator {
@@ -10,5 +10,11 @@ export class CryptoPageIdGenerator implements PageIdGenerator {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, "");
+  }
+}
+
+export class SystemPageClock implements PageClock {
+  now(): Date {
+    return new Date();
   }
 }

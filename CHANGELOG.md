@@ -2,6 +2,16 @@
 
 ## 2026-07-19
 
+- Implemented the HTTP-independent page-management application layer: typed
+  guest/user actors and namespace-authority resolution, trial public
+  create-or-replace, managed create over owned reservations, owner-safe bounded
+  listing and editable-source inspection, atomic revision-bound content/access
+  updates and deletion, and public/owner-private delivery with authorization
+  before handler disclosure. The service retries generated-ID collisions,
+  derives delivery metadata from validated content, and keeps owner IDs and
+  stored derivations out of management representations. Check, build, and all
+  359 tests pass (17 new); route composition remains a later fragment.
+
 - Implemented the page-management storage foundation (`page-management-api` plan
   steps 2-4): a new `lib/page/` module with the page domain model (stable opaque
   page IDs, publisher-cased locators, trial/managed stewardship, public/private
