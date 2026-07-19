@@ -19,3 +19,21 @@ export interface NamespaceReservation {
 export function namespace_key(namespace: string): string {
   return locator_key({ namespace });
 }
+
+/**
+ * Stable public order for owned reservations — oldest first, then spelling —
+ * so API responses and site panels never depend on repository iteration.
+ */
+export function sort_reservations(
+  reservations: readonly NamespaceReservation[],
+): NamespaceReservation[] {
+  return [...reservations].sort((left, right) =>
+    left.reserved_at.getTime() - right.reserved_at.getTime() ||
+    compare_text(namespace_key(left.namespace), namespace_key(right.namespace))
+  );
+}
+
+/** Locale-independent ordering keeps API output identical across runtimes. */
+function compare_text(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}

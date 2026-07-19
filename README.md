@@ -128,41 +128,42 @@ The first publishing slice currently provides:
   local return or a CSRF-protected logout form, and components render that
   complete model without receiving session IDs or making authorization
   decisions;
-- namespace reservation business logic: an interface-backed reservation service
-  that validates candidate namespaces through the locator engine (typed
-  rejections for forbidden and malformed names) and atomically claims them
-  case-insensitively for one owner, plus publishing authorization that rejects
-  guest and cross-user writes into reserved namespaces while the owner and all
-  unreserved namespaces keep current behavior (no HTTP surface yet); ownership
-  persistence is in-memory by default, or Deno KV can atomically persist users,
-  external identities, and namespace claims together so claims cannot be
-  orphaned by process-local user IDs;
+- namespace reservation: an interface-backed service validates candidate names
+  through the locator engine and atomically claims them case-insensitively for
+  one owner; authenticated `GET`/`POST /api/namespaces` adapters list and
+  reserve claims, the mutation requires the session's synchronizer CSRF token,
+  and the site presents the creator's owned namespaces and reserve form;
+  publishing derives its actor from the resolved session, rejecting guest and
+  cross-user writes into reserved namespaces while allowing the owner; ownership
+  is in-memory by default, or Deno KV can atomically persist users, external
+  identities, and namespace claims together;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
-- in-memory create-or-replace storage (content is lost when the process stops);
-- the site shell and mobile-first guest publishing form at `/` and `/site/*`,
-  with soft in-field four-word random locator helpers, a collapsible Page
-  workspace with exclusive Markdown/CSS source panes, split or full-width
+- interface-backed create-or-replace content storage, in memory by default or
+  optionally persisted in linked Deno KV generation chunks;
+- the site shell and mobile-first guest/creator publishing form at `/` and
+  `/site/*`, with soft in-field four-word random locator helpers, a collapsible
+  Page workspace with exclusive Markdown/CSS source panes, split or full-width
   preview layouts, fullscreen preview, raw and guided Markdown section editing,
   fenced code-block sections, grip-driven section ordering and value merging,
   CSS-reactive sandboxed section previews, editable element-based CSS presets,
   CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
-  `site` and `api` remain reserved as namespaces;
-- `POST /api/pages` for JSON guest publishing, returning the direct path and
-  URL;
+  `site`, `api`, and `auth` remain reserved as namespaces;
+- `POST /api/pages` for JSON guest or authenticated-creator publishing,
+  returning the direct path and URL;
+- authenticated `GET /api/namespaces` and CSRF-protected `POST /api/namespaces`
+  for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
   length, cache, disposition, and active-content isolation headers;
 - prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
   KiB of CSS (all content limits are measured as UTF-8 bytes).
 
-Guest pages are currently process-local. Users, external identities, namespace
-reservations, and sessions are also process-local by default. Deno KV can
-persist the linked ownership records, and sessions can separately opt into that
-same database; durable sessions are rejected unless ownership is durable so an
-authenticated session cannot outlive its user. Guest pages in unreserved
-namespaces remain replaceable by anyone. Total page capacity, publishing
-frequency, expiry, a reservation HTTP/UI surface, durable content storage, and
-backend migration are not implemented; this endpoint is not ready for untrusted
-public traffic.
+Pages, users, external identities, namespace reservations, and sessions are
+process-local by default. Deno KV can persist linked ownership records, while
+sessions and content separately opt into that same database; either durable
+store is rejected unless ownership is durable. Pages in unreserved namespaces
+remain replaceable by anyone. Total page capacity, publishing frequency,
+expiry/deletion, creator page management, search, and backend migration are not
+implemented; these endpoints are not ready for untrusted public traffic.
 
 ## Local development
 
@@ -179,8 +180,10 @@ current local site URL with an upgraded browser session. A failed callback shows
 a site-owned retry page without preserving reusable callback state. An
 authenticated header shows only signed-in state and the CSRF-protected
 `Sign out` action; signing out revokes that authenticated bearer and immediately
-rotates the browser to a distinct guest session. Authenticated publishing actor
-wiring, namespace reservation HTTP/UI, and management are not implemented yet.
+rotates the browser to a distinct guest session. Signed-in creators can reserve
+and list namespaces through the creator panel, then publish into their own
+claim; page inspection, access control, deletion, and broader management remain
+future work.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

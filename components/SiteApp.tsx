@@ -1,4 +1,6 @@
-import GuestPublishForm from "../islands/GuestPublishForm.tsx";
+import PagePublishForm from "../islands/PagePublishForm.tsx";
+import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
+import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
 import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
 import type {
   SiteNavigation,
@@ -7,10 +9,11 @@ import type {
 
 export interface SiteAppProps {
   readonly navigation: SiteNavigation;
+  readonly namespace_panel: NamespacePanel;
 }
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
-export function SiteApp({ navigation }: SiteAppProps) {
+export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
   const initial_namespace = new FourWordRandomNameGenerator().generate();
   return (
     <main class="site-app">
@@ -24,14 +27,30 @@ export function SiteApp({ navigation }: SiteAppProps) {
         </p>
       </header>
 
-      <GuestPublishForm initial_namespace={initial_namespace} />
+      {namespace_panel.kind === "creator" && (
+        <NamespaceReservationPanel
+          csrf_token={namespace_panel.csrf_token}
+          initial_reservations={namespace_panel.reservations}
+        />
+      )}
+
+      <PagePublishForm
+        initial_namespace={initial_namespace}
+        publisher_kind={namespace_panel.kind === "creator"
+          ? "creator"
+          : "guest"}
+      />
 
       <aside class="guest-notice">
-        <h2>Guest pages are temporary and unprotected</h2>
+        <h2>
+          {namespace_panel.kind === "creator"
+            ? "Unreserved pages remain unprotected"
+            : "Guest pages are unprotected"}
+        </h2>
         <p>
-          Publishing at an existing guest path replaces it. The namespace is not
-          reserved, pages are kept only in this running process, and they do not
-          appear in search or browsing.
+          Publishing at an existing unreserved path replaces it, and those pages
+          do not appear in search or browsing. Reserve the namespace first to
+          protect it from guest and cross-creator writes.
         </p>
       </aside>
     </main>

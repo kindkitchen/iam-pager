@@ -34,10 +34,16 @@ import {
 } from "./publishing/mod.ts";
 import {
   MemoryNamespaceRepository,
+  NamespaceHttpAdapter,
+  type NamespaceHttpHandler,
   type NamespaceRepository,
   type NamespaceReservationManager,
   NamespaceReservationService,
 } from "./namespace/mod.ts";
+import {
+  CreatorNamespacePanelPresenter,
+  type NamespacePanelPresenter,
+} from "./ui/namespace-panel.ts";
 import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
@@ -82,6 +88,8 @@ export interface AppServices {
   repository: ContentRepository;
   namespace_repository: NamespaceRepository;
   namespaces: NamespaceReservationManager;
+  namespaces_http: NamespaceHttpHandler;
+  namespace_panel: NamespacePanelPresenter;
   publishing: PagePublisher & PageDeliverer;
   session: SessionManager;
   session_transport: SessionTransport;
@@ -151,6 +159,11 @@ export function create_app_services(
     engine,
     repository: namespace_repository,
   });
+  const namespaces_http = new NamespaceHttpAdapter({ namespaces, engine });
+  const namespace_panel = new CreatorNamespacePanelPresenter({
+    namespaces,
+    engine,
+  });
   const publishing = new PublishingService({
     engine,
     repository,
@@ -202,6 +215,8 @@ export function create_app_services(
     repository,
     namespace_repository,
     namespaces,
+    namespaces_http,
+    namespace_panel,
     publishing,
     session,
     session_transport,

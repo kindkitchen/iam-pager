@@ -1,8 +1,10 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { create_app_services } from "../app.ts";
+import type { Session } from "../session/model.ts";
 import { deliver_locator_path } from "./http.ts";
 import {
   guest_publish_request_max_bytes,
+  publish_actor_from_session,
   publish_guest_md_page_request,
 } from "./guest-http.ts";
 
@@ -130,6 +132,54 @@ Deno.test("guest API rejects publishing into a creator-reserved namespace", asyn
     error: "namespace_reserved",
     detail: "namespace is reserved by a creator",
   });
+});
+
+Deno.test("session-derived actor lets the owner publish into its reserved namespace", async () => {
+  const { publishing, namespaces } = create_app_services();
+  const reserved = await namespaces.reserve({
+    namespace: "Claimed",
+    owner_user_id: "owner-1",
+  });
+  assertEquals(reserved.ok, true);
+
+  const owner = await publish_guest_md_page_request(
+    json_request({ namespace: "claimed", md: "# Mine" }),
+    publishing,
+    { kind: "user", user_id: "owner-1" },
+  );
+  assertEquals(owner.status, 201);
+
+  const other = await publish_guest_md_page_request(
+    json_request({ namespace: "claimed", md: "# Takeover" }),
+    publishing,
+    { kind: "user", user_id: "owner-2" },
+  );
+  assertEquals(other.status, 403);
+  assertEquals((await other.json()).error, "namespace_reserved");
+});
+
+Deno.test("publish actors derive from the request session kind", () => {
+  const now = new Date("2026-07-18T12:00:00.000Z");
+  const guest_session: Session = {
+    kind: "guest",
+    session_id: "session-1",
+    session_version: 1,
+    created_at: now,
+    last_seen_at: now,
+    absolute_expires_at: new Date("2026-07-25T12:00:00.000Z"),
+  };
+  assertEquals(publish_actor_from_session(guest_session), { kind: "guest" });
+  assertEquals(
+    publish_actor_from_session({
+      ...guest_session,
+      kind: "authenticated",
+      user_id: "user-1",
+      authenticated_at: now,
+      idle_expires_at: new Date("2026-08-17T12:00:00.000Z"),
+      csrf_token: "c".repeat(43),
+    }),
+    { kind: "user", user_id: "user-1" },
+  );
 });
 
 Deno.test("guest API surfaces MdPage validation", async () => {

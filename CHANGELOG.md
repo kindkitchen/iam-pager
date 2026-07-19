@@ -2,6 +2,16 @@
 
 ## 2026-07-18
 
+- Delivered the namespace-reservation HTTP/UI slice: authenticated creators can
+  list and atomically reserve namespaces through `GET`/`POST /api/namespaces`,
+  with bounded JSON parsing, synchronizer-token CSRF protection, stable response
+  ordering, typed status mapping, and no-store responses. Added an
+  interface-backed server presenter and creator panel for owned claims and the
+  reserve form. Publishing now derives its actor from the resolved session, so
+  owners can publish into their claims while guest and cross-creator writes stay
+  blocked; the publishing UI and protection notice reflect guest versus creator
+  state. Updated README and API requirements. Added 17 tests (307 total).
+
 - Delivered the durable-content storage slice: `DenoKvContentRepository` stores
   each page as a versioned envelope record plus immutable generation chunks, so
   source and derived data are not capped by one KV value. Replacement writes the

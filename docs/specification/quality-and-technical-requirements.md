@@ -242,8 +242,10 @@ ownership. Authentication establishes user identity only: namespace reservation
 and publishing authorization remain explicit services above it. Those services
 now enforce concurrency-safe ownership, and configured Deno KV can preserve the
 provider identity, application user, namespace claim, and opted-in session
-across restarts; the reservation HTTP/UI boundary and authenticated actor wiring
-are still pending. See
+across restarts. An authenticated JSON API and server-owned site presenter
+expose reservation listing and CSRF-protected claiming; publishing derives the
+actor from the resolved request session so only the owner can write into a
+reserved namespace. See
 [session-and-authentication.md](session-and-authentication.md).
 
 The `auth` namespace is reserved alongside `site` and `api`, so authentication
@@ -265,12 +267,25 @@ buttons. The current overwriteable guest flow has no locator availability
 endpoint, so numeric fallback only avoids a combination already generated in the
 local UI.
 
-The current guest API is `POST /api/pages` with an `application/json` body:
+The publishing API is `POST /api/pages` with an `application/json` body:
 `namespace` and `md` are required strings; `page_name` and `css` are optional
-strings. Success returns `201`, a relative `Location` header, and JSON
-containing `path` and absolute `url`. Malformed requests return `400`, oversized
-request bodies `413`, unsupported media types `415`, reserved namespaces `403`,
-and locator or content validation failures `422`. Responses use `no-store`.
+strings. A guest request remains unowned; an authenticated request derives its
+creator actor from the resolved server session and can write into that creator's
+reserved namespace. Success returns `201`, a relative `Location` header, and
+JSON containing `path` and absolute `url`. Malformed requests return `400`,
+oversized request bodies `413`, unsupported media types `415`, reserved
+namespaces `403`, and locator or content validation failures `422`. Responses
+use `no-store`.
+
+Authenticated namespace ownership uses `GET /api/namespaces` to list the
+caller's claims and `POST /api/namespaces` with required string `namespace` and
+`csrf_token` fields to claim one. The synchronizer token must match the resolved
+authenticated session. Creation returns `201`, a direct-path `Location`, and a
+reservation with its namespace, path, and ISO timestamp. Unauthenticated calls
+return `401`; invalid CSRF and platform namespaces return `403`; malformed and
+oversized bodies return `400`/`413`; unsupported media types return `415`; taken
+names return `409`; invalid locator names return `422`. Responses use
+`no-store`.
 
 ## QT-SEARCH — Search and privacy
 
