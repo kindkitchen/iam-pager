@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-19
+
+- Planned and activated `page-management-api`, the DS-PROTECT continuation
+  after namespace reservation: API-first managed-page create, list, inspect,
+  revision-bound content/access update, and delete with stable opaque page IDs,
+  explicit trial-versus-managed stewardship, and owner-only private direct
+  delivery, all in interface-backed code with UI reduced to compatibility
+  wiring. A narrower access-only exploration was discarded during planning; its
+  valid conclusions are folded into the task's analysis and plan. Baseline
+  check and all 307 tests pass.
+
 ## 2026-07-18
 
 - Delivered the namespace-reservation HTTP/UI slice: authenticated creators can
