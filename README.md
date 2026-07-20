@@ -89,9 +89,9 @@ ownership guarantee.
 Content can have different formats. It may be HTML, text, a PDF, an image, or
 another supported type. Depending on the endpoint profile, a direct URL may
 display the content or download it. The transport-independent PDF content core
-is implemented; binary upload and user-configured endpoint commands remain
-planned. One stored PDF may have browser-native inline and attachment endpoints
-at independently chosen valid locators.
+and user-configured endpoint application commands are implemented; strict binary
+HTTP upload remains planned. One stored PDF may have browser-native inline and
+attachment endpoints at independently chosen valid locators.
 
 ## Current implementation
 
@@ -340,17 +340,20 @@ profile unsupported by the content handler, and maps that profile—not a path
 suffix or filename hint—to inline or attachment disposition. This completes the
 content/endpoint prerequisite. The PDF content core now validates and detaches
 bounded bytes and safe filename metadata, derives fixed delivery metadata, and
-keeps bytes out of management inspection. Generic application commands still
-need complete endpoint-set inputs that preserve alternates through rename and
-duplication. A conforming Kvdex-backed Deno KV page/content adapter, strict
-bounded upload/direct delivery, and the PDF site projection follow. The retained
-raw-Deno-KV repository still uses the legacy compatibility path. Kvdex remains
-inside the durable adapter. Its segmented blob writes do not by themselves
-preserve atomic visibility, so immutable assets must be fully staged before page
-endpoints can reference them. Existing raw Deno KV records require explicit
-compatibility or migration before that adapter becomes the durable default.
-Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and external
-storage remain later work.
+keeps bytes out of management inspection. Generic application commands accept
+complete endpoint-set intent for trial and managed creation and revision-bound
+replacement. Canonical rename preserves every alternate; endpoint-aware
+duplication requires a fresh complete destination set, while the existing
+one-inline-endpoint command remains the compatibility path. A conforming
+Kvdex-backed Deno KV page/content adapter, strict bounded upload/direct
+delivery, and the PDF site projection follow. The retained raw-Deno-KV
+repository rejects non-compatible endpoint sets without partial mutation. Kvdex
+remains inside the durable adapter. Its segmented blob writes do not by
+themselves preserve atomic visibility, so immutable assets must be fully staged
+before page endpoints can reference them. Existing raw Deno KV records require
+explicit compatibility or migration before that adapter becomes the durable
+default. Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and
+external storage remain later work.
 
 ## Local development
 

@@ -956,7 +956,24 @@ function create_failure_response(
     case "invalid_locator":
     case "invalid_access":
     case "invalid_tags":
+    case "invalid_endpoint_count":
+    case "namespace_mismatch":
+    case "duplicate_locator":
+    case "unsupported_delivery_profile":
       return error_response(422, result.reason, "page input is invalid");
+    case "endpoint_conflict":
+    case "revision_exhausted":
+      return error_response(
+        409,
+        result.reason,
+        "page endpoints cannot be replaced",
+      );
+    case "endpoint_set_unsupported":
+      return error_response(
+        503,
+        result.reason,
+        "configured page storage does not support endpoint sets",
+      );
     case "unknown_content_type":
       return error_response(
         422,
@@ -1029,6 +1046,25 @@ function update_failure_response(
         result.reason === "invalid_input"
           ? result.detail
           : "page metadata is invalid",
+      );
+    case "forbidden_namespace":
+    case "invalid_locator":
+    case "invalid_endpoint_count":
+    case "namespace_mismatch":
+    case "duplicate_locator":
+    case "unsupported_delivery_profile":
+      return error_response(422, result.reason, "page endpoints are invalid");
+    case "page_exists":
+      return error_response(
+        409,
+        result.reason,
+        "a managed page already claims an endpoint",
+      );
+    case "endpoint_set_unsupported":
+      return error_response(
+        503,
+        result.reason,
+        "configured page storage does not support endpoint sets",
       );
     case "unknown_content_type":
       return error_response(
@@ -1113,6 +1149,26 @@ function duplicate_failure_response(
         500,
         "page_unavailable",
         "page cannot be represented",
+      );
+    case "endpoint_set_required":
+    case "forbidden_namespace":
+    case "invalid_locator":
+    case "invalid_endpoint_count":
+    case "namespace_mismatch":
+    case "duplicate_locator":
+    case "unsupported_delivery_profile":
+      return error_response(422, result.reason, "page endpoints are required");
+    case "page_exists":
+      return error_response(
+        409,
+        result.reason,
+        "a managed page already claims an endpoint",
+      );
+    case "endpoint_set_unsupported":
+      return error_response(
+        503,
+        result.reason,
+        "configured page storage does not support endpoint sets",
       );
     case "page_name_generation_exhausted":
     case "page_id_generation_exhausted":

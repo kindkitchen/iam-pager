@@ -108,10 +108,11 @@ explicitly list the formats and limits it actually accepts rather than
 pretending every file can be displayed safely. `md-page` is implemented. The
 transport-independent `pdf` handler is also implemented with a 16 MiB bound,
 fixed `application/pdf` media type, detached immutable bytes, bounded safe
-filename metadata, and both inline and attachment profile support. Binary upload
-and user-configured endpoint application commands remain later; either profile
-may use any valid, non-conflicting locator. Generic raw-binary handling remains
-later.
+filename metadata, and both inline and attachment profile support. Generic
+application commands now accept user-configured complete endpoint intent for
+creation, revision-bound replacement, and duplication; either profile may use
+any valid, non-conflicting locator. Binary HTTP upload and generic raw-binary
+handling remain later.
 
 ## DA-ACCESS — Access
 
@@ -160,9 +161,10 @@ revision and refreshes a stale source instead of retrying it.
 
 Duplication creates a fresh page and destination endpoint set but may safely
 reference the same immutable content asset. A later replacement changes only the
-mutated page's asset reference. The implemented one-endpoint `md-page` duplicate
-continues to generate one available canonical name; endpoint-aware content will
-supply a complete fresh destination set.
+mutated page's asset reference. The one-endpoint `md-page` compatibility command
+continues to generate one available canonical name; endpoint-aware application
+callers must supply a complete fresh destination set so aliases are never
+silently dropped.
 
 Authenticated storage should be durable enough for normal management use, but
 the app should not promise that content can never disappear under any

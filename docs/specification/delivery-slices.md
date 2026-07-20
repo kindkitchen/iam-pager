@@ -121,9 +121,12 @@ attachment disposition. The generic prerequisite is complete. The
 transport-independent PDF content core is now implemented: it validates and
 detaches at most 16 MiB, fixes media type, retains safe filename/version
 metadata, declares both profiles, and keeps bytes out of management inspection.
-Generic application endpoint-set commands, the conforming Kvdex-backed Deno KV
-adapter, strict bounded HTTP upload/delivery, and secondary PDF site projection
-follow. Generic binary fallback and external storage remain later.
+Generic application endpoint-set commands are now complete: create and
+revision-bound update plan the full set, canonical rename retains alternates,
+and endpoint-aware duplication requires a fresh full destination set. The
+conforming Kvdex-backed Deno KV adapter, strict bounded HTTP upload/delivery,
+and secondary PDF site projection follow. Generic binary fallback and external
+storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

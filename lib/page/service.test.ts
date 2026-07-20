@@ -225,7 +225,16 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
 
   const created = await service.create_managed({
     actor: owner,
-    locator: { namespace: "Mine", page_name: "report-preview" },
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "report-preview" },
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "report-download" },
+        delivery_profile: "attachment",
+      }],
+    },
     access: "public",
     content: {
       content_type: "pdf",
@@ -241,32 +250,12 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
     created.page.page_id,
   );
   assert(aggregate !== null);
-  const endpoint_update = await repository.update_managed_page_aggregate({
-    page_id: aggregate.page_id,
-    owner_user_id: owner.user_id,
-    expected_revision: 1,
-    patch: {
-      endpoint_set: {
-        canonical: {
-          locator: { namespace: "Mine", page_name: "report-preview" },
-          delivery_profile: "inline",
-        },
-        alternates: [{
-          locator: { namespace: "Mine", page_name: "report-download" },
-          delivery_profile: "attachment",
-        }],
-      },
-    },
-    now: t2,
-  });
-  assert(endpoint_update.ok);
-
   const inspected = await service.inspect_managed({
     actor: owner,
     page_id: aggregate.page_id,
   });
   assert(inspected.ok);
-  assertEquals(inspected.page.revision, 2);
+  assertEquals(inspected.page.revision, 1);
   assertEquals(inspected.page.content.input, {
     filename: "report.data",
     media_type: pdf_media_type,
@@ -308,7 +297,7 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
   const replaced = await service.update_managed({
     actor: owner,
     page_id: aggregate.page_id,
-    expected_revision: 2,
+    expected_revision: 1,
     patch: {
       content: {
         content_type: "pdf",
@@ -318,7 +307,7 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
   });
   assert(replaced.ok);
   replacement_input.fill(0);
-  assertEquals(replaced.page.revision, 3);
+  assertEquals(replaced.page.revision, 2);
   assertEquals(replaced.page.endpoints, inspected.page.endpoints);
   for (const page_name of ["report-preview", "report-download"]) {
     const delivered = await service.deliver(
@@ -333,7 +322,7 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
   const made_private = await service.update_managed({
     actor: owner,
     page_id: aggregate.page_id,
-    expected_revision: 3,
+    expected_revision: 2,
     patch: { access: "private" },
   });
   assert(made_private.ok);
@@ -351,7 +340,7 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
     await service.delete_managed({
       actor: owner,
       page_id: aggregate.page_id,
-      expected_revision: 4,
+      expected_revision: 3,
     }),
     { ok: true },
   );
@@ -361,6 +350,292 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
       { ok: false, reason: "not_found" },
     );
   }
+});
+
+Deno.test("PageService preserves complete PDF endpoints through update, rename, and duplicate", async () => {
+  const bytes = pdf_bytes("1.7", "endpoint-lifecycle");
+  const { service, repository } = await make_fixture({
+    ids: ["pdf-source", "protected", "pdf-copy", "conflicted-copy"],
+    dates: [t1, t1, t2, t3],
+  });
+  const source = await service.create_managed({
+    actor: owner,
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "source-preview" },
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "source-download" },
+        delivery_profile: "attachment",
+      }],
+    },
+    access: "public",
+    tags: ["reference"],
+    content: {
+      content_type: "pdf",
+      input: { bytes, filename: "source.pdf" },
+    },
+  });
+  const protected_page = await service.create_managed(
+    managed_request("taken", "private", "# Protected"),
+  );
+  assert(source.ok && protected_page.ok);
+
+  const endpoint_update = await service.update_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 1,
+    patch: {
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "source-preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "z-download" },
+          delivery_profile: "attachment",
+        }, {
+          locator: { namespace: "MINE", page_name: "a-preview" },
+          delivery_profile: "inline",
+        }],
+      },
+    },
+  });
+  assert(endpoint_update.ok);
+  assertEquals(endpoint_update.page.revision, 2);
+  assertEquals(
+    endpoint_update.page.endpoints.alternates.map((endpoint) => ({
+      path: endpoint.path,
+      delivery_profile: endpoint.delivery_profile,
+    })),
+    [
+      { path: "/MINE/a-preview", delivery_profile: "inline" },
+      { path: "/Mine/z-download", delivery_profile: "attachment" },
+    ],
+  );
+
+  const reordered_noop = await service.update_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 2,
+    patch: {
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "source-preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "z-download" },
+          delivery_profile: "attachment",
+        }, {
+          locator: { namespace: "MINE", page_name: "a-preview" },
+          delivery_profile: "inline",
+        }],
+      },
+    },
+  });
+  assert(reordered_noop.ok);
+  assertEquals(reordered_noop.page.revision, 2);
+
+  assertEquals(
+    await service.update_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 2,
+      patch: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "source-preview" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "taken" },
+            delivery_profile: "attachment",
+          }],
+        },
+      },
+    }),
+    { ok: false, reason: "page_exists" },
+  );
+  assertEquals(
+    await service.rename_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 2,
+      page_name: "a-preview",
+    }),
+    { ok: false, reason: "page_exists" },
+  );
+
+  const renamed = await service.rename_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 2,
+    page_name: "moved-preview",
+  });
+  assert(renamed.ok);
+  assertEquals(renamed.page.revision, 3);
+  assertEquals(renamed.page.path, "/Mine/moved-preview");
+  assertEquals(
+    renamed.page.endpoints.alternates,
+    endpoint_update.page.endpoints.alternates,
+  );
+  assertEquals(
+    await service.duplicate_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 3,
+    }),
+    { ok: false, reason: "endpoint_set_required" },
+  );
+
+  const duplicated = await service.duplicate_managed({
+    actor: owner,
+    page_id: source.page.page_id,
+    expected_revision: 3,
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "copy-preview" },
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "copy-download" },
+        delivery_profile: "attachment",
+      }],
+    },
+  });
+  assert(duplicated.ok);
+  assertEquals(duplicated.page.page_id, "pdf-copy");
+  assertEquals(duplicated.page.revision, 1);
+  assertEquals(duplicated.page.tags, ["reference"]);
+  assertEquals(
+    duplicated.page.endpoints.alternates[0].delivery_profile,
+    "attachment",
+  );
+  assertEquals((await repository.find_by_id("pdf-source"))?.revision, 3);
+
+  for (const page_name of ["moved-preview", "a-preview", "z-download"]) {
+    const delivered = await service.deliver(
+      { namespace: "Mine", page_name },
+      guest,
+    );
+    assert(delivered.ok);
+    assertEquals(delivered.payload.body, bytes);
+  }
+  const copied_download = await service.deliver(
+    { namespace: "Mine", page_name: "copy-download" },
+    guest,
+  );
+  assert(copied_download.ok);
+  assertEquals(copied_download.endpoint.delivery_profile, "attachment");
+  assertEquals(copied_download.payload.body, bytes);
+
+  assertEquals(
+    await service.duplicate_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 3,
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "fresh-copy" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "taken" },
+          delivery_profile: "attachment",
+        }],
+      },
+    }),
+    { ok: false, reason: "page_exists" },
+  );
+  assertEquals(
+    await service.update_managed({
+      actor: owner,
+      page_id: source.page.page_id,
+      expected_revision: 3,
+      patch: {
+        content: { content_type: "md-page", input: { md: "# Text" } },
+      },
+    }),
+    { ok: false, reason: "unsupported_delivery_profile" },
+  );
+  assertEquals((await repository.find_by_id("pdf-source"))?.revision, 3);
+});
+
+Deno.test("PageService trial endpoint commands reject cross-page conflicts atomically", async () => {
+  const { service } = await make_fixture({
+    ids: ["trial-one", "trial-two", "unused-conflict"],
+  });
+  const publish = (page_name: string) =>
+    service.publish_trial({
+      actor: guest,
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Free", page_name },
+          delivery_profile: "inline",
+        },
+      },
+      access: "public",
+      content: {
+        content_type: "pdf",
+        input: { bytes: pdf_bytes(), filename: `${page_name}.pdf` },
+      },
+    });
+  const one = await publish("one");
+  const two = await publish("two");
+  assert(one.ok && two.ok);
+
+  const conflict = await service.publish_trial({
+    actor: guest,
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Free", page_name: "one" },
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "FREE", page_name: "two" },
+        delivery_profile: "attachment",
+      }],
+    },
+    access: "public",
+    content: {
+      content_type: "pdf",
+      input: { bytes: pdf_bytes(), filename: "combined.pdf" },
+    },
+  });
+  assertEquals(conflict, { ok: false, reason: "endpoint_conflict" });
+  assert(
+    (await service.deliver({ namespace: "Free", page_name: "one" }, guest)).ok,
+  );
+  assert(
+    (await service.deliver({ namespace: "Free", page_name: "two" }, guest)).ok,
+  );
+});
+
+Deno.test("PageService legacy persistence rejects unsupported endpoint sets without loss", async () => {
+  const { service } = await make_fixture({ legacy_repository: true });
+  assertEquals(
+    await service.create_managed({
+      actor: owner,
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "download" },
+          delivery_profile: "attachment",
+        }],
+      },
+      access: "private",
+      content: {
+        content_type: "pdf",
+        input: { bytes: pdf_bytes(), filename: "legacy.pdf" },
+      },
+    }),
+    { ok: false, reason: "endpoint_set_unsupported" },
+  );
 });
 
 Deno.test("PageService retains the raw repository compatibility path", async () => {
