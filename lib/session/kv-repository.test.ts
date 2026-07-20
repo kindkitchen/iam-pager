@@ -1,4 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import type { SessionRepository } from "./interfaces.ts";
 import { DenoKvSessionRepository } from "./kv-repository.ts";
 import type { SessionRecord } from "./model.ts";
@@ -6,11 +7,15 @@ import { test_session_repository_conformance } from "./repository-conformance.ts
 
 const conformance_handles = new WeakMap<object, Deno.Kv>();
 
+function gateway(kv: Deno.Kv): KvToolboxGateway {
+  return new KvToolboxGateway(kv);
+}
+
 test_session_repository_conformance({
   name: "DenoKvSessionRepository",
   make_repository: async () => {
     const kv = await Deno.openKv(":memory:");
-    const repository = new DenoKvSessionRepository(kv);
+    const repository = new DenoKvSessionRepository(gateway(kv));
     conformance_handles.set(repository, kv);
     return repository;
   },
@@ -37,10 +42,10 @@ function guest_record(): SessionRecord {
 Deno.test("DenoKvSessionRepository: state is shared outside repository instances", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const writer: SessionRepository = new DenoKvSessionRepository(kv);
+    const writer: SessionRepository = new DenoKvSessionRepository(gateway(kv));
     assertEquals(await writer.create(guest_record()), true);
 
-    const reader: SessionRepository = new DenoKvSessionRepository(kv);
+    const reader: SessionRepository = new DenoKvSessionRepository(gateway(kv));
     assertEquals(
       await reader.find_by_credential_hash("durable-credential-hash"),
       guest_record(),

@@ -11,16 +11,18 @@ Top priority, active, chain position 3 of 5. The Kvdex direction is rejected;
 `@kitsonk/kv-toolbox` 0.31.0 is the required Deno KV utility. Domain,
 application, HTTP, and site contracts remain unchanged.
 
-Library assessment and the gated plan are complete; `deno task check` passes.
-All KV access will pass through a project-owned storage interface backed by
-`KvToolbox`; the concrete wrapper cannot leak beyond its infrastructure
-implementation. Ordinary/blob calls delegate to the toolbox, while the
-interface's native-atomic capability delegates to `toolbox.db.atomic()` because
-`KvToolbox.atomic()` may split a commit. See [[006.decision]].
+Phase 1 is complete; see [[008.summary]]. The exact dependency is pinned behind
+one project-owned gateway. Selected identity, namespace, session, legacy page,
+and manual-schema adapters consume its record interface. Ordinary and segmented
+binary operations delegate to `KvToolbox`; invariant-bearing commits use the
+explicit native capability backed by `toolbox.db.atomic()`. Verified staging
+fails closed on later-batch interruption or malformed/truncated state, including
+at the 16 MiB PDF bound. The versioned `v8-1` codec matches the retained
+prototype fixture. All 509 tests, check, and build pass.
 
-The completed random-stage, length/SHA-256/codec verification, and native
-manifest-CAS protocol remains salvageable. Ready for development; see
-[[007.review]]. First implement and contract-test the KV gateway and codec seam,
-then replace the unselected asset prototype and implement/migrate the aggregate
-adapter through [[004.plan]] as refined by [[006.decision]]. The raw Deno KV page adapter
-stays selected until conformance, migration, and cutover gates pass.
+Next replace the unselected Kvdex immutable-asset prototype with a gateway-backed
+manifest adapter while preserving random staging, length/SHA-256/codec checks,
+native CAS, ambiguous-outcome retention, and legacy-keyspace isolation. Remove
+Kvdex only after equivalent fault coverage passes, then implement/migrate the
+aggregate through [[004.plan]] as refined by [[006.decision]]. The raw Deno KV
+page adapter stays selected until conformance, migration, and cutover gates pass.

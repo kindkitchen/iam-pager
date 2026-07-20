@@ -7,6 +7,8 @@ import { MemoryIdentityRepository } from "../auth/memory-identity-repository.ts"
 import type { NamespaceRepository } from "../namespace/interfaces.ts";
 import { DenoKvNamespaceRepository } from "../namespace/kv-repository.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
+import type { KvGateway } from "./kv-gateway.ts";
+import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 
 export const OWNERSHIP_STORAGE_BACKEND_ENV =
   "IAM_PAGER_OWNERSHIP_STORAGE_BACKEND";
@@ -38,14 +40,14 @@ export interface OwnershipRepositoryFactory {
   ): Promise<OwnershipRepositories>;
 }
 
-/** Runtime boundary around the unstable Deno KV opener. */
+/** Runtime boundary that opens the one project-owned KV gateway. */
 export interface KvDatabaseOpener {
-  open(path?: string): Promise<Deno.Kv>;
+  open(path?: string): Promise<KvGateway>;
 }
 
 export class DenoKvDatabaseOpener implements KvDatabaseOpener {
-  open(path?: string): Promise<Deno.Kv> {
-    return Deno.openKv(path);
+  async open(path?: string): Promise<KvGateway> {
+    return new KvToolboxGateway(await Deno.openKv(path));
   }
 }
 

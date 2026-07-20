@@ -179,16 +179,22 @@ The first publishing slice currently provides:
   the site renders configured alternates without creating extra page rows, and
   direct HTTP disposition follows the resolved binding profile rather than a
   suffix or filename hint. The initial unselected Kvdex prototype is now
-  rejected: the required Deno KV utility is pinned `@kitsonk/kv-toolbox` 0.31.0.
-  One project-owned storage interface will mediate every KV operation while its
-  production implementation alone owns the concrete wrapper. Ordinary and blob
-  calls delegate to the toolbox; invariant-bearing commits explicitly delegate
-  to `toolbox.db.atomic()` because toolbox batches can span commits. The
-  already-proven random staging identity, reconstruction, length/SHA-256/codec
-  verification, and separate native manifest compare-and-set remain the safety
-  protocol. Page/endpoint persistence, prototype replacement, and raw-keyspace
-  compatibility remain incomplete, so the raw-Deno-KV repository stays on its
-  legacy service path and deployment selection is unchanged;
+  rejected: `@kitsonk/kv-toolbox` 0.31.0 is exactly pinned behind one
+  project-owned KV gateway. The selected identity, namespace, session, legacy
+  page, and manual-schema adapters now consume that interface instead of a raw
+  handle; its production implementation alone owns the wrapper. Ordinary calls
+  delegate to the toolbox, while invariant-bearing commits explicitly delegate
+  to `toolbox.db.atomic()` because toolbox batches can span commits. Binary
+  staging accepts only detached non-empty bytes under an unused unreachable key,
+  reads back and verifies every segmented write, rejects incomplete metadata or
+  chunks, and cleans known failed batches best-effort. A versioned `v8-1`
+  content-data codec preserves the superseded prototype's current Markdown/PDF
+  payload format without retaining a Kvdex encoding dependency in the new seam.
+  The random staging identity, SHA-256/codec verification, and separate native
+  manifest compare-and-set remain the asset protocol. Page/endpoint persistence,
+  prototype replacement, and raw-keyspace compatibility remain incomplete, so
+  the raw-Deno-KV repository stays on its legacy service path and deployment
+  selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -353,21 +359,25 @@ keeps bytes out of management inspection. Generic application commands accept
 complete endpoint-set intent for trial and managed creation and revision-bound
 replacement. Canonical rename preserves every alternate; endpoint-aware
 duplication requires a fresh complete destination set, while the existing
-one-inline-endpoint command remains the compatibility path. Durable persistence
-is now being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0. Every KV call
-will pass through a project-owned storage gateway whose production
-implementation alone owns the wrapper. It will reuse the verified
-immutable-asset staging protocol from the superseded, unselected prototype;
-page, endpoint, owner, revision, and manifest visibility will use the gateway's
-explicit native-atomic capability, backed by `toolbox.db.atomic()`, rather than
-the toolbox's potentially split batched atomic. The complete aggregate adapter,
-repeat-safe source-preserving raw-keyspace migration, strict bounded
-upload/direct delivery, and the PDF site projection follow. The retained
-raw-Deno-KV repository remains selected and rejects non-compatible endpoint sets
-without partial mutation. Existing raw Deno KV records require explicit
-compatibility or migration before the aggregate adapter can become durable
-default. Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and
-external storage remain later work.
+one-inline-endpoint command remains the compatibility path. The durable utility
+foundation now pins `@kitsonk/kv-toolbox` 0.31.0 exactly. Selected Deno KV
+adapters and manual schema tooling receive only the project-owned gateway;
+ordinary operations delegate to the wrapper and all invariant-bearing commits
+use its explicit native-atomic capability backed by `toolbox.db.atomic()`.
+Contract coverage includes detached 1 MiB and 16 MiB binary staging, fresh
+wrappers, later-batch interruption, cleanup/retry, missing/truncated state,
+removal, and lifecycle ownership. Every staged write is read back before success
+because a segmented batch may fail after an earlier commit. The explicit `v8-1`
+codec seam round-trips current Markdown/PDF data and decodes the retained
+prototype fixture. Next, this foundation replaces the unselected immutable-asset
+prototype while preserving random staging, SHA-256/codec verification, and
+native manifest publication. The complete aggregate adapter, repeat-safe
+source-preserving raw-keyspace migration, strict bounded upload/direct delivery,
+and the PDF site projection follow. The retained raw-Deno-KV repository remains
+selected and rejects non-compatible endpoint sets without partial mutation.
+Existing raw Deno KV records require explicit compatibility or migration before
+the aggregate adapter can become durable default. Generic raw-binary publishing,
+PDF.js, thumbnails, text extraction, and external storage remain later work.
 
 ## Local development
 

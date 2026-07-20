@@ -1,3 +1,4 @@
+import type { KvRecordGateway } from "../storage/kv-gateway.ts";
 import { ownership_database_schema_version } from "../storage/schema-versions.ts";
 import type { IdentityRepository, UserIdGenerator } from "./interfaces.ts";
 import {
@@ -154,10 +155,10 @@ function deserialize_identity(value: unknown): ExternalIdentity {
  * use versionstamps so stale observations cannot overwrite newer data.
  */
 export class DenoKvIdentityRepository implements IdentityRepository {
-  readonly #kv: Deno.Kv;
+  readonly #kv: KvRecordGateway;
   readonly #id_generator: UserIdGenerator;
 
-  constructor(kv: Deno.Kv, id_generator: UserIdGenerator) {
+  constructor(kv: KvRecordGateway, id_generator: UserIdGenerator) {
     this.#kv = kv;
     this.#id_generator = id_generator;
   }
@@ -211,7 +212,7 @@ export class DenoKvIdentityRepository implements IdentityRepository {
       }
 
       const records = create_identity_records(user_id, observation);
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(identity_entry)
         .check(user_entry)
         .set(generated_user_key, serialize_user(records.user))
@@ -275,7 +276,7 @@ export class DenoKvIdentityRepository implements IdentityRepository {
         };
       }
       const updated = update_identity(identity, observation);
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(identity_entry)
         .set(identity_key, serialize_identity(updated))
         .commit();

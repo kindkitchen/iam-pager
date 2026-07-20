@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed the kv-toolbox gateway and codec checkpoint. Exactly pinned
+  `@kitsonk/kv-toolbox` 0.31.0 behind project-owned record, native-atomic, and
+  binary-staging interfaces; selected identity, namespace, session, legacy-page,
+  and manual-schema adapters no longer receive raw KV handles. Binary writes
+  detach input, reject empty or reused complete keys, reconstruct and verify
+  segmented output, clean known later-batch failures best-effort, and reject
+  missing, truncated, or malformed state. Added 1 MiB and 16 MiB, interruption,
+  retry, removal, lifecycle, native-CAS, and fresh-wrapper coverage plus a
+  versioned `v8-1` codec compatible with the retained prototype fixture.
+  Deployment selection and database records remain unchanged. All 509 tests,
+  check, and the production build pass.
+
 - Settled one project-owned KV gateway as the only persistence entry point. Its
   production implementation owns `KvToolbox`, delegates ordinary and blob
   operations to it, and exposes native all-or-none commits explicitly through

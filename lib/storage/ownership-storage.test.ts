@@ -8,6 +8,7 @@ import {
   MemoryNamespaceRepository,
 } from "../namespace/mod.ts";
 import { CryptoIdGenerator } from "../session/mod.ts";
+import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 import {
   DefaultOwnershipRepositoryFactory,
   OWNERSHIP_DENO_KV_PATH_ENV,
@@ -104,7 +105,7 @@ Deno.test("ownership repository factory switches linked implementations together
     kv_opener: {
       open: (path) => {
         opened_path = path;
-        return Promise.resolve(kv);
+        return Promise.resolve(new KvToolboxGateway(kv));
       },
     },
   });

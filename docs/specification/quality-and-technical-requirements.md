@@ -144,16 +144,29 @@ process-local `PageService` detects and uses the focused capabilities directly.
 The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
 complete kv-toolbox-backed aggregate adapter and explicit record migration.
 
-The required Deno KV utility is pinned `@kitsonk/kv-toolbox` 0.31.0. Every KV
-operation passes through a narrow project-owned storage interface whose
-production implementation alone owns the wrapper. Ordinary and blob operations
-delegate to the toolbox; the package does not define domain models, repository
-contracts, page indexes, or web responses. The earlier Kvdex asset prototype was
-never selected and is superseded. Its useful behavior is retained as the
-replacement acceptance baseline: random unreachable payload staging,
-reconstruction, encoded-length/SHA-256/codec verification, one separately
-published immutable manifest, best-effort known-failure cleanup, retention after
-an ambiguous manifest exception, and corruption rejection on every read.
+The required Deno KV utility is exactly pinned `@kitsonk/kv-toolbox` 0.31.0. The
+project-owned gateway is implemented, and selected identity, namespace, session,
+legacy-page, and manual-schema adapters now depend on its record interface
+rather than receiving a raw handle. Its production implementation alone owns the
+wrapper and database lifecycle. Ordinary operations delegate to the toolbox; the
+package does not define domain models, repository contracts, page indexes,
+migrations, or web responses.
+
+The gateway's binary capability accepts detached non-empty bytes only at an
+unused unreachable staging key. It delegates segmentation, then reconstructs and
+verifies the exact byte length and value before reporting success; this catches
+a later failed batch even when an earlier commit succeeded. Reads reject missing
+chunks, truncation, or malformed metadata, and known failed staging is removed
+best-effort. Contract tests cover 1 MiB and the accepted 16 MiB PDF bound, fresh
+wrappers, interrupted later batches, retry, corruption, removal, and handle
+closure. The versioned `v8-1` content-data codec is byte-compatible with the
+retained prototype fixture and round-trips current Markdown/PDF data.
+
+The earlier Kvdex asset prototype was never selected and is superseded. Its
+remaining useful behavior is the next replacement acceptance baseline: random
+unreachable payload identities, SHA-256/codec verification, one separately
+published immutable manifest, retention after an ambiguous manifest exception,
+and corruption rejection on every asset read.
 
 Toolbox blob writes may span multiple commits, and `KvToolbox.atomic()` may
 split an operation. They therefore cannot publish application visibility. The

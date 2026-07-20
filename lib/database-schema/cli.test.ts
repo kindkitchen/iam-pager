@@ -1,4 +1,5 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import {
   type DatabaseSchemaDatabaseFactory,
   type DatabaseSchemaOutput,
@@ -21,16 +22,18 @@ class CapturedOutput implements DatabaseSchemaOutput {
 }
 
 class ExistingDatabaseFactory implements DatabaseSchemaDatabaseFactory {
-  readonly kv: Deno.Kv;
+  readonly gateway: KvToolboxGateway;
   opened = 0;
 
   constructor(kv: Deno.Kv) {
-    this.kv = kv;
+    this.gateway = new KvToolboxGateway(kv);
   }
 
-  open(_target: string): Promise<{ kv: Deno.Kv; close(): void }> {
+  open(
+    _target: string,
+  ): Promise<{ gateway: KvToolboxGateway; close(): void }> {
     this.opened += 1;
-    return Promise.resolve({ kv: this.kv, close: () => {} });
+    return Promise.resolve({ gateway: this.gateway, close: () => {} });
   }
 }
 

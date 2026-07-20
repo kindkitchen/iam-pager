@@ -1,5 +1,6 @@
 import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
 import { DenoKvPageRepository, MemoryPageRepository } from "../page/mod.ts";
+import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 import {
   DefaultPageRepositoryFactory,
   PAGE_STORAGE_BACKEND_ENV,
@@ -81,7 +82,7 @@ Deno.test("page repository factory switches implementations and preserves pages"
     kv_opener: {
       open: (path) => {
         opened_path = path;
-        return Promise.resolve(kv);
+        return Promise.resolve(new KvToolboxGateway(kv));
       },
     },
   });

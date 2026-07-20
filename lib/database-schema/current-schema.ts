@@ -3,6 +3,7 @@ import {
   page_database_schema_version,
   session_database_schema_version,
 } from "../storage/schema-versions.ts";
+import type { KvGateway } from "../storage/kv-gateway.ts";
 import type { DatabaseSchemaDefinition } from "./schema.ts";
 
 export const database_schema_project_id = "iam-pager";
@@ -11,7 +12,7 @@ export const database_schema_project_id = "iam-pager";
  * This is the manual database task registry. Add one repeat-safe migration for
  * every adjacent version bump; deploy and application startup never run it.
  */
-export const current_database_schema: DatabaseSchemaDefinition<Deno.Kv> = {
+export const current_database_schema: DatabaseSchemaDefinition<KvGateway> = {
   project_id: database_schema_project_id,
   schemas: [
     {

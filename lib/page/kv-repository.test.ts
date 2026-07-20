@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import type { PageRepository } from "./interfaces.ts";
 import {
   DenoKvPageRepository,
@@ -11,11 +12,15 @@ import {
 
 const conformance_handles = new WeakMap<object, Deno.Kv>();
 
+function gateway(kv: Deno.Kv): KvToolboxGateway {
+  return new KvToolboxGateway(kv);
+}
+
 test_page_repository_conformance({
   name: "DenoKvPageRepository",
   make_repository: async () => {
     const kv = await Deno.openKv(":memory:");
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     conformance_handles.set(repository, kv);
     return repository;
   },
@@ -53,8 +58,8 @@ async function create_managed(repository: PageRepository) {
 Deno.test("DenoKvPageRepository: state is shared across repository instances", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const page = await create_managed(new DenoKvPageRepository(kv));
-    const reader = new DenoKvPageRepository(kv);
+    const page = await create_managed(new DenoKvPageRepository(gateway(kv)));
+    const reader = new DenoKvPageRepository(gateway(kv));
     assertEquals(await reader.find_by_id(page.page_id), page);
     assertEquals(
       await reader.find_by_locator({ namespace: "ALICE", page_name: "notes" }),
@@ -68,7 +73,7 @@ Deno.test("DenoKvPageRepository: state is shared across repository instances", a
 Deno.test("DenoKvPageRepository: schema-v1 envelopes without tags remain readable", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     const page = await create_managed(repository);
     const envelope_key = ["iam-pager", "pages", "by-id", page.page_id];
     const envelope = (await kv.get<Record<string, unknown>>(envelope_key))
@@ -84,7 +89,7 @@ Deno.test("DenoKvPageRepository: schema-v1 envelopes without tags remain readabl
 Deno.test("DenoKvPageRepository: fresh keyspace separates envelope, indexes, and chunks", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const page = await create_managed(new DenoKvPageRepository(kv));
+    const page = await create_managed(new DenoKvPageRepository(gateway(kv)));
     const envelope = await kv.get<Record<string, unknown>>([
       "iam-pager",
       "pages",
@@ -159,7 +164,7 @@ Deno.test("DenoKvPageRepository: fresh keyspace separates envelope, indexes, and
 Deno.test("DenoKvPageRepository: content swaps generations while access-only updates retain chunks", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     await create_managed(repository);
     const envelope_key = ["iam-pager", "pages", "by-id", "managed-1"];
     const first = (await kv.get<{ generation: string }>(envelope_key)).value!;
@@ -206,7 +211,7 @@ Deno.test("DenoKvPageRepository: content swaps generations while access-only upd
 Deno.test("DenoKvPageRepository: managed deletion removes envelope, both indexes, and chunks", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     await create_managed(repository);
     assertEquals(
       await repository.delete_managed({
@@ -228,7 +233,7 @@ Deno.test("DenoKvPageRepository: managed deletion removes envelope, both indexes
 Deno.test("DenoKvPageRepository: rejects unsupported durable data before visibility", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     await assertRejects(
       () =>
         repository.put_trial({
@@ -252,7 +257,7 @@ Deno.test("DenoKvPageRepository: rejects unsupported durable data before visibil
 Deno.test("DenoKvPageRepository: stable malformed envelopes and indexes are corruption", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     await create_managed(repository);
     const envelope_key = ["iam-pager", "pages", "by-id", "managed-1"];
     const valid_envelope = (await kv.get<Record<string, unknown>>(envelope_key))
@@ -305,7 +310,7 @@ Deno.test("DenoKvPageRepository: stable malformed envelopes and indexes are corr
 Deno.test("DenoKvPageRepository: missing or malformed chunks of a stable envelope are corruption", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const repository = new DenoKvPageRepository(kv);
+    const repository = new DenoKvPageRepository(gateway(kv));
     await create_managed(repository);
     const envelope = (await kv.get<{ generation: string }>([
       "iam-pager",

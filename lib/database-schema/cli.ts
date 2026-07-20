@@ -1,3 +1,5 @@
+import type { KvGateway } from "../storage/kv-gateway.ts";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import { current_database_schema } from "./current-schema.ts";
 import { DenoKvDatabaseSchemaManifestStore } from "./deno-kv-store.ts";
 import {
@@ -32,7 +34,7 @@ export class ConsoleDatabaseSchemaOutput implements DatabaseSchemaOutput {
 }
 
 export interface OpenDatabaseSchemaDatabase {
-  readonly kv: Deno.Kv;
+  readonly gateway: KvGateway;
   close(): void | Promise<void>;
 }
 
@@ -43,8 +45,8 @@ export interface DatabaseSchemaDatabaseFactory {
 export class DenoKvDatabaseSchemaDatabaseFactory
   implements DatabaseSchemaDatabaseFactory {
   async open(target: string): Promise<OpenDatabaseSchemaDatabase> {
-    const kv = await Deno.openKv(target);
-    return { kv, close: () => kv.close() };
+    const gateway = new KvToolboxGateway(await Deno.openKv(target));
+    return { gateway, close: () => gateway.close() };
   }
 }
 
@@ -324,7 +326,7 @@ function write_schema_failure(
 
 export interface RunDatabaseSchemaCliOptions {
   readonly database_factory?: DatabaseSchemaDatabaseFactory;
-  readonly definition?: DatabaseSchemaDefinition<Deno.Kv>;
+  readonly definition?: DatabaseSchemaDefinition<KvGateway>;
 }
 
 export async function run_database_schema_cli(
@@ -346,7 +348,7 @@ export async function run_database_schema_cli(
     return 2;
   }
 
-  let definition: DatabaseSchemaDefinition<Deno.Kv>;
+  let definition: DatabaseSchemaDefinition<KvGateway>;
   try {
     definition = define_database_schema(
       options.definition ?? current_database_schema,
@@ -389,7 +391,7 @@ export async function run_database_schema_cli(
   try {
     const manager = new ManualDatabaseSchemaManager({
       definition,
-      manifest_store: new DenoKvDatabaseSchemaManifestStore(database.kv),
+      manifest_store: new DenoKvDatabaseSchemaManifestStore(database.gateway),
     });
     const initial_report = await manager.inspect();
 
@@ -414,7 +416,7 @@ export async function run_database_schema_cli(
       );
       exit_code = 2;
     } else {
-      const update_report = await manager.update(database.kv);
+      const update_report = await manager.update(database.gateway);
       write_update_report(output, update_report);
       const final_report = await manager.inspect();
       write_schema_report(output, final_report);

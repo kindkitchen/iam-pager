@@ -1,9 +1,14 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import {
   database_schema_manifest_key,
   DenoKvDatabaseSchemaManifestStore,
 } from "./deno-kv-store.ts";
 import { DatabaseSchemaError } from "./schema.ts";
+
+function gateway(kv: Deno.Kv): KvToolboxGateway {
+  return new KvToolboxGateway(kv);
+}
 
 Deno.test("Deno KV schema store reads the existing manifest format and writes with CAS", async () => {
   const kv = await Deno.openKv(":memory:");
@@ -17,7 +22,7 @@ Deno.test("Deno KV schema store reads the existing manifest format and writes wi
         { schema_id: "pages", version: 1 },
       ],
     });
-    const store = new DenoKvDatabaseSchemaManifestStore(kv);
+    const store = new DenoKvDatabaseSchemaManifestStore(gateway(kv));
     const initial = await store.read_manifest();
     assertEquals(initial, {
       project_id: "iam-pager",
@@ -64,7 +69,7 @@ Deno.test("Deno KV schema store rejects malformed metadata without rewriting it"
       schema_versions: [],
     };
     await kv.set(key, malformed);
-    const store = new DenoKvDatabaseSchemaManifestStore(kv);
+    const store = new DenoKvDatabaseSchemaManifestStore(gateway(kv));
     await assertRejects(
       () => store.read_manifest(),
       DatabaseSchemaError,

@@ -4,6 +4,7 @@ import {
   MemorySessionRepository,
   type SessionRecord,
 } from "../session/mod.ts";
+import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 import type { OwnershipStorageConfig } from "./ownership-storage.ts";
 import {
   DefaultSessionRepositoryFactory,
@@ -86,7 +87,7 @@ Deno.test("session repository factory switches implementations and preserves rec
     kv_opener: {
       open: (path) => {
         opened_path = path;
-        return Promise.resolve(kv);
+        return Promise.resolve(new KvToolboxGateway(kv));
       },
     },
   });

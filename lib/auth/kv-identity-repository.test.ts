@@ -1,15 +1,20 @@
 import { assertEquals, assertRejects } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import type { IdentityRepository, UserIdGenerator } from "./interfaces.ts";
 import { test_identity_repository_conformance } from "./identity-repository-conformance.ts";
 import { DenoKvIdentityRepository } from "./kv-identity-repository.ts";
 
 const conformance_handles = new WeakMap<object, Deno.Kv>();
 
+function gateway(kv: Deno.Kv): KvToolboxGateway {
+  return new KvToolboxGateway(kv);
+}
+
 test_identity_repository_conformance({
   name: "DenoKvIdentityRepository",
   make_repository: async (id_generator) => {
     const kv = await Deno.openKv(":memory:");
-    const repository = new DenoKvIdentityRepository(kv, id_generator);
+    const repository = new DenoKvIdentityRepository(gateway(kv), id_generator);
     conformance_handles.set(repository, kv);
     return repository;
   },
@@ -29,7 +34,7 @@ Deno.test("DenoKvIdentityRepository: state is shared outside repository instance
   const kv = await Deno.openKv(":memory:");
   try {
     const writer: IdentityRepository = new DenoKvIdentityRepository(
-      kv,
+      gateway(kv),
       new FixedUserIdGenerator(),
     );
     const created = await writer.find_or_create({
@@ -40,7 +45,7 @@ Deno.test("DenoKvIdentityRepository: state is shared outside repository instance
     });
 
     const reader: IdentityRepository = new DenoKvIdentityRepository(
-      kv,
+      gateway(kv),
       new FixedUserIdGenerator(),
     );
     assertEquals(

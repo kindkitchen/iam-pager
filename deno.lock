@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@deno/esbuild-plugin@^1.2.0": "1.2.1",
     "jsr:@deno/gfm@0.12": "0.12.0",
+    "jsr:@deno/kv-utils@~0.1.4": "0.1.4",
     "jsr:@deno/loader@0.4": "0.4.0",
     "jsr:@deno/loader@~0.3.10": "0.3.14",
     "jsr:@denosaurs/emoji@~0.3.1": "0.3.1",
@@ -12,13 +13,20 @@
     "jsr:@fresh/plugin-vite@^1.1.2": "1.1.2",
     "jsr:@kindkitchen/gauth@0.4.1": "0.4.1",
     "jsr:@kindkitchen/internal-util@~0.4.1": "0.4.2",
+    "jsr:@kitsonk/kv-toolbox@0.31.0": "0.31.0",
     "jsr:@olli/kvdex@3.6.7": "3.6.7",
+    "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/assert@^1.0.16": "1.0.19",
+    "jsr:@std/bytes@1": "1.0.6",
+    "jsr:@std/bytes@^1.0.3": "1.0.6",
     "jsr:@std/bytes@^1.0.4": "1.0.6",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
     "jsr:@std/collections@^1.0.9": "1.3.0",
+    "jsr:@std/crypto@1.1": "1.1.0",
     "jsr:@std/dotenv@~0.225.5": "0.225.7",
+    "jsr:@std/encoding@1": "1.0.10",
     "jsr:@std/encoding@^1.0.10": "1.0.10",
+    "jsr:@std/encoding@^1.0.5": "1.0.10",
     "jsr:@std/fmt@^1.0.7": "1.0.10",
     "jsr:@std/fmt@^1.0.8": "1.0.10",
     "jsr:@std/fs@^1.0.19": "1.0.24",
@@ -99,6 +107,13 @@
         "npm:sanitize-html"
       ]
     },
+    "@deno/kv-utils@0.1.4": {
+      "integrity": "119a768c8a9b1af76552b48e78457cd2fb38cc97c10b3a57cf65efe47ff9ca1a",
+      "dependencies": [
+        "jsr:@std/bytes@^1.0.3",
+        "jsr:@std/encoding@^1.0.5"
+      ]
+    },
     "@deno/loader@0.3.14": {
       "integrity": "97bc63a6cc2d27a60bcdc953f588c5213331d866d44212eebb24cebfb9b011ca"
     },
@@ -111,7 +126,7 @@
     "@fresh/build-id@1.0.1": {
       "integrity": "12a2ec25fd52ae9ec68c26848a5696cd1c9b537f7c983c7e56e4fb1e7e816c20",
       "dependencies": [
-        "jsr:@std/encoding"
+        "jsr:@std/encoding@^1.0.10"
       ]
     },
     "@fresh/core@2.3.3": {
@@ -119,7 +134,7 @@
       "dependencies": [
         "jsr:@deno/esbuild-plugin",
         "jsr:@fresh/build-id",
-        "jsr:@std/encoding",
+        "jsr:@std/encoding@^1.0.10",
         "jsr:@std/fmt@^1.0.8",
         "jsr:@std/fs",
         "jsr:@std/html",
@@ -162,7 +177,7 @@
       "integrity": "d6139ae1781586b4b8098610ec542fe49a62aca7b9eab4747038d729c3fbfdcf",
       "dependencies": [
         "jsr:@kindkitchen/internal-util",
-        "jsr:@std/encoding",
+        "jsr:@std/encoding@^1.0.10",
         "npm:effect@^4.0.0-beta.91",
         "npm:google-auth-library"
       ]
@@ -171,6 +186,17 @@
       "integrity": "d17b5a3ce22270119d70b2ef6a8e02a0b7eb4f9097eda03332fd191d9c2efd12",
       "dependencies": [
         "npm:effect@4.0.0-beta.94"
+      ]
+    },
+    "@kitsonk/kv-toolbox@0.31.0": {
+      "integrity": "cf2c62dad83234b2472f2525e23dbd5d998407afa60bf24bdd315c538abe2663",
+      "dependencies": [
+        "jsr:@deno/kv-utils",
+        "jsr:@std/assert@1",
+        "jsr:@std/bytes@1",
+        "jsr:@std/crypto",
+        "jsr:@std/encoding@1",
+        "jsr:@std/media-types@1"
       ]
     },
     "@olli/kvdex@3.6.7": {
@@ -193,6 +219,9 @@
     "@std/collections@1.3.0": {
       "integrity": "eb36b43d784477ea0b476483ac034a14bdd182aff921c812ecf662a1fcef9498"
     },
+    "@std/crypto@1.1.0": {
+      "integrity": "b8d6d0a6377a32b213af2661ed7bf1062d94feac0c57def5526a8e74a95c3ec8"
+    },
     "@std/dotenv@0.225.7": {
       "integrity": "11d8db03ca4ad5aba9eba809f2e8058b2a4f320b7b09fea4b360e162928329e3"
     },
@@ -214,7 +243,7 @@
     "@std/http@1.1.1": {
       "integrity": "e343a9a80aea07c716b91be5c79df764144430ad2dd7c9121ed7443f08dc74f7",
       "dependencies": [
-        "jsr:@std/encoding"
+        "jsr:@std/encoding@^1.0.10"
       ]
     },
     "@std/internal@1.0.14": {
@@ -1796,6 +1825,7 @@
       "jsr:@fresh/core@^2.3.3",
       "jsr:@fresh/plugin-vite@^1.1.2",
       "jsr:@kindkitchen/gauth@0.4.1",
+      "jsr:@kitsonk/kv-toolbox@0.31.0",
       "jsr:@olli/kvdex@3.6.7",
       "jsr:@std/assert@^1.0.16",
       "jsr:@std/http@^1.0.21",

@@ -1,3 +1,4 @@
+import type { KvRecordGateway } from "../storage/kv-gateway.ts";
 import { ownership_database_schema_version } from "../storage/schema-versions.ts";
 import type {
   NamespaceRepository,
@@ -88,10 +89,10 @@ function deserialize_reservation(value: unknown): NamespaceReservation {
  * `NamespaceRepository` contract.
  */
 export class DenoKvNamespaceRepository implements NamespaceRepository {
-  readonly #kv: Deno.Kv;
+  readonly #kv: KvRecordGateway;
   readonly #now: () => Date;
 
-  constructor(kv: Deno.Kv, options: { now?: () => Date } = {}) {
+  constructor(kv: KvRecordGateway, options: { now?: () => Date } = {}) {
     this.#kv = kv;
     this.#now = options.now ?? (() => new Date());
   }
@@ -112,7 +113,7 @@ export class DenoKvNamespaceRepository implements NamespaceRepository {
       reserved_at: this.#now(),
     };
     const stored = serialize_reservation(reservation);
-    const commit = await this.#kv.atomic()
+    const commit = await this.#kv.native_atomic()
       .check(existing)
       .set(key, stored)
       .set(
