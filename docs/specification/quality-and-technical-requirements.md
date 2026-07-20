@@ -43,8 +43,9 @@ ID, and revision conditions. Owner-safe summaries and inspection input exclude
 stewardship IDs and stored derivations. The process-local composition now runs
 this service through the named `PageAggregateRepository` capability; the
 retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
-path until source-preserving migration and controlled cutover select the now-
-conforming kv-toolbox-backed aggregate adapter. The service and strict HTTP
+path until controlled cutover selects the now-conforming kv-toolbox-backed
+aggregate adapter. The source-preserving migration and readiness probe are
+complete but do not alter runtime composition. The service and strict HTTP
 boundary are still exposed once, and Fresh collection/item/direct routes remain
 thin adapters. Public exploration extends that boundary through
 `PublicPageExplorer`: callers supply optional name queries and an opaque
@@ -155,8 +156,9 @@ supported duplication/takeover shape—eight source endpoints and eight
 eight-endpoint trials—uses 87 of Deno KV's 100 atomic checks, leaving 13 checks
 of tested headroom. Shared conformance plus reconstruction, malformed
 record/index, manifest, rejected-commit, exhaustion, and maximum-transaction
-coverage pass. The raw-Deno-KV `PageRepository` remains selected pending
-explicit source-preserving record migration and controlled cutover.
+coverage pass. The raw-Deno-KV `PageRepository` remains selected pending only
+the controlled composition cutover; the explicit source-preserving record
+migration and readiness gate are now implemented.
 
 The required Deno KV utility is exactly pinned `@kitsonk/kv-toolbox` 0.31.0. The
 project-owned gateway is implemented, and selected identity, namespace, session,
@@ -198,11 +200,23 @@ immutable asset may be referenced by a page. Toolbox query and response helpers
 do not replace deterministic repository indexes or the web-independent HTTP
 adapter.
 
-The replacement remains unselected until it satisfies unchanged aggregate
-conformance and preserved application behavior. Existing raw-KV schema-v1 page
-records require a manual, adjacent, repeat-safe, source-preserving migration to
-a shadow aggregate keyspace plus an explicit readiness rule; selecting the new
-adapter must fail rather than silently present an unmigrated database as empty.
+The replacement remains unselected until controlled composition changes it.
+Existing raw-KV schema-v1 page records now have one retained, adjacent,
+repeat-safe `pages-v1-to-v2` migration. Its strict source reader validates every
+visible envelope, locator/owner index, and referenced chunk set while tolerating
+only documented unreachable chunk residue. It maps each locator to one canonical
+inline endpoint, derives SHA-256-based deterministic asset/payload identities,
+reuses identical interrupted staging, verifies each manifest/payload/aggregate,
+and publishes destination visibility conditionally without updating or deleting
+a v1 key. Existing different v2 data fails as a conflict.
+
+A strict readiness record binds the migrated page count and source fingerprint.
+The read-only `PageAggregateReadinessProbe` recomputes that fingerprint and
+revalidates every destination asset and aggregate; it refuses missing migration
+state, non-empty unmigrated v1, post-migration v1 changes, source corruption,
+missing manifests, and destination conflicts. It is available to the controlled
+cutover factory but is deliberately not wired into startup, deploy, or the
+still- legacy runtime composition in this checkpoint.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
@@ -265,10 +279,14 @@ rerun. A concurrent manifest change fails publication and requires another
 manual check. Destructive changes still require staged expand/deploy/contract
 releases and an operator-managed backup.
 
-The immutable registry currently declares all three schemas at version 1, so
-confirmed initialization writes only the compatible manifest and changes no
-application records. Later releases run retained migrations before publishing
-the new complete vector.
+The immutable registry now declares ownership and sessions at version 1 and
+pages at version 2. Confirmed initialization or a pages-v1 manifest runs the
+retained source-preserving `pages-v1-to-v2` migration before publishing that
+complete vector. Operators must back up and quiesce v1 page writers before the
+update and keep them stopped through readiness verification and controlled
+cutover. A later v1 write changes the readiness fingerprint and is refused
+rather than overwritten; retained v1 records provide a fallback window, not a
+rollback claim.
 
 Deno Deploy currently uses Deno 2.5.0 for both builder and runtime, so the
 project toolchain and formatting are pinned to that version. Runtime storage

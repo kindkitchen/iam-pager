@@ -4,6 +4,10 @@ import {
   session_database_schema_version,
 } from "../storage/schema-versions.ts";
 import type { KvGateway } from "../storage/kv-gateway.ts";
+import {
+  migrate_pages_v1_to_v2,
+  pages_v1_to_v2_migration_id,
+} from "../storage/pages-v1-to-v2-migration.ts";
 import type { DatabaseSchemaDefinition } from "./schema.ts";
 
 export const database_schema_project_id = "iam-pager";
@@ -31,5 +35,13 @@ export const current_database_schema: DatabaseSchemaDefinition<KvGateway> = {
       target_version: page_database_schema_version,
     },
   ],
-  migrations: [],
+  migrations: [{
+    migration_id: pages_v1_to_v2_migration_id,
+    schema_id: "pages",
+    from_version: 1,
+    to_version: 2,
+    description:
+      "Copy and verify legacy pages in the source-preserving v2 aggregate keyspace",
+    migrate: migrate_pages_v1_to_v2,
+  }],
 };

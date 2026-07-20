@@ -2,6 +2,19 @@
 
 ## 2026-07-20
 
+- Completed the source-preserving pages-v1-to-v2 migration checkpoint. The
+  retained manual schema registry now validates every visible legacy envelope,
+  locator/owner index, and referenced chunk set; derives deterministic
+  retry-safe asset and payload identities; conditionally imports exact v2
+  aggregates; and leaves all v1 keys untouched. A source fingerprint and
+  read-only readiness probe reject unmigrated, changed, corrupt, conflicting, or
+  incomplete state, including a write racing readiness publication. Added mixed
+  legacy fixtures, pre-tag compatibility, interruption/concurrency,
+  conflict/corruption, missing-manifest, source-race, and no-op-rerun coverage.
+  Runtime composition still selects the legacy adapter pending controlled
+  cutover. All 542 tests, tracked-source formatting/lint/type checks, and the
+  production build pass.
+
 - Completed the durable page-aggregate checkpoint. Named the composed
   `PageAggregateRepository` contract and made the service, memory reference, and
   shared conformance depend on it. Added an unselected

@@ -1,6 +1,5 @@
 import { type Locator } from "../locator/model.ts";
 import type { KvRecordGateway } from "../storage/kv-gateway.ts";
-import { page_database_schema_version } from "../storage/schema-versions.ts";
 import {
   compare_page_sort_keys,
   decode_managed_page_list_cursor,
@@ -45,15 +44,26 @@ import {
   type PageRecord,
 } from "./model.ts";
 
-const storage_schema_version = page_database_schema_version;
+const storage_schema_version = 1 as const;
 const max_attempts = 16;
-const by_id_prefix: Deno.KvKey = ["iam-pager", "pages", "by-id"];
-const by_locator_prefix: Deno.KvKey = [
+export const page_v1_by_id_prefix: Deno.KvKey = [
+  "iam-pager",
+  "pages",
+  "by-id",
+];
+export const page_v1_by_locator_prefix: Deno.KvKey = [
   "iam-pager",
   "pages",
   "by-locator",
 ];
-const by_owner_prefix: Deno.KvKey = ["iam-pager", "pages", "by-owner"];
+export const page_v1_by_owner_prefix: Deno.KvKey = [
+  "iam-pager",
+  "pages",
+  "by-owner",
+];
+const by_id_prefix = page_v1_by_id_prefix;
+const by_locator_prefix = page_v1_by_locator_prefix;
+const by_owner_prefix = page_v1_by_owner_prefix;
 const chunk_prefix: Deno.KvKey = ["iam-pager", "pages", "chunks"];
 
 /** Leaves headroom below Deno KV's 64 KiB value limit. */
@@ -254,6 +264,19 @@ function chunk_key(
   index: number,
 ): Deno.KvKey {
   return [...generation_prefix(page_id, generation), index];
+}
+
+/** Stable schema-v1 keys exposed only for explicit compatibility tooling. */
+export function page_v1_storage_key(page_id: string): Deno.KvKey {
+  return id_key(page_id);
+}
+
+export function page_v1_locator_key(locator: Locator): Deno.KvKey {
+  return locator_key(locator);
+}
+
+export function page_v1_owner_key(page: PageRecord): Deno.KvKey {
+  return owner_key(page);
 }
 
 function has_exact_keys(

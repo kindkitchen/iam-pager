@@ -201,9 +201,16 @@ The first publishing slice currently provides:
   carry its revision, and every visibility mutation uses one native atomic
   commit. Restart, corruption, retry exhaustion, injected commit loss, all-eight
   endpoint, and worst-case 87-check transaction coverage pass with 13 checks of
-  Deno KV headroom. Raw-keyspace compatibility and migration remain incomplete,
-  so the raw-Deno-KV repository stays on its legacy service path and deployment
-  selection is unchanged;
+  Deno KV headroom. The retained manual `pages-v1-to-v2` migration now validates
+  every visible legacy envelope, locator/owner index, and referenced chunk set;
+  derives deterministic retry-safe asset and payload identities; copies each
+  locator as one canonical inline endpoint; conditionally publishes exact v2
+  records; and leaves every v1 key untouched. A source fingerprint/readiness
+  record plus a read-only probe rejects missing, changed, corrupt, or incomplete
+  migration state. Empty, mixed trial/managed/private, pre-tag, interruption,
+  concurrent, conflict, corruption, absent-manifest, and no-op-rerun coverage
+  pass. The raw-Deno-KV repository still stays on its legacy service path until
+  the separate controlled composition cutover;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -257,9 +264,9 @@ filter-bound pagination, refreshes stale rows, edits content and comma-separated
 tags together, supports default/named renames and generated duplication, and
 applies access or deletion to an explicit selection of at most 100 current row
 revisions while showing one result per page. Total page capacity, publishing
-frequency, guest expiry, exploration text indexing/relevance, and backend
-migration are not implemented; these endpoints are not ready for untrusted
-public traffic.
+frequency, guest expiry, exploration text indexing/relevance, process-local or
+cross-database migration, and the durable-v2 composition cutover are not
+implemented; these endpoints are not ready for untrusted public traffic.
 
 ## Local verification and database schema releases
 
@@ -316,14 +323,32 @@ deno task db:update \
 
 The confirmation is especially important when the manifest is absent, because an
 unversioned database cannot prove its identity. Existing raw records are the
-version-1 baseline. Future version bumps must add one adjacent, repeat-safe
-migration to `lib/database-schema/current-schema.ts`; a gap makes the registry
-invalid before a database is touched. The small manual runner executes retained
+version-1 baseline. The current vector advances `pages` to version 2 through the
+retained `pages-v1-to-v2` migration; ownership and sessions remain at version 1.
+The migration copies into adjacent aggregate/asset keyspaces, verifies both
+source and destination repeatedly, publishes a source fingerprint only after
+success, and never updates or deletes a v1 record. Deterministic payload staging
+and conditional destination writes make interruption and identical concurrent
+execution safe; different pre-existing v2 data is a hard conflict, not an
+overwrite.
+
+Back up the exact target and quiesce page publication before `db:update`. Keep
+v1 writers stopped through readiness verification and the later controlled
+adapter cutover: a v1 write after migration changes the fingerprint and is
+intentionally refused rather than merged into v2. Then run `db:check`, run the
+confirmed `db:update`, verify the result, change deployment selection only when
+the cutover release is present, and smoke-test it. The retained v1 records give
+a deliberate fallback window, not a rollback guarantee. This checkpoint does not
+yet select the v2 adapter; deployment continues to use the legacy repository.
+
+Every later version bump must likewise add one adjacent, repeat-safe migration
+to `lib/database-schema/current-schema.ts`; a gap makes the registry invalid
+before a database is touched. The small manual runner executes retained
 migrations and publishes the complete manifest with one compare-and-set only
 after they succeed. It has no deploy hook, durable lock, pending-step protocol,
-or rollback framework. A failure leaves the manifest unchanged; migrations must
-therefore tolerate a manual retry. A concurrent manifest change is reported and
-requires a fresh `db:check`.
+or rollback framework. A failure leaves the manifest unchanged and may leave
+verified, unreachable, or already-published v2 work for the same migration to
+reuse. A concurrent manifest change is reported and requires a fresh `db:check`.
 
 Runtime repositories still reject unknown per-record schema versions. That local
 validation is independent from the manual release manifest and remains the final
@@ -383,13 +408,15 @@ aggregate adapter now pass their shared and fault-specific gates. Aggregate
 records live beside raw records in an adapter-owned v2 keyspace and use one
 native commit for the envelope, up to eight endpoint claims, and owner/public
 projections; the worst supported takeover/duplication shape uses 87 of 100 Deno
-KV checks. Repeat-safe source-preserving raw-keyspace migration, controlled
-composition cutover, strict bounded upload/direct delivery, and the PDF site
-projection follow. The retained raw-Deno-KV repository remains selected and
-rejects non-compatible endpoint sets without partial mutation. Existing raw Deno
-KV records require explicit compatibility or migration before the aggregate
-adapter can become durable default. Generic raw-binary publishing, PDF.js,
-thumbnails, text extraction, and external storage remain later work.
+KV checks. The manual source-preserving raw-keyspace migration is now complete:
+it uses deterministic assets/payloads, conditional idempotent aggregate imports,
+strict source/destination verification, and a source-bound readiness record
+without changing v1. Controlled composition cutover, strict bounded
+upload/direct delivery, and the PDF site projection follow. The retained
+raw-Deno-KV repository remains selected and rejects non-compatible endpoint sets
+without partial mutation; the v2 readiness probe is available for the cutover
+factory but is not a startup or deploy hook. Generic raw-binary publishing,
+PDF.js, thumbnails, text extraction, and external storage remain later work.
 
 ## Local development
 
@@ -496,10 +523,13 @@ deno task pre-deploy
 deno task --env-file=.env.production.local start
 ```
 
-No deploy or startup step checks a database. For a schema-affecting release, run
-`db:check` manually against the exact target and, when it reports an available
-path, run the separately confirmed `db:update`. Ordinary code-only releases need
-no database command.
+No deploy or startup step checks a database. For a schema-affecting release,
+back up and quiesce affected writers, run `db:check` manually against the exact
+target, and, when it reports an available path, run the separately confirmed
+`db:update`. Keep writers quiesced through adapter selection and smoke testing;
+ordinary code-only releases need no database command. The current
+`pages-v1-to-v2` release is additive and source-preserving, but this checkpoint
+does not yet switch runtime composition to v2.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance

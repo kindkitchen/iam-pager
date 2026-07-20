@@ -142,10 +142,12 @@ contention, corruption, interrupted-batch/retry, legacy-keyspace, and accepted
 v2 implementation with manifest-backed envelopes, revision-bearing endpoint and
 owner/public indexes, and one native visibility commit. Shared conformance,
 restart/corruption/retry-exhaustion coverage, all eight endpoints, and the
-worst-case 87-of-100-check transaction pass. Source-preserving raw-keyspace
-migration and controlled cutover still precede strict bounded HTTP
-upload/delivery and the secondary PDF site projection. Generic binary fallback
-and external storage remain later.
+worst-case 87-of-100-check transaction pass. The manual source-preserving
+raw-keyspace migration now validates and retains v1, copies deterministic
+assets/aggregates into v2, rejects conflicts and source changes, and exposes a
+strict readiness probe. Controlled composition cutover still precedes strict
+bounded HTTP upload/delivery and the secondary PDF site projection. Generic
+binary fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

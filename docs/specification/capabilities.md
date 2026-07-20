@@ -132,10 +132,11 @@ The HTTP-independent management core now implements trial publishing and managed
 create, bounded list, source inspection, revision-bound content/access update,
 deletion, and owner-only private delivery. Process-local composition runs this
 behavior through the named immutable-asset/page-aggregate repository contract;
-the conforming v2 Deno KV aggregate implementation is now complete, while the
-raw-Deno-KV adapter retains the compatible `PageRepository` path until explicit
-migration and controlled cutover. Both paths preserve the current JSON behavior.
-Fresh collection, item, action, and bulk routes now expose the strict bounded
+the conforming v2 Deno KV aggregate implementation and explicit
+source-preserving migration/readiness gate are now complete, while the
+raw-Deno-KV adapter retains the compatible `PageRepository` path until
+controlled cutover. Both paths preserve the current JSON behavior. Fresh
+collection, item, action, and bulk routes now expose the strict bounded
 management adapter with synchronizer CSRF, owner-safe presenters, pagination,
 and strong revision ETags. The composed catch-all route uses the same service
 and session-derived actor for public or owner-private delivery, while deployment

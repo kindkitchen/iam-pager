@@ -64,9 +64,15 @@ export class CryptoContentAssetPayloadIdGenerator
   }
 }
 
+export type ContentAssetPayloadStagingMode =
+  | "new"
+  | "reuse-identical";
+
 export interface KvContentAssetRepositoryOptions {
   readonly codec?: ContentDataCodec;
   readonly payload_id_generator?: ContentAssetPayloadIdGenerator;
+  /** Migration-only mode for a deterministic payload key retained across retries. */
+  readonly payload_staging_mode?: ContentAssetPayloadStagingMode;
 }
 
 export function content_asset_manifest_key(
@@ -116,6 +122,11 @@ function key_part_equals(a: Deno.KvKeyPart, b: Deno.KvKeyPart): boolean {
 function key_equals(a: Deno.KvKey, b: Deno.KvKey): boolean {
   return a.length === b.length &&
     a.every((part, index) => key_part_equals(part, b[index]));
+}
+
+function bytes_equal(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength &&
+    left.every((byte, index) => byte === right[index]);
 }
 
 function deserialize_manifest(
@@ -216,6 +227,7 @@ export class KvContentAssetRepository
   readonly #kv: KvGateway;
   readonly #codec: ContentDataCodec;
   readonly #payload_id_generator: ContentAssetPayloadIdGenerator;
+  readonly #payload_staging_mode: ContentAssetPayloadStagingMode;
 
   constructor(
     kv: KvGateway,
@@ -225,10 +237,16 @@ export class KvContentAssetRepository
     this.#codec = options.codec ?? new V8ContentDataCodec();
     this.#payload_id_generator = options.payload_id_generator ??
       new CryptoContentAssetPayloadIdGenerator();
+    this.#payload_staging_mode = options.payload_staging_mode ?? "new";
     require(
       typeof this.#codec.encoding_version === "string" &&
         /^[A-Za-z0-9_-]{1,64}$/.test(this.#codec.encoding_version),
       "codec encoding_version must be a storage-safe identifier",
+    );
+    require(
+      this.#payload_staging_mode === "new" ||
+        this.#payload_staging_mode === "reuse-identical",
+      "payload_staging_mode must be new or reuse-identical",
     );
   }
 
@@ -294,11 +312,13 @@ export class KvContentAssetRepository
     );
     const payload_storage_key = content_asset_payload_key(payload_id);
 
-    let staged = false;
-    let retain_payload = false;
+    let cleanup_on_failure = false;
+    let retain_payload = this.#payload_staging_mode === "reuse-identical";
     try {
-      await this.#kv.stage_binary_object(payload_storage_key, payload_bytes);
-      staged = true;
+      cleanup_on_failure = await this.#stage_payload(
+        payload_storage_key,
+        payload_bytes,
+      );
 
       const manifest: StoredContentAssetManifest = {
         schema_version: storage_schema_version,
@@ -325,12 +345,12 @@ export class KvContentAssetRepository
       retain_payload = true;
       const published = await publication.commit();
       if (!published.ok) {
-        retain_payload = false;
+        retain_payload = this.#payload_staging_mode === "reuse-identical";
         return { ok: false, reason: "content_asset_id_conflict" };
       }
       return { ok: true, asset: stored_asset };
     } finally {
-      if (staged && !retain_payload) {
+      if (cleanup_on_failure && !retain_payload) {
         await this.#cleanup_payload(payload_storage_key);
       }
     }
@@ -349,6 +369,34 @@ export class KvContentAssetRepository
     if (entry === null) return null;
     const data = await this.#read_verified_payload(entry.value);
     return manifest_asset(entry.value, data);
+  }
+
+  async #stage_payload(
+    key: Deno.KvKey,
+    bytes: Uint8Array,
+  ): Promise<boolean> {
+    if (this.#payload_staging_mode === "new") {
+      await this.#kv.stage_binary_object(key, bytes);
+      return true;
+    }
+
+    const existing = await this.#kv.read_binary_object(key);
+    if (existing !== null) {
+      if (!bytes_equal(existing, bytes)) {
+        throw new TypeError(
+          "content asset repository: deterministic payload conflict",
+        );
+      }
+      return false;
+    }
+
+    try {
+      await this.#kv.stage_binary_object(key, bytes);
+    } catch (error) {
+      const raced = await this.#kv.read_binary_object(key);
+      if (raced === null || !bytes_equal(raced, bytes)) throw error;
+    }
+    return false;
   }
 
   async #read_verified_payload(

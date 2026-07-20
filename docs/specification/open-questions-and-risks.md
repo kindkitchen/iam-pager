@@ -140,9 +140,12 @@ wins publication. Operators rerun `db:check` after either outcome. A migration
 may be removed only after every supported database is beyond its source version.
 
 The Deno KV adapter preserves the existing manifest key/format. Current
-`ownership`, `sessions`, and `pages` targets are version 1; confirmed legacy
-initialization writes metadata without rewriting already-version-1 application
-records.
+`ownership` and `sessions` targets are version 1; `pages` is version 2 through
+the retained `pages-v1-to-v2` migration. Confirmed initialization or an existing
+version-1 pages manifest validates and copies legacy page records into adjacent
+v2 asset/aggregate keyspaces before publishing the manifest. Operators must
+quiesce v1 page writers through migration verification and controlled cutover;
+the migration never rewrites or deletes v1 records.
 
 Runtime storage now follows environment selectors without a Deno Deploy timeline
 override. Shared revision-preview databases therefore remain an operator risk:

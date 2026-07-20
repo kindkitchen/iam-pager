@@ -4,4 +4,4 @@
  */
 export const ownership_database_schema_version = 1;
 export const session_database_schema_version = 1;
-export const page_database_schema_version = 1;
+export const page_database_schema_version = 2;
