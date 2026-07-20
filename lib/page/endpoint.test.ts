@@ -1,0 +1,202 @@
+import { assert, assertEquals, assertThrows } from "@std/assert";
+import { LocatorEngine } from "../locator/engine.ts";
+import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
+import type { PageEndpointBinding } from "./endpoint.ts";
+import { DefaultPageEndpointPlanner, max_page_endpoints } from "./endpoint.ts";
+
+function make_planner(): DefaultPageEndpointPlanner {
+  return new DefaultPageEndpointPlanner(
+    new LocatorEngine({
+      strategies: [new PathSlugStrategy()],
+      forbidden_namespaces: ["api", "auth", "site"],
+    }),
+  );
+}
+
+function endpoint(
+  page_name: string | undefined,
+  delivery_profile: "inline" | "attachment" = "inline",
+  namespace = "Alice",
+): PageEndpointBinding {
+  return {
+    locator: page_name === undefined ? { namespace } : { namespace, page_name },
+    delivery_profile,
+  };
+}
+
+Deno.test("endpoint planner accepts one canonical endpoint", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: { canonical: endpoint(undefined) },
+      supported_delivery_profiles: ["inline"],
+    }),
+    {
+      ok: true,
+      endpoint_set: {
+        canonical: endpoint(undefined),
+        alternates: [],
+      },
+    },
+  );
+});
+
+Deno.test("endpoint planner accepts the bounded complete set and orders alternates", () => {
+  const alternates = Array.from(
+    { length: max_page_endpoints - 1 },
+    (_, index) => endpoint(`path-${max_page_endpoints - index}`, "attachment"),
+  );
+  const result = make_planner().plan({
+    endpoint_set: {
+      canonical: endpoint("Report", "inline"),
+      alternates,
+    },
+    supported_delivery_profiles: ["inline", "attachment"],
+  });
+  assert(result.ok);
+  assertEquals(
+    result.endpoint_set.alternates.map((binding) => binding.locator.page_name),
+    ["path-2", "path-3", "path-4", "path-5", "path-6", "path-7", "path-8"],
+  );
+});
+
+Deno.test("endpoint planner rejects more than eight endpoints", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: {
+        canonical: endpoint("canonical"),
+        alternates: Array.from(
+          { length: max_page_endpoints },
+          (_, index) => endpoint(`alternate-${index}`),
+        ),
+      },
+      supported_delivery_profiles: ["inline"],
+    }),
+    { ok: false, reason: "invalid_endpoint_count" },
+  );
+});
+
+Deno.test("endpoint planner validates every locator and reserved namespace", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: {
+        canonical: endpoint("valid"),
+        alternates: [endpoint("../invalid")],
+      },
+      supported_delivery_profiles: ["inline"],
+    }),
+    { ok: false, reason: "invalid_locator" },
+  );
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: { canonical: endpoint("page", "inline", "SITE") },
+      supported_delivery_profiles: ["inline"],
+    }),
+    { ok: false, reason: "forbidden_namespace" },
+  );
+});
+
+Deno.test("endpoint planner requires one case-insensitive namespace", () => {
+  const planner = make_planner();
+  const matching = planner.plan({
+    endpoint_set: {
+      canonical: endpoint("preview", "inline", "Alice"),
+      alternates: [endpoint("download", "attachment", "ALICE")],
+    },
+    supported_delivery_profiles: ["inline", "attachment"],
+  });
+  assert(matching.ok);
+  assertEquals(matching.endpoint_set.alternates[0].locator.namespace, "ALICE");
+
+  assertEquals(
+    planner.plan({
+      endpoint_set: {
+        canonical: endpoint("preview", "inline", "Alice"),
+        alternates: [endpoint("download", "attachment", "Bob")],
+      },
+      supported_delivery_profiles: ["inline", "attachment"],
+    }),
+    { ok: false, reason: "namespace_mismatch" },
+  );
+});
+
+Deno.test("endpoint planner rejects case-insensitive duplicate locator claims", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: {
+        canonical: endpoint("Report", "inline", "Alice"),
+        alternates: [endpoint("REPORT", "attachment", "ALICE")],
+      },
+      supported_delivery_profiles: ["inline", "attachment"],
+    }),
+    { ok: false, reason: "duplicate_locator" },
+  );
+});
+
+Deno.test("endpoint planner enforces content-specific delivery profiles", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: {
+        canonical: endpoint("report.pdf", "attachment"),
+      },
+      supported_delivery_profiles: ["inline"],
+    }),
+    { ok: false, reason: "unsupported_delivery_profile" },
+  );
+});
+
+Deno.test("endpoint planner gives no path suffix special meaning", () => {
+  assertEquals(
+    make_planner().plan({
+      endpoint_set: {
+        canonical: endpoint("download", "attachment"),
+        alternates: [endpoint("browser-copy.pdf", "inline")],
+      },
+      supported_delivery_profiles: ["inline", "attachment"],
+    }),
+    {
+      ok: true,
+      endpoint_set: {
+        canonical: endpoint("download", "attachment"),
+        alternates: [endpoint("browser-copy.pdf", "inline")],
+      },
+    },
+  );
+});
+
+Deno.test("endpoint planner detaches accepted publisher intent", () => {
+  const canonical = endpoint("Report");
+  const alternate = endpoint("Download", "attachment");
+  const result = make_planner().plan({
+    endpoint_set: { canonical, alternates: [alternate] },
+    supported_delivery_profiles: ["inline", "attachment"],
+  });
+  assert(result.ok);
+  canonical.locator.namespace = "Changed";
+  alternate.locator.page_name = "Changed";
+  assertEquals(result.endpoint_set, {
+    canonical: endpoint("Report"),
+    alternates: [endpoint("Download", "attachment")],
+  });
+});
+
+Deno.test("endpoint planner rejects invalid content profile declarations", () => {
+  const planner = make_planner();
+  assertThrows(
+    () =>
+      planner.plan({
+        endpoint_set: { canonical: endpoint("page") },
+        supported_delivery_profiles: [],
+      }),
+    Error,
+    "non-empty",
+  );
+  assertThrows(
+    () =>
+      planner.plan({
+        endpoint_set: { canonical: endpoint("page") },
+        supported_delivery_profiles: ["inline", "inline"],
+      }),
+    Error,
+    "valid and unique",
+  );
+});

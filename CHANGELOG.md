@@ -2,6 +2,44 @@
 
 ## 2026-07-20
 
+- Refactored the process-local `PageService` and current `md-page` flow onto the
+  immutable-asset/page-aggregate capabilities without changing HTTP or JSON
+  behavior. Validated content is staged before page visibility; content changes
+  atomically flip the asset reference; access/tag changes retain it; rename,
+  duplicate, delete, and direct resolution use the split contracts. Added
+  focused managed/public aggregate queries that emit one canonical page row
+  regardless of endpoint count, made `MemoryPageRepository` a compatibility
+  projection over the split reference, and retained the raw-Deno-KV service path
+  until its planned replacement. Aggregate conformance and service coverage now
+  include query cardinality, asset/reference behavior, and legacy compatibility.
+  All 475 tests, check, and the production build pass.
+
+- Implemented the immutable-asset/atomic-persistence foundation for
+  `content-endpoint-bindings`. Added opaque immutable `ContentAsset` records and
+  focused create/read capabilities; a separate logical `PageAggregate` with one
+  asset reference and a complete endpoint set; and granular resolve,
+  trial/managed create, combined revision update, duplicate, and delete
+  capabilities. The process-local reference stages assets before visibility,
+  publishes every endpoint claim all-or-none, supports managed takeover of
+  endpoint-occupying trials, atomically moves sets and flips shared asset
+  references, shares immutable assets on duplication, and removes endpoint
+  visibility without unsafe asset deletion. A 16-case backend-neutral
+  conformance suite covers isolation, conflicts, concurrent winners, revision
+  checks, takeover, replacement, sharing, and cleanup. The composed
+  `PageService` and JSON API intentionally retain their one-endpoint `md-page`
+  behavior for the next refactor step. All 473 tests, check, and the production
+  build pass.
+
+- Implemented the first `content-endpoint-bindings` contract step. The settled
+  endpoint set has one explicit canonical binding and up to seven deterministic
+  alternates, all at unique validated locators in one case-insensitive
+  namespace; content types declare supported `inline`/`attachment` profiles and
+  `md-page` remains inline-only. Added the transport/storage-neutral planner
+  interface, pure default implementation, and focused coverage for bounds,
+  casing, namespace, collisions, profile compatibility, input isolation, and
+  path-suffix behavior. The stored page aggregate and public API remain
+  unchanged for the next immutable-asset/atomic-persistence step.
+
 - Reduced database release handling to an explicit developer workflow. The
   retained `pre-deploy` task now only echoes a pointer and always succeeds;
   deploy and runtime no longer inspect schemas or rewrite timeline storage.

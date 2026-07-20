@@ -155,12 +155,27 @@ The first publishing slice currently provides:
   omit page IDs, revisions, and owner identity; private and guest pages never
   enter creator listings. The durable adapter uses coherent ID/locator/owner
   indexes and immutable binary-safe content chunks in a fresh keyspace. The
-  composition root selects one page repository and exposes this service plus its
-  strict HTTP adapter to thin Fresh collection, item, action, bulk,
+  composition root selects one page persistence path and exposes this service
+  plus its strict HTTP adapter to thin Fresh collection, item, action, bulk,
   direct-delivery, and wrapped-view routes. The current publishing form sends
   the nested explicit public-create request and creator CSRF token without
   losing draft state on API errors; see
   [the page API contract](docs/api/pages.md);
+- the split page/content persistence foundation: immutable `ContentAsset`
+  identities are created and read through focused capabilities, while a separate
+  `PageAggregate` stores one asset reference and a complete canonical/alternate
+  endpoint set. Atomic capability interfaces cover trial and managed creation,
+  combined revision-bound content, endpoint, access, and tag mutation,
+  immutable-asset-sharing duplication, deletion, and logical-page owner/public
+  queries. The process-local reference passes shared backend-neutral conformance
+  for staging, collision, takeover, concurrency, all-or-none endpoint movement,
+  coherent asset switches, retained shared assets, and one-row projections.
+  `PageService` now uses these capabilities directly for the compatible
+  one-canonical-inline-endpoint `md-page` flow: validated content is staged as
+  an asset, access-only changes retain it, content changes atomically flip the
+  reference, and direct delivery resolves the endpoint before reading content.
+  The raw-Deno-KV repository stays on a legacy service compatibility path until
+  the planned conforming adapter and migration;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with soft in-field four-word random locator helpers, a collapsible
@@ -288,15 +303,31 @@ publisher supplies both valid locators and each delivery profile. A path ending
 in `.pdf` is only an example and has no special routing, generation, or delivery
 semantics; behavior is stored on the endpoint binding.
 
-The implementation order is pure endpoint/content contracts with a memory
-reference, PDF content logic, a conforming Kvdex-backed Deno KV page/content
-adapter, strict bounded upload/direct delivery, and finally the site projection.
-Kvdex remains inside the adapter. Its segmented blob writes do not by themselves
-preserve the repository's atomic visibility guarantees, so immutable assets must
-be fully staged before page endpoints can reference them. Existing raw Deno KV
-records require explicit compatibility or migration before that adapter becomes
-the durable default. Generic raw-binary publishing, PDF.js, thumbnails, text
-extraction, and external storage remain later work.
+The first three foundation steps are implemented. Endpoint intent has one
+explicit canonical binding plus at most seven alternates, all at unique valid
+locators in one case-insensitive namespace. The pure planner applies the content
+type's declared delivery-profile support, preserves publisher spelling, and
+gives alternate input order no meaning; `md-page` declares inline-only delivery.
+Immutable `ContentAsset` identity/read/create capabilities sit beside a
+`PageAggregate` whose content reference and complete endpoint set change through
+focused atomic persistence capabilities. Logical-page query capabilities keep
+aliases out of managed/public rows. The process-local reference passes shared
+backend-neutral conformance for staged assets, all-or-none endpoint claims and
+moves, concurrent winners, coherent asset switches, safe immutable sharing,
+endpoint-wide deletion, and one-row query cardinality.
+
+`PageService` and the process-local `md-page` composition now run on those split
+contracts without changing JSON/API behavior. The remaining active-task step is
+to expose safe explicit endpoint links while keeping one page projection. PDF
+content logic, a conforming Kvdex-backed Deno KV page/content adapter, strict
+bounded upload/direct delivery, and the site projection follow. The retained
+raw-Deno-KV repository still uses the legacy compatibility path. Kvdex remains
+inside the durable adapter. Its segmented blob writes do not by themselves
+preserve atomic visibility, so immutable assets must be fully staged before page
+endpoints can reference them. Existing raw Deno KV records require explicit
+compatibility or migration before that adapter becomes the durable default.
+Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and external
+storage remain later work.
 
 ## Local development
 

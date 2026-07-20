@@ -36,23 +36,48 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
-The new `PageService` is the HTTP/session-independent application boundary for
-trial and managed page behavior. It receives a typed actor and resolves
-namespace authority through an interface, while repositories alone own atomic
-locator, ID, and revision conditions. Owner-safe summaries and inspection input
-exclude stewardship IDs and stored derivations. This service runs against either
-conforming page repository. The composition root selects the memory or Deno KV
-adapter, exposes the service and strict HTTP boundary once, and Fresh
-collection/item/direct routes remain thin adapters over those interfaces. Public
-exploration extends that boundary through `PublicPageExplorer`: callers supply
-optional name queries and an opaque continuation, while the selected repository
-decides whether the MVP scan or a future index satisfies it.
+`PageService` is the HTTP/session-independent application boundary for trial and
+managed page behavior. It receives a typed actor and resolves namespace
+authority through an interface, while persistence alone owns atomic endpoint,
+ID, and revision conditions. Owner-safe summaries and inspection input exclude
+stewardship IDs and stored derivations. The process-local composition now runs
+this service through focused content-asset/page-aggregate capabilities; the
+retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
+path until the conforming Kvdex adapter replaces it. The service and strict HTTP
+boundary are still exposed once, and Fresh collection/item/direct routes remain
+thin adapters. Public exploration extends that boundary through
+`PublicPageExplorer`: callers supply optional name queries and an opaque
+continuation, while the selected persistence decides whether the MVP scan or a
+future index satisfies it.
 
-The planned PDF work must evolve this boundary before adding transport code. One
-logical page keeps one management/exploration representation while endpoint
-resolution selects an inline or attachment delivery profile and then reads its
-shared content asset. Fresh, `Request`, `Response`, multipart parsing, browser
-preview, Deno KV, and Kvdex types must remain outside these contracts.
+The endpoint foundation exposes a transport/storage-neutral
+`PageEndpointPlanner` interface and default implementation. It accepts one
+explicit canonical binding plus up to seven alternates, validates every locator
+through a narrow capability, enforces one namespace and case-insensitive claim
+per binding, applies the selected content type's supported profile declaration,
+and returns detached, deterministically ordered intent. `md-page` declares
+inline-only delivery.
+
+The persistence foundation now adds immutable `ContentAsset` identity, creation,
+and read capabilities plus a separate `PageAggregate` with one asset reference
+and a complete endpoint set. Focused capabilities cover endpoint resolution,
+trial/managed creation, one revision-bound combined mutation, duplication, and
+deletion instead of making the web or content type depend on a single broad
+adapter interface. Asset creation is a staging operation; only a fully created
+asset can enter an atomic page/endpoint commit. The memory reference and shared
+backend-neutral conformance cover complete endpoint claims/moves,
+content-reference flips, immutable sharing, concurrency, and retention after
+page deletion. Focused managed/public query capabilities return logical page
+aggregates rather than endpoint rows.
+
+`PageService` now stages each validated `md-page` representation as an immutable
+asset before atomic page publication, resolves direct requests through endpoint
+bindings, materializes management/public projections from the aggregate plus its
+asset, and keeps access-only changes on the existing asset. The current JSON and
+HTTP behavior deliberately remains one canonical inline endpoint. Explicit
+endpoint links and endpoint-selected attachment responses are the next
+projection step. Fresh, `Request`, `Response`, multipart parsing, browser
+preview, Deno KV, and Kvdex types remain outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -101,17 +126,29 @@ conditions clean unreferenced new chunks best-effort. Neither ownership nor
 session settings alone imply that pages survive a restart; only the explicit
 page-storage opt-in selects durable page persistence.
 
+`MemoryPageAggregateRepository` is the reference for the split model. Its
+synchronous check/set phases atomically update the logical page and every
+case-insensitive endpoint index, while immutable assets are cloned at boundaries
+and never overwritten or deleted by page operations. Managed/public query
+capabilities sort and cursor logical pages by their canonical locator, so
+alternates cannot duplicate rows. `MemoryPageRepository` is now only a
+one-endpoint compatibility projection over that reference, and the composed
+process-local `PageService` detects and uses the focused capabilities directly.
+The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
+planned Kvdex adapter and explicit record migration.
+
 The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
-implementation detail over Deno KV. It must satisfy the unchanged repository
-contracts and shared conformance before becoming the selected durable adapter.
-Kvdex encoded collections segment `Uint8Array`, but cannot join Kvdex atomic
-builders; values beyond Deno KV's 800 KiB atomic mutation limit require batched,
-non-atomic segment commits. Large immutable assets must therefore be staged
-while unreferenced and become reachable only after all segments succeed and an
-atomic metadata/endpoint commit publishes the reference. Critical locator and
-owner indexes may not use Kvdex shortcuts whose delete/update behavior weakens
-atomic rename, replacement, or deletion. Existing raw-KV records require an
-explicit compatibility or migration path before selection changes.
+implementation detail over Deno KV. It must satisfy the new aggregate
+conformance plus the preserved application behavior before becoming the selected
+durable adapter. Kvdex encoded collections segment `Uint8Array`, but cannot join
+Kvdex atomic builders; values beyond Deno KV's 800 KiB atomic mutation limit
+require batched, non-atomic segment commits. Large immutable assets must
+therefore be staged while unreferenced and become reachable only after all
+segments succeed and an atomic metadata/endpoint commit publishes the reference.
+Critical locator and owner indexes may not use Kvdex shortcuts whose
+delete/update behavior weakens atomic rename, replacement, or deletion. Existing
+raw-KV records require an explicit compatibility or migration path before
+selection changes.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
@@ -195,8 +232,9 @@ durable review target.
   arrive at the same time.
 - Page routes must not consume management, API, framework, or static-asset
   routes.
-- Canonical and alternate endpoint locators share the same collision space; an
-  endpoint set is created or moved completely or not at all.
+- A complete endpoint plan contains 1–8 bindings, exactly one structurally
+  canonical, all in one case-insensitive namespace and all unique in the shared
+  locator collision space; set replacement commits completely or not at all.
 - Direct responses must use an intentional status, content type, length, cache
   policy, and stored inline or download disposition.
 - Invalid and missing direct URLs must not masquerade as a successful home-page
@@ -224,15 +262,17 @@ sanitization.
   in the site view.
 
 The first supported set can be small, but the design should not assume that all
-future pages are short text. PDF is the selected next type. Its handler receives
-bounded bytes independently from HTTP, verifies the explicit minimum PDF shape,
-fixes media type to `application/pdf`, and never trusts a filename extension to
-establish type. One asset supports independently configured inline and
-attachment endpoints at ordinary valid locators. Browser-native direct viewing
-and a site wrapper around that URL are the first preview adapters; PDF.js,
-thumbnails, text extraction, generic binary, and unbounded streaming are later.
-The wrapper must retain direct-preview and download fallbacks, and the first
-slice must explicitly decide whether HTTP byte ranges are implemented or
+future pages are short text. Content handlers declare a non-empty subset of the
+fixed `inline` and `attachment` endpoint profiles; the implemented `md-page`
+handler permits only `inline`. PDF is the selected next type. Its handler
+receives bounded bytes independently from HTTP, verifies the explicit minimum
+PDF shape, fixes media type to `application/pdf`, and never trusts a filename
+extension to establish type. One asset supports independently configured inline
+and attachment endpoints at ordinary valid locators. Browser-native direct
+viewing and a site wrapper around that URL are the first preview adapters;
+PDF.js, thumbnails, text extraction, generic binary, and unbounded streaming are
+later. The wrapper must retain direct-preview and download fallbacks, and the
+first slice must explicitly decide whether HTTP byte ranges are implemented or
 deferred under a bounded size.
 
 The current `MdPage` form previews Markdown and CSS locally inside a sandboxed

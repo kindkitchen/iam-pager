@@ -108,11 +108,16 @@ not generate or reserve a special path shape. Creation, access, endpoint-set
 change, replacement, duplication, and deletion preserve the complete endpoint
 set without partial visibility.
 
-The slice is delivered in interface-first stages: shared endpoint/content
-contracts with a memory reference, the PDF content core, a conforming Kvdex-
-backed Deno KV adapter, strict bounded HTTP upload and delivery, then the
-secondary site projection. Generic binary fallback and external storage remain
-later.
+The generic prerequisite now includes pure endpoint-set planning, immutable
+content assets, an atomic page/endpoint aggregate, logical-page query
+capabilities, the process-local reference, and shared persistence conformance.
+`PageService` uses that split path for current `md-page`: validated content is
+staged before publication, each page has one canonical inline endpoint, direct
+resolution joins its current asset, and management/public queries emit one row.
+The JSON contract remains unchanged. Explicit endpoint links come next, followed
+by the PDF content core, conforming Kvdex-backed Deno KV adapter, strict bounded
+HTTP upload/delivery, and secondary site projection. Generic binary fallback and
+external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

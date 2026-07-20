@@ -1,17 +1,10 @@
-import { type Locator, locator_key } from "../locator/model.ts";
-import {
-  compare_page_sort_keys,
-  decode_managed_page_list_cursor,
-  decode_page_exploration_cursor,
-  decode_page_list_cursor,
-  encode_managed_page_list_cursor,
-  encode_page_exploration_cursor,
-  encode_page_list_cursor,
-  type ManagedPageListCursorScope,
-  page_sort_key,
-  type PageExplorationCursorScope,
-  type PageSortKey,
-} from "./cursor.ts";
+import type { ContentAsset } from "../content/asset.ts";
+import { is_valid_content_asset_id } from "../content/asset.ts";
+import { CryptoContentAssetIdGenerator } from "../content/generators.ts";
+import type { ContentAssetIdGenerator } from "../content/interfaces.ts";
+import type { Locator } from "../locator/model.ts";
+import type { PageAggregate } from "./aggregate.ts";
+import type { PageEndpointSet } from "./endpoint.ts";
 import type {
   CreateManagedRequest,
   CreateManagedResult,
@@ -33,587 +26,275 @@ import type {
   ReplaceManagedRequest,
   ReplaceManagedResult,
 } from "./interfaces.ts";
-import {
-  is_valid_page_access,
-  is_valid_page_id,
-  is_valid_page_revision,
-  is_valid_page_tags,
-  page_record_violation,
-  type PageId,
-  type PageRecord,
-} from "./model.ts";
+import { MemoryPageAggregateRepository } from "./memory-aggregate-repository.ts";
+import type { PageContent, PageRecord } from "./model.ts";
 
-function require(condition: boolean, message: string): asserts condition {
-  if (!condition) throw new Error(`page repository: ${message}`);
-}
-
-function is_valid_time(value: Date): boolean {
-  return value instanceof Date && Number.isFinite(value.getTime());
-}
-
-/** Boundary isolation: callers can never alias internal repository state. */
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
+const max_asset_id_attempts = 16;
 
 /**
- * Map-backed `PageRepository`. Every conditional mutation runs its complete
- * check/set phase synchronously (methods contain no awaits), so concurrent
- * promises serialize on the event loop and each mutation is atomic. Values
- * are cloned at both boundaries.
+ * Compatibility projection of the split memory persistence through the legacy
+ * one-locator `PageRepository` contract. New application code uses the focused
+ * inherited asset/aggregate capabilities; retained repository conformance and
+ * legacy composition can still exercise the old shape during migration.
  */
-export class MemoryPageRepository implements PageRepository {
-  #by_id = new Map<PageId, PageRecord>();
-  #by_locator = new Map<string, PageId>();
+export class MemoryPageRepository extends MemoryPageAggregateRepository
+  implements PageRepository {
+  readonly #content_asset_id_generator: ContentAssetIdGenerator;
 
-  // deno-lint-ignore require-await
+  constructor(options: {
+    content_asset_id_generator?: ContentAssetIdGenerator;
+  } = {}) {
+    super();
+    this.#content_asset_id_generator = options.content_asset_id_generator ??
+      new CryptoContentAssetIdGenerator();
+  }
+
   async find_by_locator(locator: Locator): Promise<PageRecord | null> {
-    const page_id = this.#by_locator.get(locator_key(locator));
-    return page_id === undefined ? null : clone(this.#by_id.get(page_id)!);
+    const resolved = await this.resolve_page_endpoint(locator);
+    return resolved === null ? null : await this.#materialize(resolved.page);
   }
 
-  // deno-lint-ignore require-await
-  async find_by_id(page_id: PageId): Promise<PageRecord | null> {
-    require(
-      is_valid_page_id(page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    const record = this.#by_id.get(page_id);
-    return record === undefined ? null : clone(record);
+  async find_by_id(page_id: string): Promise<PageRecord | null> {
+    const page = await this.find_page_aggregate_by_id(page_id);
+    return page === null ? null : await this.#materialize(page);
   }
 
-  // deno-lint-ignore require-await
-  async put_trial(request: PutTrialRequest): Promise<PutTrialResult> {
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(is_valid_time(request.now), "now must be a valid date");
-    const key = locator_key(request.locator);
-    const existing_id = this.#by_locator.get(key);
-    if (existing_id !== undefined) {
-      const existing = this.#by_id.get(existing_id)!;
-      if (existing.stewardship.kind === "managed") {
-        return { ok: false, reason: "managed_conflict" };
-      }
-      const page: PageRecord = {
-        page_id: existing.page_id,
-        locator: clone(request.locator),
-        stewardship: { kind: "trial" },
-        access: "public",
-        tags: [],
-        revision: existing.revision + 1,
-        content: clone(request.content),
-        created_at: existing.created_at,
-        updated_at: request.now,
-      };
-      this.#assert_valid(page);
-      this.#by_id.set(page.page_id, page);
-      this.#by_locator.set(key, page.page_id);
-      return { ok: true, outcome: "replaced", page: clone(page) };
-    }
-    if (this.#by_id.has(request.page_id)) {
-      return { ok: false, reason: "page_id_conflict" };
-    }
-    const page: PageRecord = {
-      page_id: request.page_id,
-      locator: clone(request.locator),
-      stewardship: { kind: "trial" },
-      access: "public",
-      tags: [],
-      revision: 1,
-      content: clone(request.content),
-      created_at: request.now,
-      updated_at: request.now,
-    };
-    this.#assert_valid(page);
-    this.#by_id.set(page.page_id, page);
-    this.#by_locator.set(key, page.page_id);
-    return { ok: true, outcome: "created", page: clone(page) };
-  }
-
-  // deno-lint-ignore require-await
-  async create_managed(
-    request: CreateManagedRequest,
-  ): Promise<CreateManagedResult> {
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      is_valid_page_access(request.access),
-      "access must be public or private",
-    );
-    require(
-      is_valid_page_tags(request.tags ?? []),
-      "tags must be a bounded canonical sorted unique set",
-    );
-    require(is_valid_time(request.now), "now must be a valid date");
-    const key = locator_key(request.locator);
-    const existing_id = this.#by_locator.get(key);
-    let replaced_trial_id: PageId | null = null;
-    if (existing_id !== undefined) {
-      const existing = this.#by_id.get(existing_id)!;
-      if (existing.stewardship.kind === "managed") {
-        return { ok: false, reason: "managed_conflict" };
-      }
-      replaced_trial_id = existing_id;
-    }
-    if (this.#by_id.has(request.page_id)) {
-      return { ok: false, reason: "page_id_conflict" };
-    }
-    const page: PageRecord = {
-      page_id: request.page_id,
-      locator: clone(request.locator),
-      stewardship: { kind: "managed", owner_user_id: request.owner_user_id },
-      access: request.access,
-      tags: [...(request.tags ?? [])],
-      revision: 1,
-      content: clone(request.content),
-      created_at: request.now,
-      updated_at: request.now,
-    };
-    this.#assert_valid(page);
-    if (replaced_trial_id !== null) this.#by_id.delete(replaced_trial_id);
-    this.#by_id.set(page.page_id, page);
-    this.#by_locator.set(key, page.page_id);
-    return {
-      ok: true,
-      outcome: replaced_trial_id === null ? "created" : "replaced_trial",
-      page: clone(page),
-    };
-  }
-
-  // deno-lint-ignore require-await
-  async replace_managed(
-    request: ReplaceManagedRequest,
-  ): Promise<ReplaceManagedResult> {
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      is_valid_page_revision(request.expected_revision),
-      "expected_revision must be a positive safe integer",
-    );
-    require(
-      is_valid_page_access(request.access),
-      "access must be public or private",
-    );
-    require(
-      request.tags === undefined || is_valid_page_tags(request.tags),
-      "tags must be a bounded canonical sorted unique set",
-    );
-    require(is_valid_time(request.now), "now must be a valid date");
-    const existing = this.#by_id.get(request.page_id);
-    if (
-      existing === undefined ||
-      existing.stewardship.kind !== "managed" ||
-      existing.stewardship.owner_user_id !== request.owner_user_id
-    ) {
-      return { ok: false, reason: "not_found" };
-    }
-    if (existing.revision !== request.expected_revision) {
-      return { ok: false, reason: "revision_conflict" };
-    }
-    const page: PageRecord = {
-      page_id: existing.page_id,
-      locator: existing.locator,
-      stewardship: existing.stewardship,
-      access: request.access,
-      tags: request.tags === undefined ? existing.tags : clone(request.tags),
-      revision: existing.revision + 1,
-      content: request.content === undefined
-        ? existing.content
-        : clone(request.content),
-      created_at: existing.created_at,
-      updated_at: request.now,
-    };
-    this.#assert_valid(page);
-    this.#by_id.set(page.page_id, page);
-    return { ok: true, page: clone(page) };
-  }
-
-  // deno-lint-ignore require-await
-  async rename_managed(
-    request: RenameManagedRequest,
-  ): Promise<RenameManagedResult> {
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      is_valid_page_revision(request.expected_revision),
-      "expected_revision must be a positive safe integer",
-    );
-    require(is_valid_time(request.now), "now must be a valid date");
-    const existing = this.#by_id.get(request.page_id);
-    if (
-      existing === undefined ||
-      existing.stewardship.kind !== "managed" ||
-      existing.stewardship.owner_user_id !== request.owner_user_id
-    ) {
-      return { ok: false, reason: "not_found" };
-    }
-    require(
-      request.locator.namespace.toLowerCase() ===
-        existing.locator.namespace.toLowerCase(),
-      "rename must stay within the current namespace",
-    );
-    if (existing.revision !== request.expected_revision) {
-      return { ok: false, reason: "revision_conflict" };
-    }
-    const old_key = locator_key(existing.locator);
-    const next_key = locator_key(request.locator);
-    const target_id = this.#by_locator.get(next_key);
-    let replaced_trial_id: PageId | null = null;
-    if (target_id !== undefined && target_id !== existing.page_id) {
-      const target = this.#by_id.get(target_id)!;
-      if (target.stewardship.kind === "managed") {
-        return { ok: false, reason: "locator_conflict" };
-      }
-      replaced_trial_id = target.page_id;
-    }
-    const page: PageRecord = {
-      ...existing,
-      locator: clone(request.locator),
-      revision: existing.revision + 1,
-      updated_at: request.now,
-    };
-    this.#assert_valid(page);
-    if (replaced_trial_id !== null) this.#by_id.delete(replaced_trial_id);
-    if (old_key !== next_key) this.#by_locator.delete(old_key);
-    this.#by_id.set(page.page_id, page);
-    this.#by_locator.set(next_key, page.page_id);
-    return {
-      ok: true,
-      outcome: replaced_trial_id === null ? "renamed" : "replaced_trial",
-      page: clone(page),
-    };
-  }
-
-  // deno-lint-ignore require-await
-  async duplicate_managed(
-    request: DuplicateManagedRequest,
-  ): Promise<DuplicateManagedResult> {
-    require(
-      is_valid_page_id(request.source_page_id),
-      "source_page_id must be a route-safe opaque id",
-    );
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      is_valid_page_revision(request.expected_revision),
-      "expected_revision must be a positive safe integer",
-    );
-    require(is_valid_time(request.now), "now must be a valid date");
-    const source = this.#by_id.get(request.source_page_id);
-    if (
-      source === undefined || source.stewardship.kind !== "managed" ||
-      source.stewardship.owner_user_id !== request.owner_user_id
-    ) {
-      return { ok: false, reason: "not_found" };
-    }
-    require(
-      request.locator.namespace.toLowerCase() ===
-        source.locator.namespace.toLowerCase(),
-      "duplicate must stay within the source namespace",
-    );
-    if (source.revision !== request.expected_revision) {
-      return { ok: false, reason: "revision_conflict" };
-    }
-    const target_key = locator_key(request.locator);
-    const target_id = this.#by_locator.get(target_key);
-    let replaced_trial_id: PageId | null = null;
-    if (target_id !== undefined) {
-      const target = this.#by_id.get(target_id)!;
-      if (target.stewardship.kind === "managed") {
-        return { ok: false, reason: "locator_conflict" };
-      }
-      replaced_trial_id = target.page_id;
-    }
-    if (this.#by_id.has(request.page_id)) {
-      return { ok: false, reason: "page_id_conflict" };
-    }
-    const page: PageRecord = {
-      page_id: request.page_id,
-      locator: clone(request.locator),
-      stewardship: clone(source.stewardship),
-      access: source.access,
-      tags: clone(source.tags),
-      revision: 1,
-      content: clone(source.content),
-      created_at: request.now,
-      updated_at: request.now,
-    };
-    this.#assert_valid(page);
-    if (replaced_trial_id !== null) this.#by_id.delete(replaced_trial_id);
-    this.#by_id.set(page.page_id, page);
-    this.#by_locator.set(target_key, page.page_id);
-    return {
-      ok: true,
-      outcome: replaced_trial_id === null ? "created" : "replaced_trial",
-      page: clone(page),
-    };
-  }
-
-  // deno-lint-ignore require-await
-  async delete_managed(
-    request: DeleteManagedRequest,
-  ): Promise<DeleteManagedResult> {
-    require(
-      is_valid_page_id(request.page_id),
-      "page_id must be a route-safe opaque id",
-    );
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      is_valid_page_revision(request.expected_revision),
-      "expected_revision must be a positive safe integer",
-    );
-    const existing = this.#by_id.get(request.page_id);
-    if (
-      existing === undefined ||
-      existing.stewardship.kind !== "managed" ||
-      existing.stewardship.owner_user_id !== request.owner_user_id
-    ) {
-      return { ok: false, reason: "not_found" };
-    }
-    if (existing.revision !== request.expected_revision) {
-      return { ok: false, reason: "revision_conflict" };
-    }
-    this.#by_id.delete(existing.page_id);
-    this.#by_locator.delete(locator_key(existing.locator));
-    return { ok: true };
-  }
-
-  // deno-lint-ignore require-await
   async list_managed(request: ListManagedRequest): Promise<ListManagedResult> {
-    require(
-      typeof request.owner_user_id === "string" &&
-        request.owner_user_id !== "",
-      "owner_user_id must be non-empty",
-    );
-    require(
-      Number.isSafeInteger(request.limit) && request.limit >= 1,
-      "limit must be a positive safe integer",
-    );
-    require(
-      request.namespace === undefined ||
-        (typeof request.namespace === "string" && request.namespace !== ""),
-      "namespace filter must be non-empty when present",
-    );
-    require_normalized_managed_list_request(request);
-    const scope: ManagedPageListCursorScope = {
-      namespace: request.namespace?.toLowerCase() ?? null,
-      page_name_query: request.page_name_query ?? null,
-      access: request.access ?? null,
-      tag: request.tag ?? null,
-    };
-    let after: PageSortKey | null = null;
-    if (request.cursor !== undefined) {
-      after = decode_managed_page_list_cursor(request.cursor, scope);
-      if (after === null) return { ok: false, reason: "invalid_cursor" };
-    }
-    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
-    for (const record of this.#by_id.values()) {
-      if (record.stewardship.kind !== "managed") continue;
-      if (record.stewardship.owner_user_id !== request.owner_user_id) continue;
-      const key = page_sort_key(record);
-      if (!matches_managed_list(record, key, scope)) continue;
-      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
-      candidates.push({ key, record });
-    }
-    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
-    const selected = candidates.slice(0, request.limit);
-    const next_cursor = candidates.length > request.limit
-      ? encode_managed_page_list_cursor(
-        selected[selected.length - 1].key,
-        scope,
-      )
-      : null;
+    const listed = await this.list_managed_page_aggregates(request);
+    if (!listed.ok) return listed;
     return {
       ok: true,
-      pages: selected.map((entry) => clone(entry.record)),
-      next_cursor,
+      pages: await Promise.all(
+        listed.pages.map((page) => this.#materialize(page)),
+      ),
+      next_cursor: listed.next_cursor,
     };
   }
 
-  // deno-lint-ignore require-await
   async list_public(request: ListPublicRequest): Promise<ListPublicResult> {
-    require(
-      typeof request.namespace === "string" && request.namespace !== "",
-      "namespace must be non-empty",
-    );
-    require(
-      Number.isSafeInteger(request.limit) && request.limit >= 1,
-      "limit must be a positive safe integer",
-    );
-    const filter = request.namespace.toLowerCase();
-    let after: PageSortKey | null = null;
-    if (request.cursor !== undefined) {
-      after = decode_page_list_cursor(request.cursor, filter);
-      if (after === null) return { ok: false, reason: "invalid_cursor" };
-    }
-    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
-    for (const record of this.#by_id.values()) {
-      if (record.stewardship.kind !== "managed") continue;
-      if (record.access !== "public") continue;
-      const key = page_sort_key(record);
-      if (key.namespace_key !== filter) continue;
-      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
-      candidates.push({ key, record });
-    }
-    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
-    const selected = candidates.slice(0, request.limit);
-    const next_cursor = candidates.length > request.limit
-      ? encode_page_list_cursor(selected[selected.length - 1].key, filter)
-      : null;
+    const listed = await this.list_public_page_aggregates(request);
+    if (!listed.ok) return listed;
     return {
       ok: true,
-      pages: selected.map((entry) => clone(entry.record)),
-      next_cursor,
+      pages: await Promise.all(
+        listed.pages.map((page) => this.#materialize(page)),
+      ),
+      next_cursor: listed.next_cursor,
     };
   }
 
-  // deno-lint-ignore require-await
   async explore_public(
     request: ExplorePublicRequest,
   ): Promise<ExplorePublicResult> {
-    require_normalized_exploration_request(request);
-    const scope: PageExplorationCursorScope = {
-      namespace_query: request.namespace_query ?? null,
-      page_name_query: request.page_name_query ?? null,
-      tag: request.tag ?? null,
-    };
-    let after: PageSortKey | null = null;
-    if (request.cursor !== undefined) {
-      after = decode_page_exploration_cursor(request.cursor, scope);
-      if (after === null) return { ok: false, reason: "invalid_cursor" };
-    }
-    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
-    for (const record of this.#by_id.values()) {
-      if (record.stewardship.kind !== "managed") continue;
-      if (record.access !== "public") continue;
-      const key = page_sort_key(record);
-      if (!matches_exploration(record, key, scope)) continue;
-      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
-      candidates.push({ key, record });
-    }
-    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
-    const selected = candidates.slice(0, request.limit);
+    const explored = await this.explore_public_page_aggregates(request);
+    if (!explored.ok) return explored;
     return {
       ok: true,
-      pages: selected.map((entry) => clone(entry.record)),
-      next_cursor: candidates.length > request.limit
-        ? encode_page_exploration_cursor(
-          selected[selected.length - 1].key,
-          scope,
-        )
-        : null,
+      pages: await Promise.all(
+        explored.pages.map((page) => this.#materialize(page)),
+      ),
+      next_cursor: explored.next_cursor,
     };
   }
 
-  #assert_valid(page: PageRecord): void {
-    const violation = page_record_violation(page);
-    if (violation !== null) throw new Error(`page repository: ${violation}`);
-  }
-}
-
-function require_normalized_managed_list_request(
-  request: ListManagedRequest,
-): void {
-  if (request.page_name_query !== undefined) {
-    require(
-      request.page_name_query !== "" &&
-        request.page_name_query === request.page_name_query.trim() &&
-        request.page_name_query === request.page_name_query.toLowerCase(),
-      "page_name_query must be a normalized lowercase substring when present",
+  async put_trial(request: PutTrialRequest): Promise<PutTrialResult> {
+    const content_asset_id = await this.#stage_content(
+      request.content,
+      request.now,
     );
+    const result = await this.put_trial_page_aggregate({
+      page_id: request.page_id,
+      endpoint_set: canonical_inline_endpoint(request.locator),
+      content_asset_id,
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (
+        result.reason === "managed_conflict" ||
+        result.reason === "page_id_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page repository: ${result.reason}`);
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize(result.page),
+    };
   }
-  require(
-    request.access === undefined || is_valid_page_access(request.access),
-    "access filter must be public or private when present",
-  );
-  require(
-    request.tag === undefined || is_valid_page_tags([request.tag]),
-    "tag filter must be canonical when present",
-  );
-}
 
-function matches_managed_list(
-  record: PageRecord,
-  key: PageSortKey,
-  scope: ManagedPageListCursorScope,
-): boolean {
-  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
-    (scope.page_name_query === null ||
-      (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query))) &&
-    (scope.access === null || record.access === scope.access) &&
-    (scope.tag === null || record.tags.includes(scope.tag));
-}
-
-function require_normalized_exploration_request(
-  request: ExplorePublicRequest,
-): void {
-  require(
-    Number.isSafeInteger(request.limit) && request.limit >= 1,
-    "limit must be a positive safe integer",
-  );
-  for (
-    const [name, query] of [
-      ["namespace_query", request.namespace_query],
-      ["page_name_query", request.page_name_query],
-    ] as const
-  ) {
-    require(
-      query === undefined ||
-        (query !== "" && query === query.trim() &&
-          query === query.toLowerCase()),
-      `${name} must be a normalized lowercase substring when present`,
+  async create_managed(
+    request: CreateManagedRequest,
+  ): Promise<CreateManagedResult> {
+    const content_asset_id = await this.#stage_content(
+      request.content,
+      request.now,
     );
+    const result = await this.create_managed_page_aggregate({
+      page_id: request.page_id,
+      endpoint_set: canonical_inline_endpoint(request.locator),
+      owner_user_id: request.owner_user_id,
+      access: request.access,
+      tags: request.tags,
+      content_asset_id,
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (
+        result.reason === "managed_conflict" ||
+        result.reason === "page_id_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page repository: ${result.reason}`);
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize(result.page),
+    };
   }
-  require(
-    request.tag === undefined || is_valid_page_tags([request.tag]),
-    "tag must be canonical when present",
-  );
+
+  async replace_managed(
+    request: ReplaceManagedRequest,
+  ): Promise<ReplaceManagedResult> {
+    const content_asset_id = request.content === undefined
+      ? undefined
+      : await this.#stage_content(request.content, request.now);
+    const result = await this.update_managed_page_aggregate({
+      page_id: request.page_id,
+      owner_user_id: request.owner_user_id,
+      expected_revision: request.expected_revision,
+      patch: {
+        access: request.access,
+        ...(request.tags === undefined ? {} : { tags: request.tags }),
+        ...(content_asset_id === undefined ? {} : { content_asset_id }),
+      },
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (
+        result.reason === "not_found" ||
+        result.reason === "revision_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page repository: ${result.reason}`);
+    }
+    return { ok: true, page: await this.#materialize(result.page) };
+  }
+
+  async rename_managed(
+    request: RenameManagedRequest,
+  ): Promise<RenameManagedResult> {
+    const result = await this.update_managed_page_aggregate({
+      page_id: request.page_id,
+      owner_user_id: request.owner_user_id,
+      expected_revision: request.expected_revision,
+      patch: { endpoint_set: canonical_inline_endpoint(request.locator) },
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (result.reason === "endpoint_conflict") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      if (
+        result.reason === "not_found" ||
+        result.reason === "revision_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page repository: ${result.reason}`);
+    }
+    return {
+      ok: true,
+      outcome: result.outcome === "updated" ? "renamed" : "replaced_trial",
+      page: await this.#materialize(result.page),
+    };
+  }
+
+  async duplicate_managed(
+    request: DuplicateManagedRequest,
+  ): Promise<DuplicateManagedResult> {
+    const result = await this.duplicate_managed_page_aggregate({
+      source_page_id: request.source_page_id,
+      owner_user_id: request.owner_user_id,
+      expected_revision: request.expected_revision,
+      page_id: request.page_id,
+      endpoint_set: canonical_inline_endpoint(request.locator),
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (result.reason === "endpoint_conflict") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      return { ok: false, reason: result.reason };
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize(result.page),
+    };
+  }
+
+  delete_managed(request: DeleteManagedRequest): Promise<DeleteManagedResult> {
+    return this.delete_managed_page_aggregate(request);
+  }
+
+  async #stage_content(
+    content: PageContent,
+    created_at: Date,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < max_asset_id_attempts; attempt += 1) {
+      const content_asset_id = this.#content_asset_id_generator.generate();
+      if (!is_valid_content_asset_id(content_asset_id)) {
+        throw new Error(
+          "ContentAssetIdGenerator produced an invalid content asset id",
+        );
+      }
+      const asset: ContentAsset = {
+        content_asset_id,
+        content_type: content.content_type,
+        data: content.data,
+        meta: content.meta,
+        created_at,
+      };
+      const created = await this.create_content_asset(asset);
+      if (created.ok) return created.asset.content_asset_id;
+    }
+    throw new Error("page repository: content asset id generation exhausted");
+  }
+
+  async #materialize(page: PageAggregate): Promise<PageRecord> {
+    const asset = await this.find_content_asset_by_id(page.content_asset_id);
+    if (asset === null) {
+      throw new Error("page repository invariant violated");
+    }
+    return {
+      page_id: page.page_id,
+      locator: structuredClone(page.endpoint_set.canonical.locator),
+      stewardship: structuredClone(page.stewardship),
+      access: page.access,
+      tags: [...page.tags],
+      revision: page.revision,
+      content: {
+        content_type: asset.content_type,
+        data: structuredClone(asset.data),
+        meta: structuredClone(asset.meta),
+      },
+      created_at: new Date(page.created_at),
+      updated_at: new Date(page.updated_at),
+    };
+  }
 }
 
-function matches_exploration(
-  record: PageRecord,
-  key: PageSortKey,
-  scope: PageExplorationCursorScope,
-): boolean {
-  return (scope.namespace_query === null ||
-    key.namespace_key.includes(scope.namespace_query)) &&
-    (scope.page_name_query === null ||
-      (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query))) &&
-    (scope.tag === null || record.tags.includes(scope.tag));
+function canonical_inline_endpoint(locator: Locator): PageEndpointSet {
+  return {
+    canonical: {
+      locator: structuredClone(locator),
+      delivery_profile: "inline",
+    },
+    alternates: [],
+  };
 }

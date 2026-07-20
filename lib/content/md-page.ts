@@ -45,6 +45,7 @@ function escape_css(css: string): string {
 export class MdPageHandler
   implements ContentTypeHandler<MdPageInput, MdPageData> {
   readonly content_type = "md-page";
+  readonly supported_delivery_profiles = ["inline"] as const;
   #limits: MdPageLimits;
 
   constructor(limits: MdPageLimits = default_md_page_limits) {

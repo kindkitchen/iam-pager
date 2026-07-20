@@ -14,6 +14,7 @@ import {
   max_bulk_managed_pages,
   type PageClock,
   type PageIdGenerator,
+  type PageRepository,
 } from "./interfaces.ts";
 import { MemoryPageRepository } from "./memory-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
@@ -71,6 +72,7 @@ async function make_fixture(options: {
   max_page_id_attempts?: number;
   names?: string[];
   max_page_name_attempts?: number;
+  legacy_repository?: boolean;
 } = {}) {
   const repository = new MemoryPageRepository();
   const namespaces = new MemoryNamespaceRepository();
@@ -84,7 +86,9 @@ async function make_fixture(options: {
       strategies: [new PathSlugStrategy()],
       forbidden_namespaces: ["site", "api", "auth"],
     }),
-    repository,
+    repository: options.legacy_repository
+      ? legacy_repository_only(repository)
+      : repository,
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler()],
     page_id_generator: new SequenceIds(options.ids),
@@ -94,6 +98,24 @@ async function make_fixture(options: {
     max_page_name_attempts: options.max_page_name_attempts,
   });
   return { service, repository, namespaces };
+}
+
+function legacy_repository_only(
+  repository: MemoryPageRepository,
+): PageRepository {
+  return {
+    find_by_locator: repository.find_by_locator.bind(repository),
+    find_by_id: repository.find_by_id.bind(repository),
+    list_managed: repository.list_managed.bind(repository),
+    list_public: repository.list_public.bind(repository),
+    explore_public: repository.explore_public.bind(repository),
+    put_trial: repository.put_trial.bind(repository),
+    create_managed: repository.create_managed.bind(repository),
+    replace_managed: repository.replace_managed.bind(repository),
+    rename_managed: repository.rename_managed.bind(repository),
+    duplicate_managed: repository.duplicate_managed.bind(repository),
+    delete_managed: repository.delete_managed.bind(repository),
+  };
 }
 
 function trial_request(namespace = "free", md = "# Trial") {
@@ -138,6 +160,23 @@ Deno.test("PageService trial publish creates and replaces complete public conten
 
   const stored = await repository.find_by_id(first.page.page_id);
   assert(stored !== null);
+  const aggregate = await repository.find_page_aggregate_by_id(
+    first.page.page_id,
+  );
+  assert(aggregate !== null);
+  assertEquals(aggregate.endpoint_set, {
+    canonical: {
+      locator: { namespace: "FREE" },
+      delivery_profile: "inline",
+    },
+    alternates: [],
+  });
+  const asset = await repository.find_content_asset_by_id(
+    aggregate.content_asset_id,
+  );
+  assert(asset !== null);
+  assertEquals(asset.content_type, "md-page");
+  assertEquals(asset.data, stored.content.data);
   const payload = new MdPageHandler().render(stored.content.data as MdPageData);
   assertEquals(stored.content.meta.media_type, payload.media_type);
   assertEquals(
@@ -145,6 +184,35 @@ Deno.test("PageService trial publish creates and replaces complete public conten
     new TextEncoder().encode(payload.body as string).byteLength,
   );
   assertFalse((stored.content.data as MdPageData).html.includes("<script>"));
+});
+
+Deno.test("PageService retains the raw repository compatibility path", async () => {
+  const { service } = await make_fixture({
+    ids: ["legacy-managed"],
+    dates: [t1, t2],
+    legacy_repository: true,
+  });
+  const created = await service.create_managed(
+    managed_request("legacy", "public"),
+  );
+  assert(created.ok);
+  const updated = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: 1,
+    patch: { content: { content_type: "md-page", input: { md: "# Next" } } },
+  });
+  assert(updated.ok);
+  assertEquals(updated.page.revision, 2);
+  const listed = await service.list_managed({ actor: owner, limit: 10 });
+  assert(listed.ok);
+  assertEquals(listed.pages.map((page) => page.page_id), ["legacy-managed"]);
+  assert(
+    (await service.deliver(
+      { namespace: "Mine", page_name: "legacy" },
+      guest,
+    )).ok,
+  );
 });
 
 Deno.test("PageService trial publish rejects private, reserved, forbidden, and invalid requests", async () => {
@@ -420,7 +488,10 @@ Deno.test("PageService access-only and combined updates preserve atomic page inv
   );
   assert(created.ok);
   const before = await repository.find_by_id(created.page.page_id);
-  assert(before !== null);
+  const aggregate_before = await repository.find_page_aggregate_by_id(
+    created.page.page_id,
+  );
+  assert(before !== null && aggregate_before !== null);
 
   const access_only = await service.update_managed({
     actor: owner,
@@ -431,6 +502,14 @@ Deno.test("PageService access-only and combined updates preserve atomic page inv
   assert(access_only.ok);
   assertEquals(access_only.page.revision, 2);
   const after_access = await repository.find_by_id(created.page.page_id);
+  const aggregate_after_access = await repository.find_page_aggregate_by_id(
+    created.page.page_id,
+  );
+  assert(aggregate_after_access !== null);
+  assertEquals(
+    aggregate_after_access.content_asset_id,
+    aggregate_before.content_asset_id,
+  );
   assertEquals(after_access?.content, before.content);
   assertEquals(after_access?.created_at, t1);
   assertEquals(after_access?.updated_at, t2);
@@ -448,6 +527,14 @@ Deno.test("PageService access-only and combined updates preserve atomic page inv
   assertEquals(combined.page.revision, 3);
   assertEquals(combined.page.access, "public");
   assertEquals(combined.page.content.input, { md: "# Replaced" });
+  const aggregate_after_content = await repository.find_page_aggregate_by_id(
+    created.page.page_id,
+  );
+  assert(aggregate_after_content !== null);
+  assertFalse(
+    aggregate_after_content.content_asset_id ===
+      aggregate_before.content_asset_id,
+  );
 });
 
 Deno.test("PageService update rejects empty, invalid, stale, and foreign mutations", async () => {

@@ -101,8 +101,8 @@ export interface PageRecord<Data = unknown> {
 /** Route-safe opaque id: unpadded base64url-ish, bounded length. */
 const page_id_pattern = /^[A-Za-z0-9_-]{1,64}$/;
 
-export function is_valid_page_id(value: string): boolean {
-  return page_id_pattern.test(value);
+export function is_valid_page_id(value: unknown): value is PageId {
+  return typeof value === "string" && page_id_pattern.test(value);
 }
 
 export function is_valid_page_access(value: unknown): value is PageAccess {

@@ -43,11 +43,19 @@ HTTP maps that stored behavior to headers. The publisher supplies each endpoint
 locator as ordinary locator intent. A suffix such as `.pdf` carries no special
 meaning and is neither generated nor interpreted by content or delivery logic.
 
-One endpoint is canonical. Alternate endpoints do not receive their own page ID,
-revision, tags, access, management row, or exploration row. Page authority and
-visibility are checked after endpoint resolution against the one logical page.
-Creating or renaming an endpoint set must check every locator and publish all
-bindings or none.
+One endpoint is canonical and a page may have at most seven alternates. The
+canonical endpoint is explicitly designated and may use any profile supported by
+the content type; it is not implicitly the inline endpoint. Alternate endpoints
+do not receive their own page ID, revision, tags, access, management row, or
+exploration row. Page authority and visibility are checked after endpoint
+resolution against the one logical page.
+
+Every binding belongs to the canonical locator's same case-insensitive namespace
+and every locator is unique inside the set. Canonical and alternate locators may
+each be default or named. Add, change, remove, canonical change, and display-
+casing change submit the complete one-to-eight-binding set against the exact
+page revision. Alternate input order is not semantic. Storage checks all old and
+new claims and publishes the page, revision, and complete binding set or none.
 
 ## DA-CONTENT-ASSET — Stored content identity
 
@@ -147,6 +155,12 @@ unchanged and creates revision 1 under a bounded server-generated available name
 and fresh ID from the exact expected source revision. Strict HTTP actions and
 the creator panel project both operations; the panel uses the displayed current
 revision and refreshes a stale source instead of retrying it.
+
+Duplication creates a fresh page and destination endpoint set but may safely
+reference the same immutable content asset. A later replacement changes only the
+mutated page's asset reference. The implemented one-endpoint `md-page` duplicate
+continues to generate one available canonical name; endpoint-aware content will
+supply a complete fresh destination set.
 
 Authenticated storage should be durable enough for normal management use, but
 the app should not promise that content can never disappear under any

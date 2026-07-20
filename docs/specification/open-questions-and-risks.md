@@ -76,6 +76,44 @@ the page service nor HTTP generates a locator, interprets `.pdf`, or infers
 behavior from any path shape. PDF.js, generated preview images, and text
 extraction are later adapters or capabilities.
 
+### OQ-ENDPOINT-CONFIG — Bounded user-configured endpoint set
+
+A page has one explicitly designated canonical endpoint and zero to seven
+alternates, for a maximum of eight endpoint bindings. Canonical designation is
+structural rather than a flag repeated on every binding. Canonical status does
+not imply `inline`: any profile supported by the content type may be canonical.
+Alternates are normalized to case-insensitive locator order for stable storage
+and output; their submitted order has no meaning.
+
+Every endpoint uses an ordinary valid locator in the canonical endpoint's same
+case-insensitive namespace. Each supplied spelling is preserved for display, but
+all endpoint locators share the existing case-insensitive collision space and
+must also be unique within the submitted set. A default locator is allowed in
+either canonical or alternate position. Reserved namespaces and invalid locators
+fail the complete plan. Because all endpoints share one namespace, the page's
+existing namespace authority applies to every binding.
+
+The initial delivery-profile vocabulary is `inline` and `attachment`. Every
+content type declares a non-empty supported subset: `md-page` supports only
+`inline`; PDF will support both. Multiple endpoints may use the same profile,
+and neither profile implies a suffix or other path shape.
+
+Endpoint add, change, remove, canonical change, and casing-only display change
+replace the complete endpoint set under the page's exact revision. Reordering
+otherwise identical alternates is unchanged and does not increment revision.
+Repository mutation checks every old and new claim and commits the page,
+revision, and endpoint indexes all-or-none. A claim held by another managed page
+fails the whole operation. Managed creation may retire trials occupying any of
+its planned locators only when every claim can be committed together. Concurrent
+claims have one complete winner and no partial endpoint visibility.
+
+Duplication references the same immutable asset from a fresh page and requires a
+fresh complete destination endpoint set; replacing one page's content later does
+not change the other page. The current `md-page` compatibility operation remains
+a one-inline-endpoint special case with its bounded server-generated canonical
+name. Deletion removes every endpoint binding atomically; unreferenced asset
+cleanup is separate and must not delete an asset still used by another page.
+
 ### OQ-SCHEMA-UPGRADES — Explicit manual forward evolution
 
 Deployment and runtime neither inspect nor mutate the release manifest.
@@ -136,16 +174,6 @@ asset.
 Active HTML, SVG, scripts, generic raw binary, and broader media-type inference
 remain unselected. Each later type still needs an explicit size band and
 display, download, or isolation policy.
-
-### OQ-ENDPOINT-CONFIG — User-configured endpoint set
-
-`example` and `example.pdf` are only illustrations of two ordinary locators a
-publisher might choose. No suffix is reserved, generated, or interpreted. Before
-endpoint contracts are frozen, decide and specify the maximum endpoint count,
-canonical endpoint designation, allowed delivery profiles per content type,
-revision-bound add/change/remove semantics, namespace authority for every
-locator, and whole-set collision behavior. An invalid or conflicting endpoint
-set must fail atomically rather than partially publishing locators.
 
 ### OQ-PDF-TRANSPORT — PDF upload and range delivery
 
