@@ -225,7 +225,11 @@ The first publishing slice currently provides:
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with a Markdown/PDF chooser, a bounded PDF picker with filename/size
   feedback, explicit canonical/alternate locator and delivery-profile controls,
-  and no inferred PDF path convention. Markdown retains soft in-field four-word
+  typed endpoint/PDF/size/authority/availability failures, and no inferred PDF
+  path convention. The creator manager exposes profile-derived PDF preview and
+  download actions, bounded filename/media-type/size/version inspection, and
+  exact-revision multipart replacement that preserves the selected file on
+  failure and never retries a conflict. Markdown retains soft in-field four-word
   random locator helpers, a collapsible Page workspace with exclusive
   Markdown/CSS source panes, split or full-width preview layouts, fullscreen
   preview, raw and guided Markdown section editing, fenced code-block sections,
@@ -426,9 +430,12 @@ JSON metadata file part plus one bounded PDF file part; metadata requires a
 publisher-configured canonical inline endpoint and at least one attachment
 alternate. Direct PDF responses provide opaque strong validators,
 `Accept-Ranges`, and strict single-range `206`/`416` behavior while preserving
-endpoint-selected disposition over identical bytes. The PDF site projection
-follows. The readiness check runs only when v2 storage is deliberately selected
-and never migrates at startup or deploy. Generic raw-binary publishing, PDF.js,
+endpoint-selected disposition over identical bytes. The PDF site projection now
+publishes through the strict multipart boundary, presents typed API failures,
+and gives creators bounded metadata plus profile-derived preview/download and
+revision-bound replacement controls. The public browser-native wrapper follows.
+The readiness check runs only when v2 storage is deliberately selected and never
+migrates at startup or deploy. Generic raw-binary publishing, PDF.js,
 thumbnails, text extraction, and external storage remain later work.
 
 ## Local development

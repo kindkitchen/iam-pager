@@ -66,14 +66,17 @@ direct URL is the only way to reach them.
 
 The implemented PDF HTTP flow accepts one strictly bounded multipart PDF file
 and creates one logical page. The secondary site publishing form now exposes a
-Markdown/PDF choice, bounded filename/size feedback, and explicit canonical and
-alternate locator/profile controls; creator replacement and wrapped preview
-remain planned. A configured direct endpoint can return `application/pdf` for
-browser-native inline viewing. Another configured endpoint can return the same
-content asset with attachment disposition and a safe filename. The publisher
-chooses both locators; a `.pdf` suffix is only an ordinary possible name. The
-site wrapper may embed the native preview, but always exposes explicit preview
-and download links and a fallback when the browser cannot display PDF inline.
+Markdown/PDF choice, bounded filename/size feedback, explicit canonical and
+alternate locator/profile controls, and typed failures that keep the draft and
+selected file intact. Creator management now shows profile-derived preview and
+download links, bounded PDF metadata, and exact-revision replacement without a
+silent stale retry; the wrapped public preview remains planned. A configured
+direct endpoint can return `application/pdf` for browser-native inline viewing.
+Another configured endpoint can return the same content asset with attachment
+disposition and a safe filename. The publisher chooses both locators; a `.pdf`
+suffix is only an ordinary possible name. The site wrapper may embed the native
+preview, but always exposes explicit preview and download links and a fallback
+when the browser cannot display PDF inline.
 
 The creator manages one page rather than two copies. Access changes apply to
 both endpoints, renaming moves the complete endpoint set or fails without a

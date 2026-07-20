@@ -61,9 +61,11 @@ The generic application core now:
 The PDF capability now exposes these contracts through strict bounded multipart
 HTTP create/replacement and browser-native direct preview/download delivery. The
 secondary site now selects Markdown or PDF, gives advisory filename/size
-feedback, and submits an explicit canonical-inline/attachment-alternate endpoint
-set without inventing a path. Creator inspection/replacement and wrapped-preview
-controls remain next.
+feedback, submits an explicit canonical-inline/attachment-alternate endpoint set
+without inventing a path, and maps typed API failures without exposing unknown
+detail. Creator management validates bounded PDF metadata, derives direct
+preview/download from returned profiles, and performs exact-revision replacement
+without silent retry. Wrapped public preview controls remain next.
 
 The PDF content core is implemented and registered with `PageService`; its HTTP
 adapter accepts exactly one bounded JSON metadata part and one bounded PDF file

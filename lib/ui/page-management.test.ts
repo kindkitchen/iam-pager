@@ -6,6 +6,7 @@ import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
 import type { PageClock, PageIdGenerator } from "../page/interfaces.ts";
 import { MemoryPageRepository } from "../page/memory-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "../page/namespace-authority.ts";
+import { WebPdfMultipartDecoder } from "../page/pdf-http.ts";
 import { PageService } from "../page/service.ts";
 import type { AuthenticatedSession, Session } from "../session/model.ts";
 import {
@@ -15,6 +16,9 @@ import {
   managed_bulk_delete_from_api,
   managed_list_from_api,
   managed_md_page_draft,
+  managed_pdf_delivery_links,
+  managed_pdf_metadata,
+  managed_pdf_replacement_violation,
   managed_revision_selection,
   managed_tags_from_input,
   management_summary_from_api,
@@ -25,6 +29,7 @@ import {
   prepare_managed_duplicate_request,
   prepare_managed_inspect_request,
   prepare_managed_list_request,
+  prepare_managed_pdf_replace_request,
   prepare_managed_rename_request,
   prepare_managed_update_request,
   present_management_summary,
@@ -514,6 +519,144 @@ Deno.test("managed_md_page_draft accepts only editable md-page content", () => {
       input: { md: "# Hi", css: 2 },
     }),
     null,
+  );
+});
+
+Deno.test("managed PDF inspection accepts only bounded metadata without bytes", () => {
+  const metadata = {
+    content_type: "pdf",
+    input: {
+      filename: "report.pdf",
+      media_type: "application/pdf",
+      size_bytes: 2048,
+      pdf_version: "1.7",
+      replaceable: true,
+    },
+  };
+  assertEquals(managed_pdf_metadata(metadata, 2048), metadata.input);
+  assertEquals(managed_pdf_metadata(metadata, 2049), null);
+  assertEquals(
+    managed_pdf_metadata({
+      ...metadata,
+      input: { ...metadata.input, bytes: new Uint8Array([1]) },
+    }),
+    metadata.input,
+  );
+  assertEquals(
+    managed_pdf_metadata({
+      ...metadata,
+      input: { ...metadata.input, pdf_version: "3.0" },
+    }),
+    null,
+  );
+  assertEquals(
+    managed_pdf_metadata({
+      ...metadata,
+      input: { ...metadata.input, media_type: "application/octet-stream" },
+    }),
+    null,
+  );
+  assertEquals(managed_pdf_metadata({ content_type: "md-page" }), null);
+});
+
+Deno.test("managed PDF delivery links follow returned endpoint profiles", () => {
+  const page = management_summary_from_api(api_summary({
+    content_type: "pdf",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes" },
+        path: "/Mine/notes",
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "notes/download" },
+        path: "/Mine/notes/download",
+        delivery_profile: "attachment",
+      }],
+    },
+  }));
+  assert(page !== null);
+  assertEquals(managed_pdf_delivery_links(page), {
+    preview: page.endpoints.canonical,
+    downloads: page.endpoints.alternates,
+  });
+  assertEquals(
+    managed_pdf_delivery_links({ ...page, content_type: "md-page" }),
+    null,
+  );
+  assertEquals(
+    managed_pdf_delivery_links({
+      ...page,
+      endpoints: { canonical: page.endpoints.canonical, alternates: [] },
+    }),
+    null,
+  );
+});
+
+Deno.test("PDF replacement request repeats endpoints and binds the exact revision", async () => {
+  const page = management_summary_from_api(api_summary({
+    content_type: "pdf",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes" },
+        path: "/Mine/notes",
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "notes/download" },
+        path: "/Mine/notes/download",
+        delivery_profile: "attachment",
+      }],
+    },
+  }));
+  assert(page !== null);
+  const bytes = new Uint8Array([1, 2, 3, 4]);
+  const prepared = prepare_managed_pdf_replace_request(
+    page,
+    { filename: "revised.pdf", bytes, tags: ["Reports"] },
+    "csrf",
+  );
+  assertEquals(prepared.url, "/api/pages/p1");
+  assertEquals(prepared.method, "PATCH");
+  assertEquals(prepared.headers.get("x-csrf-token"), "csrf");
+  assertEquals(prepared.headers.get("if-match"), '"page-p1-r2"');
+  assertEquals(prepared.headers.get("content-type"), null);
+  assert(prepared.body instanceof FormData);
+
+  const request = new Request(`https://pager.test${prepared.url}`, {
+    method: prepared.method,
+    headers: prepared.headers,
+    body: prepared.body,
+  });
+  const decoded = await new WebPdfMultipartDecoder().decode_update(request);
+  assert(decoded.ok, decoded.ok ? "" : decoded.detail);
+  assertEquals(decoded.value.tags, ["Reports"]);
+  assertEquals(decoded.value.content.input.filename, "revised.pdf");
+  assertEquals([...decoded.value.content.input.bytes], [...bytes]);
+  assertEquals(decoded.value.endpoint_set, {
+    canonical: {
+      locator: { namespace: "Mine", page_name: "notes" },
+      delivery_profile: "inline",
+    },
+    alternates: [{
+      locator: { namespace: "Mine", page_name: "notes/download" },
+      delivery_profile: "attachment",
+    }],
+  });
+
+  assertEquals(
+    managed_pdf_replacement_violation({
+      filename: "revised.pdf",
+      bytes: new Uint8Array(),
+    }),
+    "select a PDF replacement file",
+  );
+  assertEquals(
+    managed_pdf_replacement_violation({
+      filename: "bad/name.pdf",
+      bytes,
+    }),
+    "filename contains unsafe characters",
   );
 });
 

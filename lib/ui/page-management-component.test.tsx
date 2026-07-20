@@ -51,3 +51,46 @@ Deno.test("creator management component renders DS-MANAGE controls and safe rows
   assertEquals(html.includes("csrf_token"), false);
   assertEquals(html.includes("owner_user_id"), false);
 });
+
+Deno.test("creator management component presents PDF preview and download actions", () => {
+  const html = render_to_string(
+    <PageManagementPanel
+      csrf_token={"c".repeat(43)}
+      initial_pages={[{
+        page_id: "pdf-1",
+        locator: { namespace: "Mine", page_name: "report" },
+        path: "/Mine/report",
+        endpoints: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "report" },
+            path: "/Mine/report",
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "report-download" },
+            path: "/Mine/report-download",
+            delivery_profile: "attachment",
+          }],
+        },
+        access: "private",
+        content_type: "pdf",
+        size_bytes: 2048,
+        tags: ["reports"],
+        updated_at: "2026-07-21T01:00:00.000Z",
+        revision: 3,
+        etag: '"page-pdf-1-r3"',
+        management_url: "/api/pages/pdf-1",
+      }]}
+      initial_next_cursor={null}
+    />,
+  );
+
+  assertStringIncludes(html, "PDF delivery actions");
+  assertStringIncludes(html, 'href="/Mine/report"');
+  assertStringIncludes(html, "Preview PDF");
+  assertStringIncludes(html, 'href="/Mine/report-download"');
+  assertStringIncludes(html, "Download PDF: /Mine/report-download");
+  assertStringIncludes(html, "Inspect PDF");
+  assertEquals(html.includes(">Duplicate<"), false);
+  assertEquals(html.includes("application/pdf"), false);
+});
