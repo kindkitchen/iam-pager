@@ -352,9 +352,11 @@ filename/media-type/size/version/replace capability to management inspection,
 and declares independently configured inline and attachment endpoints at
 ordinary valid locators. Browser-native direct viewing and a site wrapper around
 that URL are the first preview adapters; PDF.js, thumbnails, text extraction,
-generic binary, and unbounded streaming are later. The strict binary HTTP task
-owns upload buffering and has the explicit byte-range decision; ranges are not
-part of the content core.
+generic binary, and unbounded streaming are later. The HTTP adapter now owns
+strict two-part multipart buffering under a stream-enforced 16 MiB-plus-64 KiB
+body bound. Direct PDF delivery supports one byte range with `206`/`416`,
+validators, and browser-native full-body fallback; ranges remain outside the
+content core.
 
 The current `MdPage` form previews Markdown and CSS locally inside a sandboxed
 iframe, without a preview HTTP request. Its Page workspace is collapsible
@@ -550,16 +552,18 @@ Access successes retain content and tags, increment once, and use one shared
 bulk-operation timestamp. Results preserve input order and collapse missing,
 foreign, and unauthorized pages to the same item-level `not_found` outcome.
 
-The planned PDF API must not base64-encode bytes into the existing JSON content
-command. A strict bounded multipart or dedicated upload decoder belongs at the
-HTTP edge and produces the implemented transport-independent PDF input. Its
-metadata carries the publisher-supplied endpoint locator/profile set; no route
-appends `.pdf` or otherwise manufactures an endpoint. Managed replacement
-remains CSRF- and exact-revision-bound; inspection returns safe PDF metadata and
-replacement capability, never the full byte payload in JSON. Create, inspect,
-and public representations return the complete canonical/preview/download link
-model without exposing storage IDs. The current JSON `md-page` contract remains
-compatible.
+The PDF API does not base64-encode bytes into the JSON content command. Its
+HTTP-edge decoder accepts exactly one `metadata.json` `application/json` part
+(up to 16 KiB) and one named `application/pdf` file part (up to 16 MiB) inside a
+stream-enforced 16 MiB-plus-64 KiB multipart request. Metadata carries the
+publisher-supplied canonical-inline and attachment-alternate locator/profile
+set; no route appends `.pdf` or manufactures an endpoint. Managed replacement
+remains CSRF- and exact-revision-bound and can preserve or atomically replace
+the complete set. Inspection returns safe PDF metadata and replacement
+capability, never bytes or storage IDs. Direct delivery supplies opaque revision
+ETags, `Accept-Ranges`, strict single-range `206`/`416`, and endpoint-specific
+content disposition over byte-identical bodies. The JSON `md-page` contract
+remains compatible.
 
 ## QT-SEARCH — Search and privacy
 

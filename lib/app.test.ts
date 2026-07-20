@@ -94,29 +94,71 @@ Deno.test("composition root exposes page HTTP creation and direct delivery over 
   assertStringIncludes(await delivered.text(), "Hi there");
 });
 
-Deno.test("composition root registers the transport-independent PDF core", async () => {
+Deno.test("composition root publishes PDF multipart to configured direct endpoints", async () => {
   const services = create_app_services();
   const bytes = pdf_bytes();
-  const created = await services.pages.publish_trial({
-    actor: { kind: "guest" },
-    locator: { namespace: "Guest", page_name: "report" },
-    access: "public",
-    content: {
-      content_type: "pdf",
-      input: { bytes, filename: "report.data" },
-    },
-  });
-  assertEquals(created.ok, true);
+  const form = new FormData();
+  form.append(
+    "metadata",
+    new Blob([JSON.stringify({
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Guest", page_name: "report-preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Guest", page_name: "report-download" },
+          delivery_profile: "attachment",
+        }],
+      },
+      access: "public",
+    })], { type: "application/json" }),
+    "metadata.json",
+  );
+  form.append(
+    "file",
+    new Blob([bytes as BlobPart], { type: pdf_media_type }),
+    "report.data",
+  );
+  const session = (await services.session.resolve()).session;
+  const created = await services.pages_http.collection(
+    new Request("https://pager.test/api/pages", {
+      method: "POST",
+      body: form,
+    }),
+    { request_id: "request-pdf", session },
+  );
+  assertEquals(created.status, 201);
+  const created_body = await created.json();
+  assertEquals(
+    created_body.page.endpoints.alternates[0].path,
+    "/Guest/report-download",
+  );
 
-  const delivered = await services.pages.deliver(
-    { namespace: "Guest", page_name: "report" },
+  const preview = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    new Request("https://pager.test/Guest/report-preview", {
+      headers: { range: "bytes=0-8" },
+    }),
     { kind: "guest" },
   );
-  assertEquals(delivered.ok, true);
-  if (!delivered.ok) return;
-  assertEquals(delivered.payload.media_type, pdf_media_type);
-  assertEquals(delivered.payload.download_filename, "report.data");
-  assertEquals(delivered.payload.body, bytes);
+  assertEquals(preview.status, 206);
+  assertEquals(preview.headers.get("content-type"), pdf_media_type);
+  assertEquals(new Uint8Array(await preview.arrayBuffer()), bytes.slice(0, 9));
+
+  const download = await deliver_page_locator_path(
+    services.engine,
+    services.pages,
+    "/Guest/report-download",
+    { kind: "guest" },
+  );
+  assertEquals(download.status, 200);
+  assertStringIncludes(
+    download.headers.get("content-disposition")!,
+    'attachment; filename="report.data"',
+  );
+  assertEquals(new Uint8Array(await download.arrayBuffer()), bytes);
 });
 
 Deno.test("composition root exposes public exploration over the shared page service", async () => {

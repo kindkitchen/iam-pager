@@ -146,9 +146,13 @@ worst-case 87-of-100-check transaction pass. The manual source-preserving
 raw-keyspace migration now validates and retains v1, copies deterministic
 assets/aggregates into v2, rejects conflicts and source changes, and exposes a
 strict readiness probe. Explicit `deno-kv-v2` composition now gates and selects
-the aggregate while `deno-kv` preserves the v1 fallback; strict bounded HTTP
-upload/delivery and the secondary PDF site projection follow. Generic binary
-fallback and external storage remain later.
+the aggregate while `deno-kv` preserves the v1 fallback. Strict HTTP delivery is
+now complete: create and revision-bound replacement accept one bounded
+metadata/PDF multipart pair, require publisher-configured canonical-inline and
+attachment-alternate endpoints, and direct delivery provides opaque validators
+plus strict single-range `206`/`416` over byte-identical responses. The
+secondary PDF site projection follows. Generic binary fallback and external
+storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

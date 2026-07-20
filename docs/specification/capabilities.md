@@ -58,16 +58,21 @@ The generic application core now:
 - keeps alternate delivery endpoints out of creator lists and public
   exploration.
 
-The remaining PDF capability exposes these contracts through strict bounded HTTP
-upload and browser-native site viewing with direct preview/download fallbacks.
+The PDF capability now exposes these contracts through strict bounded multipart
+HTTP create/replacement and browser-native direct preview/download delivery. The
+secondary site publishing and wrapped-preview controls remain next.
 
-The PDF content core is implemented and registered with `PageService`; strict
-binary HTTP upload is not. Its generic prerequisites include the endpoint
-planner plus immutable-asset and atomic page/endpoint capability contracts, a
-process-local reference, and shared persistence conformance. Core integration
-coverage proves detached immutable bytes, bounded inspection, one-row queries,
-coherent replacement/access/deletion, and identical inline/attachment delivery
-over a generic configured endpoint set. Generic application commands now accept
+The PDF content core is implemented and registered with `PageService`; its HTTP
+adapter accepts exactly one bounded JSON metadata part and one bounded PDF file
+part, preserving JSON `md-page`. Metadata requires publisher-configured
+canonical inline and attachment alternate locators. Direct PDF responses expose
+opaque revision validators and strict single-range `206`/`416` behavior. Its
+generic prerequisites include the endpoint planner plus immutable-asset and
+atomic page/endpoint capability contracts, a process-local reference, and shared
+persistence conformance. Core integration coverage proves detached immutable
+bytes, bounded inspection, one-row queries, coherent
+replacement/access/deletion, and identical inline/attachment delivery over a
+generic configured endpoint set. Generic application commands now accept
 complete intent for create and revision-bound replacement, preserve alternates
 through canonical rename, and require a fresh complete set for endpoint-aware
 duplication. Owner/public summaries expose complete safe endpoint links without

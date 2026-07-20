@@ -2,21 +2,27 @@ export type BoundedBodyReadResult =
   | { ok: true; text: string }
   | { ok: false; reason: "too_large" | "unreadable" };
 
+export type BoundedBodyBytesReadResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; reason: "too_large" | "unreadable" };
+
 export function is_json_media_type(content_type: string | null): boolean {
   return content_type?.split(";", 1)[0].trim().toLowerCase() ===
     "application/json";
 }
 
-/** Read a request body without buffering more than the declared byte limit. */
-export async function read_bounded_request_text(
+/** Read request bytes without trusting Content-Length as the only bound. */
+export async function read_bounded_request_bytes(
   request: Request,
   max_bytes: number,
-): Promise<BoundedBodyReadResult> {
+): Promise<BoundedBodyBytesReadResult> {
   const declared_length = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared_length) && declared_length > max_bytes) {
     return { ok: false, reason: "too_large" };
   }
-  if (request.body === null) return { ok: true, text: "" };
+  if (request.body === null) {
+    return { ok: true, bytes: new Uint8Array() };
+  }
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -44,5 +50,16 @@ export async function read_bounded_request_text(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return { ok: true, text: new TextDecoder().decode(bytes) };
+  return { ok: true, bytes };
+}
+
+/** Read bounded UTF-8-compatible request text. */
+export async function read_bounded_request_text(
+  request: Request,
+  max_bytes: number,
+): Promise<BoundedBodyReadResult> {
+  const result = await read_bounded_request_bytes(request, max_bytes);
+  return result.ok
+    ? { ok: true, text: new TextDecoder().decode(result.bytes) }
+    : result;
 }

@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { MdPageHandler } from "../content/md-page.ts";
+import { PdfHandler } from "../content/pdf.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
@@ -8,14 +9,33 @@ import type { PageClock, PageIdGenerator } from "./interfaces.ts";
 import { MemoryPageRepository } from "./memory-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
 import {
+  deliver_page_locator_path,
   page_request_max_bytes,
   PageHttpAdapter,
   type PageHttpRequestContext,
-} from "./http.ts";
+} from "./mod.ts";
 import { PageService } from "./service.ts";
 
 const now = new Date("2026-07-19T12:00:00.000Z");
 const csrf_token = "c".repeat(43);
+const text_encoder = new TextEncoder();
+
+function pdf_bytes(marker = "fixture"): Uint8Array {
+  const before_xref = `%PDF-1.7\n` +
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n` +
+    `2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n` +
+    `% ${marker}\n`;
+  const xref_offset = text_encoder.encode(before_xref).byteLength;
+  return text_encoder.encode(
+    before_xref +
+      `xref\n0 3\n` +
+      `0000000000 65535 f \n` +
+      `0000000009 00000 n \n` +
+      `0000000062 00000 n \n` +
+      `trailer\n<< /Size 3 /Root 1 0 R >>\n` +
+      `startxref\n${xref_offset}\n%%EOF\n`,
+  );
+}
 const guest_session: Session = {
   kind: "guest",
   session_id: "guest-session",
@@ -71,12 +91,13 @@ async function make_fixture() {
     engine,
     repository,
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
-    handlers: [new MdPageHandler()],
+    handlers: [new MdPageHandler(), new PdfHandler()],
     page_id_generator: new SequenceIds(),
     clock: new AdvancingClock(),
   });
   return {
     adapter: new PageHttpAdapter({ pages }),
+    engine,
     pages,
     repository,
   };
@@ -122,6 +143,60 @@ function request(
     headers,
     body,
   });
+}
+
+function pdf_multipart_request(
+  path: string,
+  metadata: unknown,
+  bytes: Uint8Array,
+  options: {
+    method?: string;
+    etag?: string;
+    filename?: string;
+    file_media_type?: string;
+    extra_part?: boolean;
+  } = {},
+): Request {
+  const form = new FormData();
+  form.append(
+    "metadata",
+    new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+    "metadata.json",
+  );
+  form.append(
+    "file",
+    new Blob([bytes as BlobPart], {
+      type: options.file_media_type ?? "application/pdf",
+    }),
+    options.filename ?? "report.pdf",
+  );
+  if (options.extra_part) form.append("unexpected", "value");
+  const request = new Request(`https://pager.test${path}`, {
+    method: options.method ?? "POST",
+    headers: {
+      "x-csrf-token": csrf_token,
+      ...(options.etag === undefined ? {} : { "if-match": options.etag }),
+    },
+    body: form,
+  });
+  return request;
+}
+
+function pdf_metadata(access: "public" | "private" = "public") {
+  return {
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "report-preview" },
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Mine", page_name: "report-download" },
+        delivery_profile: "attachment",
+      }],
+    },
+    access,
+    tags: ["Reports"],
+  };
 }
 
 function creator_headers(etag?: string): HeadersInit {
@@ -1004,6 +1079,206 @@ Deno.test("page HTTP bulk delete reports ordered, independent outcomes", async (
     context(owner_session),
   );
   assertEquals(survivor.status, 200);
+});
+
+Deno.test("page HTTP publishes and revision-replaces one PDF endpoint set", async () => {
+  const { adapter, engine, pages } = await make_fixture();
+  const original = pdf_bytes("original");
+  const created = await adapter.collection(
+    pdf_multipart_request("/api/pages", pdf_metadata(), original),
+    context(owner_session),
+  );
+
+  assertEquals(created.status, 201);
+  assertEquals(created.headers.get("etag"), '"page-page-1-r1"');
+  const created_body = await created.json();
+  assertEquals(created_body.page.content_type, "pdf");
+  assertEquals(created_body.page.tags, ["reports"]);
+  assertEquals(created_body.page.endpoints, {
+    canonical: {
+      locator: { namespace: "Mine", page_name: "report-preview" },
+      path: "/Mine/report-preview",
+      delivery_profile: "inline",
+    },
+    alternates: [{
+      locator: { namespace: "Mine", page_name: "report-download" },
+      path: "/Mine/report-download",
+      delivery_profile: "attachment",
+    }],
+  });
+
+  const inspected = await adapter.item(
+    request("/api/pages/page-1"),
+    context(owner_session),
+  );
+  assertEquals((await inspected.json()).page.content, {
+    content_type: "pdf",
+    input: {
+      filename: "report.pdf",
+      media_type: "application/pdf",
+      size_bytes: original.byteLength,
+      pdf_version: "1.7",
+      replaceable: true,
+    },
+  });
+
+  const preview = await deliver_page_locator_path(
+    engine,
+    pages,
+    new Request("https://pager.test/Mine/report-preview", {
+      headers: { range: "bytes=0-8" },
+    }),
+    { kind: "guest" },
+  );
+  assertEquals(preview.status, 206);
+  assertEquals(preview.headers.get("content-disposition"), "inline");
+  assertEquals(
+    preview.headers.get("content-range"),
+    `bytes 0-8/${original.byteLength}`,
+  );
+  assertEquals(
+    new Uint8Array(await preview.arrayBuffer()),
+    original.slice(0, 9),
+  );
+
+  const download = await deliver_page_locator_path(
+    engine,
+    pages,
+    new Request("https://pager.test/Mine/report-download"),
+    { kind: "guest" },
+  );
+  assertEquals(download.status, 200);
+  assertStringIncludes(
+    download.headers.get("content-disposition")!,
+    'attachment; filename="report.pdf"',
+  );
+  assertEquals(new Uint8Array(await download.arrayBuffer()), original);
+
+  const replacement = pdf_bytes("replacement");
+  const replaced = await adapter.item(
+    pdf_multipart_request(
+      "/api/pages/page-1",
+      { endpoint_set: pdf_metadata().endpoint_set },
+      replacement,
+      {
+        method: "PATCH",
+        etag: '"page-page-1-r1"',
+        filename: "revised.pdf",
+      },
+    ),
+    context(owner_session),
+  );
+  assertEquals(replaced.status, 200);
+  assertEquals(replaced.headers.get("etag"), '"page-page-1-r2"');
+  const replaced_body = await replaced.json();
+  assertEquals(replaced_body.page.revision, 2);
+  assertEquals(replaced_body.page.content.input.filename, "revised.pdf");
+  assertEquals(replaced_body.page.endpoints, created_body.page.endpoints);
+
+  const stale = await adapter.item(
+    pdf_multipart_request(
+      "/api/pages/page-1",
+      { endpoint_set: pdf_metadata().endpoint_set },
+      original,
+      {
+        method: "PATCH",
+        etag: '"page-page-1-r1"',
+      },
+    ),
+    context(owner_session),
+  );
+  assertEquals(stale.status, 412);
+
+  const current = await deliver_page_locator_path(
+    engine,
+    pages,
+    "/Mine/report-download",
+    { kind: "guest" },
+  );
+  assertEquals(new Uint8Array(await current.arrayBuffer()), replacement);
+});
+
+Deno.test("page HTTP rejects malformed PDF multipart before mutation", async () => {
+  const { adapter, repository } = await make_fixture();
+  const cases = [
+    {
+      input: pdf_multipart_request(
+        "/api/pages",
+        pdf_metadata(),
+        pdf_bytes(),
+        { extra_part: true },
+      ),
+      status: 400,
+      error: "invalid_request",
+    },
+    {
+      input: pdf_multipart_request(
+        "/api/pages",
+        {
+          ...pdf_metadata(),
+          endpoint_set: {
+            ...pdf_metadata().endpoint_set,
+            canonical: {
+              ...pdf_metadata().endpoint_set.canonical,
+              delivery_profile: "attachment",
+            },
+          },
+        },
+        pdf_bytes(),
+      ),
+      status: 400,
+      error: "invalid_request",
+    },
+    {
+      input: pdf_multipart_request(
+        "/api/pages",
+        pdf_metadata(),
+        pdf_bytes(),
+        { file_media_type: "application/octet-stream" },
+      ),
+      status: 415,
+      error: "unsupported_media_type",
+    },
+    {
+      input: pdf_multipart_request(
+        "/api/pages",
+        pdf_metadata(),
+        text_encoder.encode("not pdf"),
+      ),
+      status: 422,
+      error: "invalid_input",
+    },
+  ];
+
+  for (const test_case of cases) {
+    const response = await adapter.collection(
+      test_case.input,
+      context(owner_session),
+    );
+    assertEquals(response.status, test_case.status);
+    assertEquals((await response.json()).error, test_case.error);
+  }
+  assertEquals(
+    await repository.find_by_locator({
+      namespace: "Mine",
+      page_name: "report-preview",
+    }),
+    null,
+  );
+
+  const malformed = await adapter.collection(
+    new Request("https://pager.test/api/pages", {
+      method: "POST",
+      headers: {
+        "content-type": "multipart/form-data; boundary=missing",
+        "x-csrf-token": csrf_token,
+      },
+      body: "--missing\r\nbroken",
+    }),
+    context(owner_session),
+  );
+  assertEquals(malformed.status, 400);
+  assertEquals((await malformed.json()).error, "invalid_request");
 });
 
 Deno.test("page HTTP rejects unsupported methods with no-store Allow responses", async () => {

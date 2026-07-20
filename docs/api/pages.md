@@ -3,25 +3,18 @@
 > Implementation status: this contract is composed into Fresh collection, item,
 > action, and bulk routes and backed by the selected page repository.
 >
-> PDF publication is not part of this HTTP contract yet. The implemented
-> transport-independent handler accepts validated `Uint8Array` input up to 16
-> MiB, but the future HTTP extension will use a strict bounded binary upload
-> boundary rather than base64 inside the JSON content command. Generic
-> application contracts already accept a complete user-configured set of 1–8
-> endpoints over the same asset for create, revision-bound endpoint replacement,
-> and duplication. Exactly one endpoint is explicitly canonical; each binding
-> supplies an ordinary same-namespace locator and a content-supported `inline`
-> or `attachment` profile. Canonical rename retains every alternate. No filename
-> suffix has special routing or delivery meaning. The immutable-asset/atomic-
-> endpoint contract backs the composed process-local `PageService`. This HTTP
-> JSON contract keeps its compatible one-canonical-inline-endpoint `md-page`
-> shape until the strict PDF upload extension, while every owner-safe summary
-> exposes the complete endpoint link set and direct delivery obeys the resolved
-> binding profile. PDF management inspection exposes only bounded filename/
-> media-type/size/version/replace metadata, never complete bytes. Binary upload
-> fields are not exposed yet. Explicit `deno-kv-v2` composition supports the
-> full aggregate contract; retained `deno-kv` fallback rejects non-compatible
-> endpoint sets without truncating them.
+> PDF publication and revision-bound replacement use strict bounded
+> `multipart/form-data` on the existing collection and item endpoints. Binary
+> bytes never enter JSON or application transport types. The publisher supplies
+> the complete same-namespace endpoint locator/profile set; HTTP never creates a
+> suffix or infers delivery behavior. PDF requires a canonical `inline` binding
+> and at least one `attachment` alternate. The same immutable asset is served at
+> every binding, with browser range support and endpoint-selected disposition.
+> PDF management inspection exposes only bounded filename/media-type/size/
+> version/replace metadata, never complete bytes. Explicit `deno-kv-v2` and
+> process-local memory support the full endpoint aggregate; retained `deno-kv`
+> fallback rejects non-compatible endpoint sets without truncating them. The
+> existing JSON `md-page` contract remains compatible.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the
@@ -107,8 +100,57 @@ and absolute `url`. Managed success also includes `management_url`.
 
 Relevant failures are `400` invalid shape/JSON, `401` stale creator intent,
 `403` invalid CSRF/private trial/forbidden authority, `409` unreserved creator
-namespace or existing managed page, `413` oversized, `415` non-JSON, `422`
-invalid locator/access/tags/content, and `503` exhausted server ID generation.
+namespace or existing managed page, `413` oversized, `415` unsupported media,
+`422` invalid locator/access/tags/content, and `503` exhausted server ID
+generation.
+
+### PDF create — multipart `POST /api/pages`
+
+A PDF request has `Content-Type: multipart/form-data` with one unquoted boundary
+of at most 70 permitted characters. Its complete body is limited to 16 MiB plus
+64 KiB and is read with a stream-enforced bound; `Content-Length` is only an
+early rejection hint. It contains exactly these two file parts, with no unknown
+or duplicate parts:
+
+1. `metadata`, filename `metadata.json`, `Content-Type: application/json`, at
+   most 16 KiB;
+2. `file`, a non-empty portable filename, `Content-Type: application/pdf`, at
+   most 16 MiB.
+
+The metadata JSON is strict UTF-8 and has this shape:
+
+```json
+{
+  "endpoint_set": {
+    "canonical": {
+      "locator": { "namespace": "Alice", "page_name": "report-preview" },
+      "delivery_profile": "inline"
+    },
+    "alternates": [
+      {
+        "locator": { "namespace": "Alice", "page_name": "report-download" },
+        "delivery_profile": "attachment"
+      }
+    ]
+  },
+  "access": "private",
+  "tags": ["reports"]
+}
+```
+
+`tags` is optional. `endpoint_set.alternates` is required; the complete set must
+contain 2–8 unique ordinary locators in one case-insensitive namespace. The
+canonical profile must be `inline`, and at least one alternate must be
+`attachment`; additional supported inline or attachment alternates are allowed.
+The file part's declared type and filename extension do not establish validity:
+the PDF handler still applies the 16 MiB, portable-filename, header, version,
+xref, and terminal structure rules.
+
+Guest versus managed authority, CSRF, namespace ownership, conflicts, status,
+`Location`, ETag, and response summary behavior are the same as JSON create.
+Malformed framing, fields, or metadata returns `400`; oversized total, metadata,
+or file data returns `413`; wrong request or part media types return `415`;
+invalid access/tags/endpoints/PDF content returns `422` without mutation.
 
 ## List — `GET /api/pages`
 
@@ -229,6 +271,17 @@ ETag. Missing `If-Match` returns `428`; malformed, weak, wildcard, multiple, or
 non-canonical validators return `400`; a different-page or stale validator
 returns `412`. Missing/non-owner pages return `404`, and invalid
 content/access/tags return `422`.
+
+PDF replacement uses the same exact two-part multipart contract and always
+includes a replacement `file`. Its strict metadata object requires the complete
+`endpoint_set` and accepts optional `access` and `tags`; omitted metadata fields
+are preserved. Repeating the current set replaces only the PDF bytes and
+filename, while a changed set is applied atomically. This explicit requirement
+also prevents multipart from converting a one-endpoint Markdown page into an
+incomplete PDF publication. CSRF and `If-Match` are validated before the body
+can mutate the page. One successful request advances the revision once; a stale
+retry returns `412` and cannot publish a partial asset or endpoint set. JSON
+PATCH remains the compatible metadata and `md-page` update path.
 
 ## Delete — `DELETE /api/pages/:page_id`
 
@@ -396,3 +449,14 @@ resolved session and uses the same composed page service as management. After
 access checks, the resolved endpoint's stored profile exclusively selects
 `Content-Disposition: inline` or `attachment`; safe suggested filenames are
 encoded only for attachment delivery.
+
+PDF delivery returns fixed `application/pdf`, `nosniff`, `no-store`, exact
+length, an opaque strong `ETag`, and `Accept-Ranges: bytes`. A request without a
+range returns the bounded complete body with `200`. Exactly one `bytes` range is
+accepted, including closed, open-ended, and suffix forms; a satisfiable range
+returns `206` with exact `Content-Range` and length. Malformed, multiple, empty,
+reversed, or unsatisfiable ranges return bodyless `416` with
+`Content-Range: bytes */<size>`. `If-Range` applies a range only when it exactly
+matches the current ETag; otherwise the current complete `200` representation is
+returned. Matching `If-None-Match` returns `304`. Inline and attachment
+endpoints have byte-identical payload and validator values at one revision.
