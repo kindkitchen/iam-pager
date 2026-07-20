@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Activated `kvdex-content-persistence` and completed its first coherent storage
+  slice. Pinned Kvdex 3.6.7 behind an adapter-owned Deno KV schema factory and
+  added an interface-backed immutable content-asset repository. V8-serialized
+  payloads stage under random encoded-collection identities, are reconstructed,
+  length- and SHA-256-verified before a separate manifest publishes the asset,
+  and are revalidated on every read. Focused coverage proves identity
+  immutability/isolation, cross-instance multi-segment PDF bytes, interrupted
+  batch cleanup and retry, corruption rejection, and legacy raw-keyspace
+  coexistence. Deployment still selects raw Deno KV until atomic page/endpoint
+  persistence, aggregate conformance, and explicit compatibility/migration land.
+  All 499 tests, check, and the production build pass.
+
 - Completed `pdf-content-core`. Generic trial and managed application commands
   now accept either the one-inline-locator compatibility shape or a complete
   planned endpoint set; revision-bound updates replace all bindings atomically,

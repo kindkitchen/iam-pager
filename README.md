@@ -178,8 +178,14 @@ The first publishing slice currently provides:
   Owner/public summaries expose a complete safe canonical/alternate link set,
   the site renders configured alternates without creating extra page rows, and
   direct HTTP disposition follows the resolved binding profile rather than a
-  suffix or filename hint. The raw-Deno-KV repository stays on a legacy service
-  compatibility path until the planned conforming adapter and migration;
+  suffix or filename hint. The first unselected Kvdex storage slice now pins
+  3.6.7 and stages encoded immutable asset payloads under random identities,
+  verifies their reconstruction, length, and SHA-256, then publishes a separate
+  manifest identity. Interrupted batches remain unreachable and are cleaned
+  best-effort; fresh repository instances round-trip multi-segment bytes over
+  the same supplied Deno KV. Page/endpoint persistence and raw-keyspace
+  compatibility remain incomplete, so the raw-Deno-KV repository stays on its
+  legacy service path and deployment selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -344,16 +350,18 @@ keeps bytes out of management inspection. Generic application commands accept
 complete endpoint-set intent for trial and managed creation and revision-bound
 replacement. Canonical rename preserves every alternate; endpoint-aware
 duplication requires a fresh complete destination set, while the existing
-one-inline-endpoint command remains the compatibility path. A conforming
-Kvdex-backed Deno KV page/content adapter, strict bounded upload/direct
-delivery, and the PDF site projection follow. The retained raw-Deno-KV
-repository rejects non-compatible endpoint sets without partial mutation. Kvdex
-remains inside the durable adapter. Its segmented blob writes do not by
-themselves preserve atomic visibility, so immutable assets must be fully staged
-before page endpoints can reference them. Existing raw Deno KV records require
-explicit compatibility or migration before that adapter becomes the durable
-default. Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and
-external storage remain later work.
+one-inline-endpoint command remains the compatibility path. The first Kvdex
+adapter step is implemented: pinned 3.6.7 remains inside `lib/storage`, and an
+interface-backed content-asset repository writes V8-serialized payloads through
+its segmented encoded collection, verifies them, then publishes one unencoded
+manifest. Failed multi-operation batches expose no asset identity and permit a
+retry; corruption is rejected on read. The complete atomic page/endpoint
+adapter, raw-keyspace compatibility, strict bounded upload/direct delivery, and
+the PDF site projection follow. The retained raw-Deno-KV repository remains
+selected and rejects non-compatible endpoint sets without partial mutation.
+Existing raw Deno KV records require explicit compatibility or migration before
+Kvdex can become the durable default. Generic raw-binary publishing, PDF.js,
+thumbnails, text extraction, and external storage remain later work.
 
 ## Local development
 

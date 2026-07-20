@@ -142,20 +142,31 @@ alternates cannot duplicate rows. `MemoryPageRepository` is now only a
 one-endpoint compatibility projection over that reference, and the composed
 process-local `PageService` detects and uses the focused capabilities directly.
 The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
-planned Kvdex adapter and explicit record migration.
+complete Kvdex adapter and explicit record migration.
 
-The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
-implementation detail over Deno KV. It must satisfy the new aggregate
-conformance plus the preserved application behavior before becoming the selected
-durable adapter. Kvdex encoded collections segment `Uint8Array`, but cannot join
-Kvdex atomic builders; values beyond Deno KV's 800 KiB atomic mutation limit
-require batched, non-atomic segment commits. Large immutable assets must
-therefore be staged while unreferenced and become reachable only after all
-segments succeed and an atomic metadata/endpoint commit publishes the reference.
-Critical locator and owner indexes may not use Kvdex shortcuts whose
-delete/update behavior weakens atomic rename, replacement, or deletion. Existing
-raw-KV records require an explicit compatibility or migration path before
-selection changes.
+The replacement page/content adapter pins Kvdex 3.6.7 only as an implementation
+detail over Deno KV. Its first implemented slice is an interface-backed
+immutable content-asset repository and adapter-owned schema factory. Payload
+data is V8-serialized, written to a segmented encoded collection under a random
+staging identity with batched operations, reconstructed, length-checked,
+SHA-256-checked, and deserialized before an unencoded manifest publishes the
+application asset identity. Readers resolve only manifests and repeat every
+integrity check; a failed segment batch has no visible identity, best-effort
+pinned-layout cleanup removes partial staging records, and an ambiguous
+manifest-commit exception retains the payload rather than risk corrupting a
+visible record. Focused tests cover immutable conflicts/isolation,
+cross-instance multi-segment bytes, interruption/retry, corruption, and
+coexistence with the legacy keyspace.
+
+This asset slice is not selected by deployment composition yet. The adapter must
+still satisfy the complete aggregate conformance and preserved application
+behavior before replacing raw Deno KV. Kvdex encoded collections cannot join
+Kvdex atomic builders, and batched writes are not one visibility transaction;
+page references therefore remain forbidden until a manifest exists. Critical
+locator and owner indexes may not use Kvdex shortcuts whose delete/update
+behavior weakens atomic rename, replacement, or deletion. Existing raw-KV
+records require an explicit compatibility or migration path before selection
+changes.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is

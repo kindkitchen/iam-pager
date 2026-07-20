@@ -123,10 +123,12 @@ detaches at most 16 MiB, fixes media type, retains safe filename/version
 metadata, declares both profiles, and keeps bytes out of management inspection.
 Generic application endpoint-set commands are now complete: create and
 revision-bound update plan the full set, canonical rename retains alternates,
-and endpoint-aware duplication requires a fresh full destination set. The
-conforming Kvdex-backed Deno KV adapter, strict bounded HTTP upload/delivery,
-and secondary PDF site projection follow. Generic binary fallback and external
-storage remain later.
+and endpoint-aware duplication requires a fresh full destination set. The first
+Kvdex persistence step now pins 3.6.7 and implements verified staged immutable
+assets whose segmented batch failures cannot publish an asset identity. Atomic
+page/endpoint persistence, aggregate conformance, raw-keyspace compatibility,
+strict bounded HTTP upload/delivery, and the secondary PDF site projection
+follow. Generic binary fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

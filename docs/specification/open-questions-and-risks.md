@@ -247,16 +247,23 @@ accidental generic-file contract.
 
 ### OQ-KVDEX — Kvdex atomicity and migration
 
-Kvdex 3.6.7 is selected for the planned Deno KV page/content adapter because it
-provides typed collections and segmented `Uint8Array` storage. It remains an
-adapter dependency and must not enter domain or application interfaces.
+Kvdex 3.6.7 is pinned for the Deno KV page/content adapter because it provides
+typed collections and segmented `Uint8Array` storage. It remains inside storage
+implementation files and does not enter domain or application interfaces.
 
-Its encoded collections cannot participate in Kvdex atomic builders, and blobs
-above Deno KV's 800 KiB atomic mutation limit require Kvdex batched writes that
-are not one atomic visibility commit. The adapter must therefore stage immutable
-unreferenced assets to completion before atomically publishing page/endpoint
-references. Built-in index deletion also cannot replace the repository's
-existing atomic rename/delete guarantees without proof. The current raw Deno KV
-keyspace is not a Kvdex keyspace, so switching implementations requires explicit
-compatibility or migration; silently presenting an empty database is not
-acceptable.
+The implemented first slice stages each V8-serialized immutable payload under a
+random Kvdex identity, verifies reconstructed length, SHA-256, and decoding, and
+only then publishes a separate unencoded asset manifest. Failed multi-operation
+segment batches expose no application asset identity, receive best-effort
+partial-record cleanup, and can be retried; readers reject missing or changed
+segments. An ambiguous manifest-commit exception deliberately retains the staged
+payload because deleting it could corrupt a commit that actually succeeded.
+
+The larger risk remains open. Encoded collections cannot participate in Kvdex
+atomic builders, and their batched writes are not one visibility transaction.
+Pages and endpoints are not yet persisted by this adapter, and deployment still
+selects the raw-Deno-KV compatibility path. Built-in index deletion cannot
+replace existing atomic rename/delete guarantees without proof. The current raw
+Deno KV keyspace is not a Kvdex keyspace, so switching implementations requires
+explicit compatibility or migration; silently presenting an empty database is
+not acceptable.
