@@ -209,8 +209,9 @@ The first publishing slice currently provides:
   record plus a read-only probe rejects missing, changed, corrupt, or incomplete
   migration state. Empty, mixed trial/managed/private, pre-tag, interruption,
   concurrent, conflict, corruption, absent-manifest, and no-op-rerun coverage
-  pass. The raw-Deno-KV repository still stays on its legacy service path until
-  the separate controlled composition cutover;
+  pass. Explicit `deno-kv-v2` composition runs the readiness probe before
+  selecting this aggregate; retained `deno-kv` composition remains the
+  source-preserving schema-v1 fallback;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -264,9 +265,9 @@ filter-bound pagination, refreshes stale rows, edits content and comma-separated
 tags together, supports default/named renames and generated duplication, and
 applies access or deletion to an explicit selection of at most 100 current row
 revisions while showing one result per page. Total page capacity, publishing
-frequency, guest expiry, exploration text indexing/relevance, process-local or
-cross-database migration, and the durable-v2 composition cutover are not
-implemented; these endpoints are not ready for untrusted public traffic.
+frequency, guest expiry, exploration text indexing/relevance, and process-local
+or cross-database migration are not implemented; these endpoints are not ready
+for untrusted public traffic.
 
 ## Local verification and database schema releases
 
@@ -333,13 +334,14 @@ execution safe; different pre-existing v2 data is a hard conflict, not an
 overwrite.
 
 Back up the exact target and quiesce page publication before `db:update`. Keep
-v1 writers stopped through readiness verification and the later controlled
-adapter cutover: a v1 write after migration changes the fingerprint and is
+v1 writers stopped through readiness verification and controlled adapter
+selection: a v1 write after migration changes the fingerprint and is
 intentionally refused rather than merged into v2. Then run `db:check`, run the
-confirmed `db:update`, verify the result, change deployment selection only when
-the cutover release is present, and smoke-test it. The retained v1 records give
-a deliberate fallback window, not a rollback guarantee. This checkpoint does not
-yet select the v2 adapter; deployment continues to use the legacy repository.
+confirmed `db:update`, verify the result, select `deno-kv-v2`, and smoke-test
+it. The retained `deno-kv` profile and untouched v1 records provide a deliberate
+fallback window, not a rollback guarantee. The v2 factory revalidates source,
+readiness, and destination before exposing the aggregate and fails closed on any
+mismatch; it performs no migration.
 
 Every later version bump must likewise add one adjacent, repeat-safe migration
 to `lib/database-schema/current-schema.ts`; a gap makes the registry invalid
@@ -411,12 +413,12 @@ projections; the worst supported takeover/duplication shape uses 87 of 100 Deno
 KV checks. The manual source-preserving raw-keyspace migration is now complete:
 it uses deterministic assets/payloads, conditional idempotent aggregate imports,
 strict source/destination verification, and a source-bound readiness record
-without changing v1. Controlled composition cutover, strict bounded
-upload/direct delivery, and the PDF site projection follow. The retained
-raw-Deno-KV repository remains selected and rejects non-compatible endpoint sets
-without partial mutation; the v2 readiness probe is available for the cutover
-factory but is not a startup or deploy hook. Generic raw-binary publishing,
-PDF.js, thumbnails, text extraction, and external storage remain later work.
+without changing v1. Explicit `deno-kv-v2` composition now gates and selects the
+aggregate; `deno-kv` retains the raw schema-v1 compatibility path. Strict
+bounded upload/direct delivery and the PDF site projection follow. The readiness
+check runs only when v2 storage is deliberately selected and never migrates at
+startup or deploy. Generic raw-binary publishing, PDF.js, thumbnails, text
+extraction, and external storage remain later work.
 
 ## Local development
 
@@ -528,8 +530,8 @@ back up and quiesce affected writers, run `db:check` manually against the exact
 target, and, when it reports an available path, run the separately confirmed
 `db:update`. Keep writers quiesced through adapter selection and smoke testing;
 ordinary code-only releases need no database command. The current
-`pages-v1-to-v2` release is additive and source-preserving, but this checkpoint
-does not yet switch runtime composition to v2.
+`pages-v1-to-v2` release is additive and source-preserving; runtime switches to
+v2 only when `IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv-v2` is selected.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
@@ -545,12 +547,13 @@ keeps that repository process-local.
 
 For Deno Deploy production and Git branch timelines that must preserve sign-in,
 namespace reservations, and published pages, attach Deno KV to the app and set
-all three backend variables:
+all three backend variables. Page v2 selection requires the manual migration and
+a successful `db:check` first:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
-IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
+IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv-v2
 ```
 
 Leave `IAM_PAGER_OWNERSHIP_DENO_KV_PATH` unset on Deno Deploy so every adapter
@@ -585,20 +588,23 @@ revision preview URLs, keep those contexts explicitly in memory unless every
 revision is known to be record-schema compatible. The application no longer
 silently rewrites preview storage configuration.
 
-A self-hosted durable process can use the three `deno-kv` settings with an
-explicit durable filesystem path:
+A self-hosted durable process can use durable ownership/session settings plus
+the `deno-kv-v2` page setting with an explicit durable filesystem path:
 
 ```env
 IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/ownership.kv
 ```
 
 Deno KV selects the linked identity and namespace repositories as one ownership
-unit; sessions and pages remain separate opt-ins. Durable sessions and durable
-pages each require Deno KV ownership and inherit its exact path or default
-database. Startup rejects either option with memory ownership, preventing an
-authenticated session from surviving without its user record and a published
-page from surviving without its namespace reservation. Omitting either opt-in
-keeps that store in restart-invalidated memory even when ownership is durable.
+unit; sessions and pages remain separate opt-ins. Durable sessions and both page
+profiles require Deno KV ownership and inherit its exact path or default
+database, the same explicit target used by the schema task. Startup rejects any
+of them with memory ownership, preventing an authenticated session from
+surviving without its user record and a published page from surviving without
+its namespace reservation. Use page value `deno-kv` only for the retained v1
+fallback window; it bypasses the v2 readiness gate by design. Omitting either
+opt-in keeps that store in restart-invalidated memory even when ownership is
+durable.
 
 The Deno KV session adapter atomically preserves creation, renewal,
 authentication-attempt consumption, credential rotation, logout, and revocation.
@@ -607,17 +613,19 @@ Session records and credential indexes receive the absolute-session-lifetime KV
 TTL; idle and absolute expiry remain enforced by the service because KV expiry
 is lazy, and logout/revocation removes the credential index atomically.
 
-The Deno KV page adapter stores each page as an envelope record plus immutable
-generation chunks, so a page's Markdown source and derived HTML are not limited
-by the single-value size cap. Replacement writes the new generation's chunks
-first and then atomically flips the envelope while deleting the replaced
-generation: readers always see one complete page, and concurrent replacements
-settle on exactly one winner. A crash between chunk writes and the flip can only
-orphan chunks of a never-referenced generation. Changing the backend or
-ownership path does not migrate or merge records. Ownership records still have
-no application expiry or deletion path, and backup/recovery follows the selected
-KV service or deployment operator. Without the content opt-in, pages still
-disappear on restart.
+The `deno-kv-v2` page profile first validates the source-bound migration
+readiness record and every migrated asset/aggregate, then selects
+`KvPageAggregateRepository`. Its immutable payloads use kv-toolbox behind the
+project gateway, while one native Deno KV commit publishes each complete page,
+endpoint, owner, and public-index transition. Selection fails closed when v1 is
+unmigrated, changed, corrupt, or no longer matches v2. The retained `deno-kv`
+profile continues to select the schema-v1 raw adapter during the fallback
+window; it does not share writes with v2, so quiesce v1 writers before migration
+and keep them stopped after readiness. Changing the backend or ownership path
+performs no migration or merge. Ownership records still have no application
+expiry or deletion path, and backup/recovery follows the selected KV service or
+deployment operator. Without the content opt-in, pages still disappear on
+restart.
 
 For Deno Deploy, use `deno task build` as the platform build command,
 `deno task pre-deploy` as the no-op pre-deploy placeholder, and

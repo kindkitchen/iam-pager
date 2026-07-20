@@ -23,7 +23,10 @@ import {
 } from "./app.ts";
 import { pdf_media_type } from "./content/mod.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
-import { deliver_page_locator_path, MemoryPageRepository } from "./page/mod.ts";
+import {
+  deliver_page_locator_path,
+  MemoryPageAggregateRepository,
+} from "./page/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
 import {
   hash_session_credential,
@@ -390,8 +393,8 @@ Deno.test("configured composition selects referentially safe session storage", a
   );
 });
 
-Deno.test("configured composition selects referentially safe page storage", async () => {
-  const selected_page_repository = new MemoryPageRepository();
+Deno.test("configured composition selects referentially safe v2 page storage", async () => {
+  const selected_page_repository = new MemoryPageAggregateRepository();
   let selected_config: PageStorageConfig | undefined;
   const page_repository_factory: PageRepositoryFactory = {
     create: (config) => {
@@ -407,7 +410,7 @@ Deno.test("configured composition selects referentially safe page storage", asyn
       "http://localhost:5173/auth/google/mock-consent",
     [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
     [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
-    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv-v2",
   };
 
   const services = await create_configured_app_services(
@@ -427,7 +430,7 @@ Deno.test("configured composition selects referentially safe page storage", asyn
   );
 
   assertEquals(selected_config, {
-    backend: "deno-kv",
+    backend: "deno-kv-v2",
     path: "/data/iam-pager.kv",
   });
   assertStrictEquals(services.page_repository, selected_page_repository);
@@ -438,11 +441,20 @@ Deno.test("configured composition selects referentially safe page storage", asyn
     content: { content_type: "md-page", input: { md: "# Durable" } },
   });
   assertEquals(published.ok, true);
+  const endpoint = await selected_page_repository.resolve_page_endpoint({
+    namespace: "durable",
+    page_name: "hello",
+  });
   assertEquals(
-    (await selected_page_repository.find_by_locator({
-      namespace: "durable",
-      page_name: "hello",
-    }))?.content.content_type,
+    endpoint?.page.page_id,
+    published.ok ? published.page.page_id : null,
+  );
+  assertEquals(
+    endpoint === null
+      ? null
+      : (await selected_page_repository.find_content_asset_by_id(
+        endpoint.page.content_asset_id,
+      ))?.content_type,
     "md-page",
   );
 });

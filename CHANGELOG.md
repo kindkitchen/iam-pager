@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed the controlled durable-v2 composition cutover. The explicit
+  `deno-kv-v2` page profile inherits the ownership database, revalidates the
+  source-bound migration readiness and complete v2 destination, then supplies
+  `KvPageAggregateRepository` through the named aggregate interface. Missing,
+  changed, corrupt, conflicting, or incomplete migration state fails closed and
+  closes the unused gateway; no startup migration runs. The retained `deno-kv`
+  profile preserves the untouched schema-v1 compatibility/fallback path. Added
+  factory/configuration and composed-service coverage, updated operator and
+  architecture documentation, and verified a disposable manual schema release.
+  All 543 tests, tracked-source formatting/lint/type checks, and the production
+  build pass.
+
 - Completed the source-preserving pages-v1-to-v2 migration checkpoint. The
   retained manual schema registry now validates every visible legacy envelope,
   locator/owner index, and referenced chunk set; derives deterministic

@@ -145,9 +145,10 @@ restart/corruption/retry-exhaustion coverage, all eight endpoints, and the
 worst-case 87-of-100-check transaction pass. The manual source-preserving
 raw-keyspace migration now validates and retains v1, copies deterministic
 assets/aggregates into v2, rejects conflicts and source changes, and exposes a
-strict readiness probe. Controlled composition cutover still precedes strict
-bounded HTTP upload/delivery and the secondary PDF site projection. Generic
-binary fallback and external storage remain later.
+strict readiness probe. Explicit `deno-kv-v2` composition now gates and selects
+the aggregate while `deno-kv` preserves the v1 fallback; strict bounded HTTP
+upload/delivery and the secondary PDF site projection follow. Generic binary
+fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 
