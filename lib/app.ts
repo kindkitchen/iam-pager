@@ -80,6 +80,7 @@ import {
   DefaultOwnershipRepositoryFactory,
   DefaultPageRepositoryFactory,
   DefaultSessionRepositoryFactory,
+  deployment_storage_environment,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
   type PageRepositoryFactory,
@@ -269,13 +270,16 @@ export async function create_configured_app_services(
   environment: EnvironmentSource,
   options: ConfiguredAppServiceOptions = {},
 ): Promise<AppServices> {
-  const ownership_storage_config = parse_ownership_storage_config(environment);
+  const storage_environment = deployment_storage_environment(environment);
+  const ownership_storage_config = parse_ownership_storage_config(
+    storage_environment,
+  );
   const session_storage_config = parse_session_storage_config(
-    environment,
+    storage_environment,
     ownership_storage_config,
   );
   const page_storage_config = parse_page_storage_config(
-    environment,
+    storage_environment,
     ownership_storage_config,
   );
   const google_auth_config = parse_google_auth_config(environment);

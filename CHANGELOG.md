@@ -2,6 +2,19 @@
 
 ## 2026-07-20
 
+- Reworked database release safety after validating current Deno Deploy timeline
+  behavior. Local Git/GitButler pushes and review creation now use an
+  installable native pre-push hook for check and all tests; deployment
+  pre-deploy only reads and verifies an exact project/schema manifest. Added
+  interface-first manifest, checker, and guarded writer contracts with Deno KV
+  conformance, version 0 as manifest-absent only, and an explicit token-backed
+  remote update command that refuses project/from/to mismatch before writing.
+  Documented that revision previews share one database and skip pre-deploy, so
+  revision timelines force memory repositories while branch URLs provide
+  isolated durable review databases. Pinned Deno 2.5.0 to Deploy, added missing
+  third-party type declarations, and formatted `static/site.css` with that
+  formatter. The installed hook, all 475 tests, check, and build pass.
+
 - Completed `explicit-pre-deploy`. `deno task pre-deploy` now runs check, all
   tests, and the production build as parallel dependencies before the uncached
   schema command. Added an interface-first, immutable forward-upgrade runner,

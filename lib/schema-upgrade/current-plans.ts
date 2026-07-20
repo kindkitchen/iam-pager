@@ -6,13 +6,15 @@ import {
 import type { SchemaUpgradePlan } from "./interfaces.ts";
 import { define_schema_upgrade_plans } from "./plan.ts";
 
+export const database_schema_project_id = "iam-pager";
+
 export interface DenoKvSchemaUpgradeContext {
   readonly kv: Deno.Kv;
 }
 
 /**
- * Raw Deno KV databases created before this framework are baseline version 1.
- * No application-data transformation is needed until one target advances.
+ * Raw records are already format 1; absent database-manifest metadata is the
+ * external version-0 bootstrap handled by `GuardedDatabaseSchemaWriter`.
  */
 export const current_database_schema_upgrade_plans: readonly SchemaUpgradePlan<
   DenoKvSchemaUpgradeContext

@@ -1,31 +1,31 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import {
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   PAGE_STORAGE_BACKEND_ENV,
   SESSION_STORAGE_BACKEND_ENV,
 } from "../storage/mod.ts";
+import { database_schema_project_id } from "./current-plans.ts";
+import { DenoKvDatabaseSchemaManifestRepository } from "./deno-kv-manifest-repository.ts";
 import { DenoKvSchemaUpgradeStateRepository } from "./deno-kv-state-repository.ts";
 import type {
-  DatabaseSchemaUpgradeConnection,
-  DatabaseSchemaUpgradeConnectionFactory,
-  DatabaseSchemaUpgradeEnvironmentSource,
-  DatabaseSchemaUpgradeOutput,
+  DatabaseSchemaConnection,
+  DatabaseSchemaConnectionFactory,
+  DatabaseSchemaEnvironmentSource,
+  DatabaseSchemaOutput,
 } from "./pre-deploy.ts";
 import {
-  execute_database_schema_upgrade,
-  parse_database_schema_upgrade_storage_config,
-  run_database_schema_upgrade_cli,
+  parse_database_schema_storage_config,
+  run_database_schema_check_cli,
 } from "./pre-deploy.ts";
 
 function environment(
   values: Readonly<Record<string, string>>,
-): DatabaseSchemaUpgradeEnvironmentSource {
+): DatabaseSchemaEnvironmentSource {
   return { get: (name) => values[name] };
 }
 
-class SharedKvConnectionFactory
-  implements DatabaseSchemaUpgradeConnectionFactory {
+class SharedKvConnectionFactory implements DatabaseSchemaConnectionFactory {
   readonly kv: Deno.Kv;
   opened_paths: (string | undefined)[] = [];
   close_count = 0;
@@ -34,10 +34,11 @@ class SharedKvConnectionFactory
     this.kv = kv;
   }
 
-  open(path?: string): Promise<DatabaseSchemaUpgradeConnection> {
+  open(path?: string): Promise<DatabaseSchemaConnection> {
     this.opened_paths.push(path);
     return Promise.resolve({
       context: { kv: this.kv },
+      manifest_repository: new DenoKvDatabaseSchemaManifestRepository(this.kv),
       state_repository: new DenoKvSchemaUpgradeStateRepository(this.kv),
       close: () => {
         this.close_count += 1;
@@ -46,7 +47,7 @@ class SharedKvConnectionFactory
   }
 }
 
-class RecordingOutput implements DatabaseSchemaUpgradeOutput {
+class RecordingOutput implements DatabaseSchemaOutput {
   readonly logs: string[] = [];
   readonly errors: string[] = [];
 
@@ -59,186 +60,131 @@ class RecordingOutput implements DatabaseSchemaUpgradeOutput {
   }
 }
 
-Deno.test("pre-deploy schema configuration reuses linked storage validation", () => {
-  assertEquals(parse_database_schema_upgrade_storage_config(environment({})), {
+function durable_environment(): DatabaseSchemaEnvironmentSource {
+  return environment({
+    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
+    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/production.kv",
+    [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
+    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+  });
+}
+
+Deno.test("pre-deploy schema check reuses linked storage validation", () => {
+  assertEquals(parse_database_schema_storage_config(environment({})), {
     backend: "memory",
   });
   assertEquals(
-    parse_database_schema_upgrade_storage_config(environment({
-      [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-    })),
-    { backend: "deno-kv" },
-  );
-  assertEquals(
-    parse_database_schema_upgrade_storage_config(environment({
-      [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-      [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/production.kv",
-      [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
-      [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
-    })),
+    parse_database_schema_storage_config(durable_environment()),
     { backend: "deno-kv", path: "/data/production.kv" },
   );
 });
 
-Deno.test("pre-deploy schema configuration rejects incompatible linked storage", async () => {
-  const output = new RecordingOutput();
-  const status = await run_database_schema_upgrade_cli(
-    environment({ [SESSION_STORAGE_BACKEND_ENV]: "deno-kv" }),
-    output,
-  );
-
-  assertEquals(status, 1);
-  assertEquals(output.logs, []);
-  assertEquals(output.errors, [
-    "schema-upgrade failed code=invalid_configuration",
-  ]);
+Deno.test("pre-deploy schema check rejects memory or incompatible storage", async () => {
+  for (
+    const test_environment of [
+      environment({}),
+      environment({ [SESSION_STORAGE_BACKEND_ENV]: "deno-kv" }),
+    ]
+  ) {
+    const output = new RecordingOutput();
+    const status = await run_database_schema_check_cli(
+      test_environment,
+      output,
+      {
+        database_factory: {
+          open: () => Promise.reject(new Error("must not open")),
+        },
+      },
+    );
+    assertEquals(status, 1);
+    assertEquals(output.logs, []);
+    assertEquals(output.errors, [
+      "database-schema failed code=invalid_configuration",
+    ]);
+  }
 });
 
-Deno.test("pre-deploy selects the configured KV, baselines existing data, and repeats safely", async () => {
+Deno.test("pre-deploy schema check reads exact current metadata without writes", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const raw_page_key: Deno.KvKey = ["iam-pager", "pages", "by-id", "old"];
-    const raw_page = { schema_version: 1, page_id: "old" };
-    await kv.set(raw_page_key, raw_page);
-    const factory = new SharedKvConnectionFactory(kv);
-    const durable_environment = environment({
-      [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-      [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/production.kv",
-      [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
-      [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
-    });
-
-    const first = await execute_database_schema_upgrade(durable_environment, {
-      database_factory: factory,
-    });
-    const second = await execute_database_schema_upgrade(durable_environment, {
-      database_factory: factory,
-    });
-
-    assertEquals(factory.opened_paths, [
-      "/data/production.kv",
-      "/data/production.kv",
-    ]);
-    assertEquals(factory.close_count, 2);
-    assertEquals(first.storage, "deno-kv");
-    assertEquals(second.storage, "deno-kv");
-    if (first.storage !== "deno-kv" || second.storage !== "deno-kv") return;
-    assertEquals(
-      first.report.schemas.map((schema) => [schema.schema_id, schema.outcome]),
-      [
-        ["ownership", "no_change"],
-        ["sessions", "no_change"],
-        ["pages", "no_change"],
-      ],
-    );
-    assertEquals(
-      second.report.schemas.map((schema) => schema.outcome),
-      ["no_change", "no_change", "no_change"],
-    );
+    const manifest_repository = new DenoKvDatabaseSchemaManifestRepository(kv);
     const state_repository = new DenoKvSchemaUpgradeStateRepository(kv);
-    for (const schema_id of ["ownership", "sessions", "pages"]) {
-      assertEquals(await state_repository.read_state(schema_id), {
-        current_version: 1,
-        pending_transition: null,
+    const versions = [
+      { schema_id: "ownership", version: 1 },
+      { schema_id: "pages", version: 1 },
+      { schema_id: "sessions", version: 1 },
+    ] as const;
+    await manifest_repository.initialize_manifest({
+      project_id: database_schema_project_id,
+      schema_versions: versions,
+    });
+    for (const version of versions) {
+      await state_repository.initialize_state({
+        schema_id: version.schema_id,
+        baseline_version: version.version,
       });
     }
-    assertEquals((await kv.get(raw_page_key)).value, raw_page);
+    const before = await Promise.all([
+      kv.get(["database-schema", "v1", "manifest"]),
+      kv.get(["iam-pager", "schema-upgrades", "v1", "states", "pages"]),
+    ]);
+    const factory = new SharedKvConnectionFactory(kv);
+    const output = new RecordingOutput();
+
+    const status = await run_database_schema_check_cli(
+      durable_environment(),
+      output,
+      { database_factory: factory },
+    );
+
+    assertEquals(status, 0);
+    assertEquals(factory.opened_paths, ["/data/production.kv"]);
+    assertEquals(factory.close_count, 1);
+    assertEquals(output.errors, []);
+    assertEquals(
+      output.logs.at(-1),
+      "database-schema check project=iam-pager outcome=current",
+    );
+    const after = await Promise.all([
+      kv.get(["database-schema", "v1", "manifest"]),
+      kv.get(["iam-pager", "schema-upgrades", "v1", "states", "pages"]),
+    ]);
+    assertEquals(
+      after.map((entry) => entry.versionstamp),
+      before.map((entry) => entry.versionstamp),
+    );
   } finally {
     kv.close();
   }
 });
 
-Deno.test("pre-deploy CLI succeeds without opening a database for memory storage", async () => {
-  const output = new RecordingOutput();
-  const status = await run_database_schema_upgrade_cli(
-    environment({}),
-    output,
-    {
-      database_factory: {
-        open: () => Promise.reject(new Error("must not open")),
-      },
-    },
-  );
-
-  assertEquals(status, 0);
-  assertEquals(output.errors, []);
-  assertEquals(output.logs, [
-    "schema-upgrade complete schemas=0 upgraded=0 resumed=0 no_change=0 storage=memory",
-  ]);
-});
-
-Deno.test("pre-deploy CLI reports bounded step failure and preserves its claim", async () => {
+Deno.test("pre-deploy schema check fails an unversioned DB without initializing it", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
-    const output = new RecordingOutput();
     const factory = new SharedKvConnectionFactory(kv);
-    const status = await run_database_schema_upgrade_cli(
-      environment({
-        [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-        [OWNERSHIP_DENO_KV_PATH_ENV]: "/secret/database-path.kv",
-      }),
+    const output = new RecordingOutput();
+    const status = await run_database_schema_check_cli(
+      durable_environment(),
       output,
-      {
-        database_factory: factory,
-        plans: [{
-          schema_id: "pages",
-          baseline_version: 1,
-          target_version: 2,
-          steps: [{
-            step_id: "pages-v1-to-v2",
-            from_version: 1,
-            to_version: 2,
-            upgrade: () => {
-              throw new Error("stored secret value");
-            },
-          }],
-        }],
-      },
+      { database_factory: factory },
     );
 
     assertEquals(status, 1);
     assertEquals(output.logs, []);
-    assertEquals(output.errors, [
-      "schema-upgrade failed code=step_failed schema=pages step=pages-v1-to-v2 from=1 to=2",
-    ]);
-    assertEquals(output.errors[0].includes("secret"), false);
-    assertEquals(output.errors[0].includes("database-path"), false);
-    assertEquals(factory.close_count, 1);
     assertEquals(
-      (await new DenoKvSchemaUpgradeStateRepository(kv).read_state("pages"))
-        ?.pending_transition,
-      {
-        step_id: "pages-v1-to-v2",
-        from_version: 1,
-        to_version: 2,
-      },
+      output.errors.at(-1),
+      "database-schema check project=iam-pager outcome=unversioned",
     );
+    assertEquals(
+      await new DenoKvDatabaseSchemaManifestRepository(kv).read_manifest(),
+      null,
+    );
+    assertEquals(
+      await new DenoKvSchemaUpgradeStateRepository(kv).read_state("pages"),
+      null,
+    );
+    assertEquals(factory.close_count, 1);
   } finally {
     kv.close();
   }
-});
-
-Deno.test("pre-deploy CLI hides database opener details on failure", async () => {
-  const output = new RecordingOutput();
-  const status = await run_database_schema_upgrade_cli(
-    environment({
-      [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-      [OWNERSHIP_DENO_KV_PATH_ENV]: "/secret/database-path.kv",
-    }),
-    output,
-    {
-      database_factory: {
-        open: () =>
-          Promise.reject(new Error("failed /secret/database-path.kv")),
-      },
-    },
-  );
-
-  assertEquals(status, 1);
-  assertEquals(output.logs, []);
-  assertEquals(output.errors, [
-    "schema-upgrade failed code=database_unavailable",
-  ]);
-  assertStringIncludes(output.errors[0], "database_unavailable");
-  assertEquals(output.errors[0].includes("secret"), false);
 });

@@ -209,34 +209,53 @@ frequency, guest expiry, exploration text indexing/relevance, and backend
 migration are not implemented; these endpoints are not ready for untrusted
 public traffic.
 
-## Explicit pre-deploy and schema upgrades
+## Local verification and database schema releases
 
-`deno task pre-deploy` is the explicit deployment gate; application startup and
-requests never run schema upgrades. Deno 2.9 task-object dependencies run check,
-test, and build branches in parallel, then invoke
-`pre-deploy::upgrade-db-schema` only if all three succeed. The schema task is
-not file-cacheable and always decides from current database state. `--jobs` or
-`DENO_JOBS` may bound dependency concurrency.
+Checks and tests are developer push gates rather than deployment work. Install
+the tracked native hook once per clone:
 
-The interface-first forward runner preflights immutable plans and all durable
-states before writing metadata, claims one exact adjacent transition, executes
-its retained idempotent helper, and completes only the matching claim. A pending
-step survives failure and is resumed by stable ID; gaps, removed helpers,
-downgrades, newer database versions, corrupt state, and unknown claims fail
-closed. There is no automatic schema diff, down migration, rollback log, or
-startup hook. A claim is not a process mutex: overlapping runners may invoke the
-same pending helper, so every helper must also make concurrent data writes safe
-with conditional adapter operations.
+```sh
+deno task hooks:install
+```
 
-Deno KV stores versioned coordination records for independent `ownership`,
-`sessions`, and `pages` schemas. Existing raw-KV databases and fresh databases
-without framework metadata both have explicit baseline version 1. The current
-targets are also version 1, so the first durable invocation only installs
-metadata and reports `no_change`; later invocations inspect it and report the
-same without rewriting application data. Memory storage opens no database and
-returns an empty successful report. The command validates the same linked
-ownership/session/page settings, uses the ownership KV path or attached default,
-prints only bounded schema diagnostics, and closes its owned connection.
+The hook runs `deno task verify` (`check` and the complete tests) before a
+normal Git push. GitButler's `but push` and `but pr new` run the same pre-push
+hook by default. `--no-hooks` can deliberately bypass it, so this is an accepted
+local workflow assumption rather than CI enforcement. Husky and `core.hooksPath`
+are not used, preserving GitButler's managed hooks. The project pins Deno 2.5.0
+to match the current Deno Deploy builder/runtime formatter.
+
+`deno task pre-deploy` is now read-only. It opens the attached durable database
+and requires its authoritative manifest to identify project `iam-pager` with
+exact `ownership`, `pages`, and `sessions` versions matching code. Missing or
+wrong-project metadata, stale/future versions, pending work, corrupt state,
+unknown schemas, and memory storage fail before routing. It never runs checks,
+tests, another build, or a schema mutation.
+
+Version 0 means only “the database manifest is absent”; it never
+wildcard-matches versioned data. A developer updates an exact remote Deno KV
+database separately, using its connector URL and an access token that is never a
+command argument:
+
+```sh
+export DENO_KV_ACCESS_TOKEN=<personal-or-organization-token>
+deno task db-schema:upgrade \
+  --database-url=https://api.deno.com/v2/databases/<database-id>/connect \
+  --project=iam-pager \
+  --from=ownership:0,pages:0,sessions:0 \
+  --to=ownership:1,pages:1,sessions:1
+```
+
+The complete `from` vector must match the durable manifest, and the complete
+`to` vector must match the immutable code registry. Project or version mismatch
+performs no write. The explicit `0 -> 1` bootstrap is the one unavoidable case
+where unversioned data cannot prove its project identity, so selecting the URL
+and project is the operator's assertion. The guarded writer then reuses the
+forward-only, adjacent, idempotent runner and publishes the new manifest only
+after all helpers complete; interruption keeps deployment blocked and is safe to
+resume. Since the database update happens before the new release can pass its
+gate, data-changing helpers must stay compatible with the currently running
+release; destructive changes require staged expand/deploy/contract releases.
 
 ## Next direction: PDF pages
 
@@ -355,19 +374,19 @@ injected into direct page responses.
 
 ## Production startup and deployment
 
-Run the explicit gate against the deployment's storage configuration, then start
-the generated server with the same production environment file:
+Build, run the read-only gate against the deployment's durable storage
+configuration, then start the generated server with the same environment file:
 
 ```sh
+deno task build
 deno task --env-file=.env.production.local pre-deploy
 deno task --env-file=.env.production.local start
 ```
 
-The gate already performs the production build. The named
-`pre-deploy::upgrade-db-schema` task retains the same check/test/build
-dependencies even when invoked directly, so it cannot bypass verification. An
-all-memory profile reports zero schemas, while a durable profile opens the
-configured ownership KV and checks all three current schema targets.
+The gate performs no build or mutation. If it reports version 0 or stale schema,
+run the explicit remote `db-schema:upgrade` command against that exact database,
+then retry pre-deploy. Memory storage is rejected because it cannot provide a
+durable release manifest.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
@@ -411,8 +430,14 @@ different instances or an instance may restart. A bearer upgraded during a
 successful sign-in can then be unknown on the next request, which intentionally
 creates a fresh guest session. The visible symptoms are another sign-in prompt
 or `not_authenticated` failures from namespace reservation and creator
-publication. Use Deno KV for any preview where authentication or publication
-must work reliably across requests.
+publication.
+
+Use a Git branch timeline and its isolated Deno KV database for durable
+authentication/publication review. Deno Deploy currently shares one preview
+database across all revision preview URLs and skips pre-deploy there. Migrating
+that shared database could break older revision URLs, while leaving it stale can
+break newer ones, so `DENO_TIMELINE=preview/*` forces all application
+repositories to memory. Revision previews are only stateless UI/warmup surfaces.
 
 A self-hosted durable process can use the three `deno-kv` settings with an
 explicit durable filesystem path:
@@ -448,23 +473,23 @@ no application expiry or deletion path, and backup/recovery follows the selected
 KV service or deployment operator. Without the content opt-in, pages still
 disappear on restart.
 
-For Deno Deploy, use `deno task build` as the platform build command and
-`_fresh/server.js` as the application entrypoint. The explicit pre-deploy gate
-remains a separate operator action and must run in a deployment context that can
-open the same attached KV before that release is promoted; a local memory-mode
-run does not validate a remote database. Apply the appropriate storage profile
-above to each production or preview context. Configure the original-mode Google
-variables for every deployment context that must warm successfully. The callback
-must be an authorized HTTPS `/auth/google/callback` URL for the domain used by
-that context. Dynamic preview contexts using local mock authentication can set
-`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact Google, but
-every matched host intentionally permits fake sign-in and must not be treated as
-a production environment. If original mode uses the pattern, every selected
-callback must still satisfy Google's redirect-URI registration rules. Original
-preview hosts that cannot be registered individually require a stable callback
-broker rather than a broader application regex. The SSR build deliberately
-leaves gauth and Effect as runtime imports so loading the selected preset cannot
-deadlock through circular bundle chunks.
+For Deno Deploy, use `deno task build` as the platform build command,
+`deno task pre-deploy` as the read-only pre-deploy command, and
+`_fresh/server.js` as the application entrypoint. Schema mutation is a separate
+local operator action through the guarded remote command. Apply the appropriate
+storage profile above to production and Git branch timelines; revision previews
+have the shared-database limitation described above. Configure the original-mode
+Google variables for every deployment context that must warm successfully. The
+callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
+used by that context. Dynamic preview contexts using local mock authentication
+can set `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact
+Google, but every matched host intentionally permits fake sign-in and must not
+be treated as a production environment. If original mode uses the pattern, every
+selected callback must still satisfy Google's redirect-URI registration rules.
+Original preview hosts that cannot be registered individually require a stable
+callback broker rather than a broader application regex. The SSR build
+deliberately leaves gauth and Effect as runtime imports so loading the selected
+preset cannot deadlock through circular bundle chunks.
 
 ## Technical stack
 
