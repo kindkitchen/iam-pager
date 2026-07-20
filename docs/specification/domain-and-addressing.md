@@ -16,21 +16,52 @@ lookup.
 
 ## DA-PAGE — Page
 
-A page associates one locator with one current piece of content and the metadata
-needed to deliver and manage it.
+A page is one logical management and exploration identity with one current
+content asset and the metadata needed to deliver and manage it. It has one
+canonical locator and may have additional endpoint bindings for alternate
+delivery behavior. Those bindings are representations of the same page, not
+independent pages.
 
 A page can be named or can be the namespace's default page. Its content can
-change without requiring a new locator. Managed pages have an opaque stable
-management ID that is separate from locator identity; it is not part of the
-direct URL and remains stable across content or access changes. For protected
-pages, changing the page name must not collide with another page in the same
-namespace.
+change without requiring a new canonical locator. Managed pages have an opaque
+stable management ID that is separate from locator and endpoint identity; it is
+not part of a direct URL and remains stable across content, endpoint, or access
+changes. For protected pages, changing the page name must not collide with
+another page or any reserved endpoint binding in the same namespace.
 
 A page is either a public, unowned trial or a managed page whose creator is
 recorded only by server-owned storage. Managed pages may be public or private.
-Their current representation has a positive revision, and content/access/tag
-changes or deletion must match that revision so concurrent intent cannot be
-silently overwritten.
+Their current representation has a positive revision, and
+content/access/tag/endpoint changes or deletion must match that revision so
+concurrent intent cannot be silently overwritten.
+
+## DA-ENDPOINT — Page delivery endpoint
+
+A delivery endpoint binds a locator to one logical page and one delivery
+profile. The profile states behavior such as `inline` or `attachment`; direct
+HTTP maps that stored behavior to headers. The publisher supplies each endpoint
+locator as ordinary locator intent. A suffix such as `.pdf` carries no special
+meaning and is neither generated nor interpreted by content or delivery logic.
+
+One endpoint is canonical. Alternate endpoints do not receive their own page ID,
+revision, tags, access, management row, or exploration row. Page authority and
+visibility are checked after endpoint resolution against the one logical page.
+Creating or renaming an endpoint set must check every locator and publish all
+bindings or none.
+
+## DA-CONTENT-ASSET — Stored content identity
+
+A content asset is an immutable stored payload plus validated type-specific
+metadata. A page points to its current asset; multiple endpoint bindings, and
+later multiple page snapshots, may reference the same asset. Replacing content
+creates or selects another asset and atomically changes the page reference, so
+all endpoints expose one current payload. Physical byte duplication is an
+adapter choice and is not required by product semantics.
+
+An asset is not publicly resolvable without an eligible page endpoint. Removing
+a page or replacing its asset may leave an unreferenced staged asset for bounded
+cleanup, but must never expose incomplete content or delete bytes still
+referenced elsewhere.
 
 ## DA-LOCATOR — Locator
 
@@ -44,17 +75,21 @@ the namespace to a path component, a subdomain, or another route shape without
 changing publishing, lookup, search, or ownership behavior. The HTTP mapping
 must still avoid conflicts with site assets, management routes, and API routes.
 
-Namespace and page-name uniqueness and search are case-insensitive. Displayed
-and returned values preserve the publisher-supplied casing. Internal
-representation is not specified.
+Namespace, page-name, and endpoint-locator uniqueness are case-insensitive.
+Displayed and returned values preserve the publisher-supplied casing. Internal
+representation is not specified. Alternate endpoint locators participate in
+collision checks even though they remain absent from page search and management
+lists.
 
 A valid locator resolves to one current page response. Deterministic means that
 resolution is predictable; it does not mean the content can never change.
 
 ## DA-CONTENT — Content
 
-Content is the payload plus delivery metadata such as media type, size, and an
-optional download filename. It may be textual or binary.
+Content is the payload plus intrinsic metadata such as media type, size, and an
+optional safe suggested filename. It may be textual or binary. Inline versus
+attachment behavior belongs to the resolved endpoint rather than requiring a
+second content copy or changing the content asset.
 
 "Raw" or "direct" content means the response is not wrapped in the site. It
 still uses normal HTTP behavior and any handling needed to stop creator content
@@ -62,7 +97,11 @@ from gaining access to authenticated management sessions.
 
 The product should support varied formats and size bands over time. The MVP must
 explicitly list the formats and limits it actually accepts rather than
-pretending every file can be displayed safely.
+pretending every file can be displayed safely. `md-page` is implemented. PDF is
+the next selected binary type; it will use `application/pdf`, browser-native
+inline delivery where available, and a user-configured attachment endpoint over
+the same bytes. Either profile may use any valid, non-conflicting locator.
+Generic raw-binary handling remains later.
 
 ## DA-ACCESS — Access
 
@@ -94,8 +133,11 @@ discoverable.
 
 Protected namespaces reject replacement by another actor. Their creators control
 content changes and deletion. A rename must reject conflicts and should tell the
-creator that old shared URLs may stop working. Redirects and revision history
-are optional later behavior, not required for the first version.
+creator that old shared URLs may stop working. When a page has alternate
+endpoints, create and rename publish or move the complete endpoint set, access
+changes cover every endpoint, content replacement switches their shared asset,
+and deletion removes all endpoint visibility. Redirects and revision history are
+optional later behavior, not required for the first version.
 
 The implemented rename core is revision-bound and keeps the stable page ID while
 atomically replacing its case-insensitive locator and owner-list position inside

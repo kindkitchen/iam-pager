@@ -71,8 +71,9 @@ This experience remains to be specified after first-party publishing works.
 
 ## What is a page?
 
-A page is an endpoint associated with content. URLs and content are related but
-separate aspects of that endpoint.
+A page is one logical managed/explored item associated with content. URLs and
+content are separate: a page has one canonical locator and may expose additional
+delivery endpoints for the same stored asset without becoming multiple pages.
 
 ### Page URL
 
@@ -86,8 +87,10 @@ ownership guarantee.
 ### Page content
 
 Content can have different formats. It may be HTML, text, a PDF, an image, or
-another supported type. Depending on the format, a direct URL may display the
-content or download it.
+another supported type. Depending on the endpoint profile, a direct URL may
+display the content or download it. PDF is the next planned type: one stored PDF
+may have user-configured browser-native inline and attachment endpoints at
+independently chosen valid locators.
 
 ## Current implementation
 
@@ -205,6 +208,27 @@ revisions while showing one result per page. Total page capacity, publishing
 frequency, guest expiry, exploration text indexing/relevance, and backend
 migration are not implemented; these endpoints are not ready for untrusted
 public traffic.
+
+## Next planned direction: PDF pages
+
+The next chain first separates logical pages, immutable content assets, and
+delivery endpoint bindings. One asset may back multiple locators while the page
+keeps one ID, revision, access policy, management row, and exploration row. For
+PDF, one configured endpoint can use `application/pdf` with inline disposition
+and another configured endpoint can serve the same bytes as an attachment. The
+publisher supplies both valid locators and each delivery profile. A path ending
+in `.pdf` is only an example and has no special routing, generation, or delivery
+semantics; behavior is stored on the endpoint binding.
+
+The implementation order is pure endpoint/content contracts with a memory
+reference, PDF content logic, a conforming Kvdex-backed Deno KV page/content
+adapter, strict bounded upload/direct delivery, and finally the site projection.
+Kvdex remains inside the adapter. Its segmented blob writes do not by themselves
+preserve the repository's atomic visibility guarantees, so immutable assets must
+be fully staged before page endpoints can reference them. Existing raw Deno KV
+records require explicit compatibility or migration before that adapter becomes
+the durable default. Generic raw-binary publishing, PDF.js, thumbnails, text
+extraction, and external storage remain later work.
 
 ## Local development
 

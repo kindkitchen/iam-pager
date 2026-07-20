@@ -2,6 +2,25 @@
 
 ## 2026-07-20
 
+- Moved the complete five-task PDF/content-endpoint chain to the `todo` backlog
+  before starting the explicit pre-deploy direction.
+
+- Clarified that PDF introduces no special `.pdf` locator convention or
+  generated alias. Publishers configure ordinary locators independently and may
+  bind the same content asset to each with different delivery profiles, such as
+  inline browser viewing and attachment download; the active task and all
+  chained plans now treat endpoint configuration as generic page behavior.
+
+- Selected PDF as the next content expansion and planned its interface-first
+  delivery chain. Specifications now separate one logical page, immutable
+  content assets, and canonical/alternate endpoint bindings so the same PDF
+  bytes can be viewed inline and downloaded as an attachment without duplicate
+  page identity. Recorded Kvdex 3.6.7 as the planned Deno KV page/content
+  adapter with explicit staging, atomicity, conformance, and raw-keyspace
+  migration constraints; generic binary content remains later. Activated
+  `content-endpoint-bindings`, followed by `pdf-content-core`,
+  `kvdex-content-persistence`, `pdf-content-http`, and `pdf-content-site`.
+
 - Completed the DS-MANAGE creator surface. The web-independent management
   projection now carries and validates locators/tags, builds filter-bound list,
   revision action, and bounded bulk requests, and validates ordered per-page

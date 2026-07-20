@@ -2,6 +2,12 @@
 
 > Implementation status: this contract is composed into Fresh collection, item,
 > action, and bulk routes and backed by the selected page repository.
+>
+> PDF publication is planned but not part of this implemented contract yet. Its
+> future extension will use a strict bounded binary upload boundary rather than
+> base64 inside the JSON content command, and will return one logical page with
+> user-configured inline and attachment endpoint links over the same asset. No
+> filename suffix has special routing or delivery meaning.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the

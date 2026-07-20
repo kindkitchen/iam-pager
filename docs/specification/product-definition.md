@@ -22,7 +22,9 @@ The app has two connected directions:
 A publisher chooses a namespace and optional page name, provides supported
 content, and receives a direct URL. A visitor can open that URL without going
 through the site UI. The site remains available for wrapped viewing, public
-exploration, and management.
+exploration, and management. One logical page may expose related delivery
+endpoints for the same content; those endpoints do not become separate managed
+or explored pages.
 
 An authenticated creator can reserve a unique namespace and manage its default
 and named pages. Reservation protects those pages from other creators and gives
@@ -33,6 +35,22 @@ Even an unauthenticated guest may publish content. Guest publishing uses the
 same basic content and locator idea but has stricter limits and no namespace
 reservation. Content at a guest locator may be replaced by another guest or by
 an authenticated creator using the same namespace.
+
+## PD-PDF — Planned PDF page
+
+PDF is the next explicit content type. One uploaded PDF content asset backs one
+logical page with at least two delivery behaviors:
+
+- one configured endpoint can provide browser-native inline viewing;
+- another configured endpoint can return the same bytes as a named attachment.
+
+The publisher chooses each valid endpoint locator and its delivery behavior. A
+name such as `example.pdf` has no special product meaning. Delivery behavior
+belongs to an endpoint binding, not to a second physical copy of the PDF, a
+filename guess, or content-specific locator generation in the page service. The
+site may embed the browser-native viewer when supported, but must always retain
+explicit direct preview and download links. PDF.js, generated thumbnails, text
+extraction, and generic raw-binary publication remain later choices.
 
 ## PD-VISITORS — Visitors and exploration
 
