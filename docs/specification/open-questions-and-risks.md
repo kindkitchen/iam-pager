@@ -140,9 +140,12 @@ wins publication. Operators rerun `db:check` after either outcome. A migration
 may be removed only after every supported database is beyond its source version.
 
 The Deno KV adapter preserves the existing manifest key/format. Current
-`ownership`, `sessions`, and `pages` targets are version 1; confirmed legacy
-initialization writes metadata without rewriting already-version-1 application
-records.
+`ownership` and `sessions` targets are version 1; `pages` is version 2 through
+the retained `pages-v1-to-v2` migration. Confirmed initialization or an existing
+version-1 pages manifest validates and copies legacy page records into adjacent
+v2 asset/aggregate keyspaces before publishing the manifest. Operators must
+quiesce v1 page writers through migration verification and controlled cutover;
+the migration never rewrites or deletes v1 records.
 
 Runtime storage now follows environment selectors without a Deno Deploy timeline
 override. Shared revision-preview databases therefore remain an operator risk:
@@ -245,18 +248,40 @@ delivery flow. Start with an explicit subset and keep external storage for
 later. PDF is intentionally a specific first binary type; it must not create an
 accidental generic-file contract.
 
-### OQ-KVDEX — Kvdex atomicity and migration
+### OQ-KV-TOOLBOX — kv-toolbox atomicity and migration
 
-Kvdex 3.6.7 is selected for the planned Deno KV page/content adapter because it
-provides typed collections and segmented `Uint8Array` storage. It remains an
-adapter dependency and must not enter domain or application interfaces.
+`@kitsonk/kv-toolbox` 0.31.0 is exactly pinned as the required Deno KV utility.
+The project gateway is implemented: selected identity, namespace, session,
+legacy-page, and manual-schema adapters receive its record interface, and the
+production implementation alone owns the wrapper and handle lifecycle. Ordinary
+and segmented binary operations delegate to the toolbox; invariant-bearing
+commits use the separately named native atomic capability. Package types and
+physical blob suffixes remain inside that implementation; domain, application,
+HTTP, and site contracts do not depend on them. The earlier unselected Kvdex
+prototype and dependency have been removed after behavioral parity.
 
-Its encoded collections cannot participate in Kvdex atomic builders, and blobs
-above Deno KV's 800 KiB atomic mutation limit require Kvdex batched writes that
-are not one atomic visibility commit. The adapter must therefore stage immutable
-unreferenced assets to completion before atomically publishing page/endpoint
-references. Built-in index deletion also cannot replace the repository's
-existing atomic rename/delete guarantees without proof. The current raw Deno KV
-keyspace is not a Kvdex keyspace, so switching implementations requires explicit
-compatibility or migration; silently presenting an empty database is not
-acceptable.
+Blob segmentation does not itself provide application visibility. A later
+segment batch can fail after an earlier successful commit, so the gateway treats
+the toolbox's write result as provisional: it reconstructs and compares the
+complete detached value before success and removes known failed staging
+best-effort. Missing chunks, truncation, malformed metadata, empty input, and
+reuse of a complete staging key fail closed; 1 MiB and 16 MiB contract cases
+exercise this model. The immutable-asset adapter snapshots input and stages each
+encoded payload under a random identity, checks expected length, SHA-256, and
+`v8-1` decoding, then exposes it through a strict manifest published with native
+Deno KV compare-and-set. Known CAS loss removes staging. An ambiguous manifest
+exception retains the payload rather than risk deleting data referenced by a
+commit that succeeded. Every asset read repeats manifest, blob, length, hash,
+codec, and domain checks.
+
+`KvToolbox.atomic()` may split work across commits and returns multiple commit
+results, so it cannot provide all-or-none page, endpoint, owner, revision,
+index, or manifest visibility. The project gateway exposes a separate
+native-atomic capability backed by `toolbox.db.atomic()` for those explicit
+adapter-owned record commits. Batched atomic remains opt-in; no repository can
+accidentally select it by receiving the concrete wrapper. The durable aggregate
+adapter now passes unchanged conformance and commits its worst supported
+multi-trial, eight-endpoint mutation with 87 of 100 native checks. Deployment
+still selects the legacy raw Deno KV page repository until a manual,
+repeat-safe, source-preserving schema-v1 migration prevents an existing database
+from being presented as empty and the composition cutover is explicit.

@@ -4,11 +4,7 @@ import {
   type ContentAssetId,
   is_valid_content_asset_id,
 } from "../content/asset.ts";
-import type {
-  ContentAssetCreator,
-  ContentAssetReader,
-  CreateContentAssetResult,
-} from "../content/interfaces.ts";
+import type { CreateContentAssetResult } from "../content/interfaces.ts";
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
   page_aggregate_endpoint_bindings,
@@ -42,18 +38,9 @@ import type {
   ListManagedPageAggregatesResult,
   ListPublicPageAggregatesRequest,
   ListPublicPageAggregatesResult,
-  ManagedPageAggregateCreator,
-  ManagedPageAggregateDeleter,
-  ManagedPageAggregateDuplicator,
-  ManagedPageAggregateLister,
-  ManagedPageAggregateUpdater,
-  PageAggregateReader,
-  PageEndpointResolver,
-  PublicPageAggregateExplorer,
-  PublicPageAggregateLister,
+  PageAggregateRepository,
   PutTrialPageAggregateRequest,
   PutTrialPageAggregateResult,
-  TrialPageAggregatePublisher,
   UpdateManagedPageAggregateRequest,
   UpdateManagedPageAggregateResult,
 } from "./aggregate-interfaces.ts";
@@ -87,20 +74,7 @@ function clone<T>(value: T): T {
  * Mutation methods deliberately contain no awaits, so each check/set sequence
  * is one event-loop turn and concurrent promises observe complete commits.
  */
-export class MemoryPageAggregateRepository
-  implements
-    ContentAssetCreator,
-    ContentAssetReader,
-    PageAggregateReader,
-    PageEndpointResolver,
-    ManagedPageAggregateLister,
-    PublicPageAggregateLister,
-    PublicPageAggregateExplorer,
-    TrialPageAggregatePublisher,
-    ManagedPageAggregateCreator,
-    ManagedPageAggregateUpdater,
-    ManagedPageAggregateDuplicator,
-    ManagedPageAggregateDeleter {
+export class MemoryPageAggregateRepository implements PageAggregateRepository {
   readonly #assets = new Map<ContentAssetId, ContentAsset>();
   readonly #pages = new Map<PageId, PageAggregate>();
   readonly #endpoint_page_ids = new Map<string, PageId>();

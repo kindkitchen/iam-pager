@@ -2,6 +2,89 @@
 
 ## 2026-07-20
 
+- Completed the source-preserving pages-v1-to-v2 migration checkpoint. The
+  retained manual schema registry now validates every visible legacy envelope,
+  locator/owner index, and referenced chunk set; derives deterministic
+  retry-safe asset and payload identities; conditionally imports exact v2
+  aggregates; and leaves all v1 keys untouched. A source fingerprint and
+  read-only readiness probe reject unmigrated, changed, corrupt, conflicting, or
+  incomplete state, including a write racing readiness publication. Added mixed
+  legacy fixtures, pre-tag compatibility, interruption/concurrency,
+  conflict/corruption, missing-manifest, source-race, and no-op-rerun coverage.
+  Runtime composition still selects the legacy adapter pending controlled
+  cutover. All 542 tests, tracked-source formatting/lint/type checks, and the
+  production build pass.
+
+- Completed the durable page-aggregate checkpoint. Named the composed
+  `PageAggregateRepository` contract and made the service, memory reference, and
+  shared conformance depend on it. Added an unselected
+  `KvPageAggregateRepository` over strict manifest-backed v2 envelopes,
+  revision-bearing case-normalized endpoint claims, and ordered owner/public
+  projections; create, trial replacement, managed takeover, combined update,
+  duplication, and deletion now expose all visibility through one native atomic
+  commit while retaining immutable assets. Shared conformance plus restart,
+  malformed record/index/manifest, retry, exhaustion, eight-endpoint, and
+  worst-case 87-of-100-check transaction coverage pass. The raw Deno KV adapter,
+  production records, schema registry, and deployment selection remain unchanged
+  pending source-preserving migration and controlled cutover. All 533 tests,
+  tracked-source formatting/lint/type checks, frozen dependency resolution, and
+  the production build pass.
+
+- Replaced the unselected Kvdex immutable-asset prototype with an
+  interface-backed KV gateway adapter and removed Kvdex code, imports, and lock
+  roots. The replacement snapshots input, encodes once with `v8-1`, stages under
+  random adapter-owned v1 payload keys, and verifies length, SHA-256, decoding,
+  and domain coherence before native-CAS manifest publication. Reads repeat all
+  checks; known races clean staging, while ambiguous commit exceptions retain
+  possibly referenced payloads. Added strict-manifest, isolation, concurrent
+  winner, cross-instance 1 MiB/16 MiB PDF, interrupted-batch/retry, corruption,
+  verification-cleanup, ambiguous-outcome, and legacy-keyspace coverage.
+  Deployment selection and legacy page records remain unchanged. All 511 tests,
+  tracked-source formatting/lint/type checks, frozen dependency resolution, and
+  the production build pass.
+
+- Completed the kv-toolbox gateway and codec checkpoint. Exactly pinned
+  `@kitsonk/kv-toolbox` 0.31.0 behind project-owned record, native-atomic, and
+  binary-staging interfaces; selected identity, namespace, session, legacy-page,
+  and manual-schema adapters no longer receive raw KV handles. Binary writes
+  detach input, reject empty or reused complete keys, reconstruct and verify
+  segmented output, clean known later-batch failures best-effort, and reject
+  missing, truncated, or malformed state. Added 1 MiB and 16 MiB, interruption,
+  retry, removal, lifecycle, native-CAS, and fresh-wrapper coverage plus a
+  versioned `v8-1` codec compatible with the retained prototype fixture.
+  Deployment selection and database records remain unchanged. All 509 tests,
+  check, and the production build pass.
+
+- Settled one project-owned KV gateway as the only persistence entry point. Its
+  production implementation owns `KvToolbox`, delegates ordinary and blob
+  operations to it, and exposes native all-or-none commits explicitly through
+  `toolbox.db.atomic()`. Concrete wrapper types and key layout remain outside
+  repositories, domain, services, HTTP, Fresh, and site code; the toolbox's
+  potentially split batched atomic cannot be selected accidentally.
+
+- Corrected the durable page/content direction from Kvdex to
+  `@kitsonk/kv-toolbox` 0.31.0 and activated `kv-toolbox-content-persistence` as
+  the top-priority task. Library review confirmed that toolbox blob operations
+  fit storage-local payload staging but its potentially split `atomic()` must
+  not replace native Deno KV commits for manifest or page/endpoint visibility.
+  The plan preserves the completed random staging, integrity verification, and
+  fault-test work; keeps the raw Deno KV page adapter selected; requires a
+  manual source-preserving migration; and prevents storage or HTTP behavior from
+  entering domain, Fresh, or site code. The superseded Kvdex task is rejected,
+  and both remaining PDF tasks now depend on the corrected storage boundary.
+
+- Activated `kvdex-content-persistence` and completed its first coherent storage
+  slice. Pinned Kvdex 3.6.7 behind an adapter-owned Deno KV schema factory and
+  added an interface-backed immutable content-asset repository. V8-serialized
+  payloads stage under random encoded-collection identities, are reconstructed,
+  length- and SHA-256-verified before a separate manifest publishes the asset,
+  and are revalidated on every read. Focused coverage proves identity
+  immutability/isolation, cross-instance multi-segment PDF bytes, interrupted
+  batch cleanup and retry, corruption rejection, and legacy raw-keyspace
+  coexistence. Deployment still selects raw Deno KV until atomic page/endpoint
+  persistence, aggregate conformance, and explicit compatibility/migration land.
+  All 499 tests, check, and the production build pass.
+
 - Completed `pdf-content-core`. Generic trial and managed application commands
   now accept either the one-inline-locator compatibility shape or a complete
   planned endpoint set; revision-bound updates replace all bindings atomically,

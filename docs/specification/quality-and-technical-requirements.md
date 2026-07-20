@@ -41,9 +41,11 @@ managed page behavior. It receives a typed actor and resolves namespace
 authority through an interface, while persistence alone owns atomic endpoint,
 ID, and revision conditions. Owner-safe summaries and inspection input exclude
 stewardship IDs and stored derivations. The process-local composition now runs
-this service through focused content-asset/page-aggregate capabilities; the
+this service through the named `PageAggregateRepository` capability; the
 retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
-path until the conforming Kvdex adapter replaces it. The service and strict HTTP
+path until controlled cutover selects the now-conforming kv-toolbox-backed
+aggregate adapter. The source-preserving migration and readiness probe are
+complete but do not alter runtime composition. The service and strict HTTP
 boundary are still exposed once, and Fresh collection/item/direct routes remain
 thin adapters. Public exploration extends that boundary through
 `PublicPageExplorer`: callers supply optional name queries and an opaque
@@ -60,15 +62,15 @@ inline-only delivery.
 
 The persistence foundation now adds immutable `ContentAsset` identity, creation,
 and read capabilities plus a separate `PageAggregate` with one asset reference
-and a complete endpoint set. Focused capabilities cover endpoint resolution,
-trial/managed creation, one revision-bound combined mutation, duplication, and
-deletion instead of making the web or content type depend on a single broad
-adapter interface. Asset creation is a staging operation; only a fully created
-asset can enter an atomic page/endpoint commit. The memory reference and shared
-backend-neutral conformance cover complete endpoint claims/moves,
-content-reference flips, immutable sharing, concurrency, and retention after
-page deletion. Focused managed/public query capabilities return logical page
-aggregates rather than endpoint rows.
+and a complete endpoint set. The named `PageAggregateRepository` composes the
+focused endpoint resolution, trial/managed creation, revision-bound combined
+mutation, duplication, deletion, and logical query capabilities without making
+web or content types depend on its implementation. Asset creation is a staging
+operation; only a fully created asset can enter an atomic page/endpoint commit.
+The memory reference and shared backend-neutral conformance cover complete
+endpoint claims/moves, content-reference flips, immutable sharing, concurrency,
+and retention after page deletion. Focused managed/public query capabilities
+return logical page aggregates rather than endpoint rows.
 
 `PageService` now stages each validated `md-page` representation as an immutable
 asset before atomic page publication, resolves direct requests through endpoint
@@ -83,8 +85,8 @@ complete endpoint intent. Complete updates are revision-bound and no-op when
 only alternate input order changes; canonical rename retains alternates; and
 endpoint-aware duplication requires a fresh planned set. The legacy repository
 path rejects non-compatible sets rather than truncating them. Fresh, `Request`,
-`Response`, multipart parsing, browser preview, Deno KV, and Kvdex types remain
-outside the split contracts.
+`Response`, multipart parsing, browser preview, Deno KV, and kv-toolbox types
+remain outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -141,21 +143,80 @@ capabilities sort and cursor logical pages by their canonical locator, so
 alternates cannot duplicate rows. `MemoryPageRepository` is now only a
 one-endpoint compatibility projection over that reference, and the composed
 process-local `PageService` detects and uses the focused capabilities directly.
-The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
-planned Kvdex adapter and explicit record migration.
+`KvPageAggregateRepository` is the durable implementation of the same named
+contract. It stores one strict authoritative envelope in an adjacent
+`page-aggregates/v2` keyspace, revision-bearing case-normalized endpoint claims,
+and ordered canonical owner/public projections. Assets publish first; each page
+mutation checks the strict manifest entry and commits the envelope plus every
+endpoint and projection through one native atomic operation. Reads validate
+schema, key/value identity, endpoint completeness, revision coherence, and
+projection eligibility. Conditional retries are bounded, while commit exceptions
+remain ambiguous and are propagated rather than replayed blindly. The maximum
+supported duplication/takeover shape—eight source endpoints and eight
+eight-endpoint trials—uses 87 of Deno KV's 100 atomic checks, leaving 13 checks
+of tested headroom. Shared conformance plus reconstruction, malformed
+record/index, manifest, rejected-commit, exhaustion, and maximum-transaction
+coverage pass. The raw-Deno-KV `PageRepository` remains selected pending only
+the controlled composition cutover; the explicit source-preserving record
+migration and readiness gate are now implemented.
 
-The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
-implementation detail over Deno KV. It must satisfy the new aggregate
-conformance plus the preserved application behavior before becoming the selected
-durable adapter. Kvdex encoded collections segment `Uint8Array`, but cannot join
-Kvdex atomic builders; values beyond Deno KV's 800 KiB atomic mutation limit
-require batched, non-atomic segment commits. Large immutable assets must
-therefore be staged while unreferenced and become reachable only after all
-segments succeed and an atomic metadata/endpoint commit publishes the reference.
-Critical locator and owner indexes may not use Kvdex shortcuts whose
-delete/update behavior weakens atomic rename, replacement, or deletion. Existing
-raw-KV records require an explicit compatibility or migration path before
-selection changes.
+The required Deno KV utility is exactly pinned `@kitsonk/kv-toolbox` 0.31.0. The
+project-owned gateway is implemented, and selected identity, namespace, session,
+legacy-page, and manual-schema adapters now depend on its record interface
+rather than receiving a raw handle. Its production implementation alone owns the
+wrapper and database lifecycle. Ordinary operations delegate to the toolbox; the
+package does not define domain models, repository contracts, page indexes,
+migrations, or web responses.
+
+The gateway's binary capability accepts detached non-empty bytes only at an
+unused unreachable staging key. It delegates segmentation, then reconstructs and
+verifies the exact byte length and value before reporting success; this catches
+a later failed batch even when an earlier commit succeeded. Reads reject missing
+chunks, truncation, or malformed metadata, and known failed staging is removed
+best-effort. Contract tests cover 1 MiB and the accepted 16 MiB PDF bound, fresh
+wrappers, interrupted later batches, retry, corruption, removal, and handle
+closure. The versioned `v8-1` content-data codec is byte-compatible with the
+retained prototype fixture and round-trips current Markdown/PDF data.
+
+The earlier Kvdex asset prototype was never selected and has been removed with
+its dependency. Its gateway-backed replacement snapshots caller-owned values,
+encodes once with `v8-1`, stages under a random unreachable identity, and checks
+length, SHA-256, decoding, and domain coherence before publishing one strict
+schema-v1 manifest with native compare-and-set. Known CAS losses remove staging
+best-effort; an ambiguous manifest exception retains the payload because a
+successful commit may reference it. Every read repeats manifest, blob, length,
+hash, codec, and domain checks. Cross-instance, contention, corruption,
+interrupted-batch/retry, legacy-keyspace, and accepted 16 MiB PDF tests cover
+the replacement.
+
+Toolbox blob writes may span multiple commits, and `KvToolbox.atomic()` may
+split an operation. They therefore cannot publish application visibility. The
+project storage interface exposes an explicit native-atomic capability backed by
+`toolbox.db.atomic()`; manifest, page, complete endpoint set, owner/public
+index, and revision transitions use it for one commit over adapter-owned
+records. The concrete wrapper is never supplied to repositories, preventing
+accidental use of its batched atomic. Only a fully verified manifest-backed
+immutable asset may be referenced by a page. Toolbox query and response helpers
+do not replace deterministic repository indexes or the web-independent HTTP
+adapter.
+
+The replacement remains unselected until controlled composition changes it.
+Existing raw-KV schema-v1 page records now have one retained, adjacent,
+repeat-safe `pages-v1-to-v2` migration. Its strict source reader validates every
+visible envelope, locator/owner index, and referenced chunk set while tolerating
+only documented unreachable chunk residue. It maps each locator to one canonical
+inline endpoint, derives SHA-256-based deterministic asset/payload identities,
+reuses identical interrupted staging, verifies each manifest/payload/aggregate,
+and publishes destination visibility conditionally without updating or deleting
+a v1 key. Existing different v2 data fails as a conflict.
+
+A strict readiness record binds the migrated page count and source fingerprint.
+The read-only `PageAggregateReadinessProbe` recomputes that fingerprint and
+revalidates every destination asset and aggregate; it refuses missing migration
+state, non-empty unmigrated v1, post-migration v1 changes, source corruption,
+missing manifests, and destination conflicts. It is available to the controlled
+cutover factory but is deliberately not wired into startup, deploy, or the
+still- legacy runtime composition in this checkpoint.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
@@ -218,10 +279,14 @@ rerun. A concurrent manifest change fails publication and requires another
 manual check. Destructive changes still require staged expand/deploy/contract
 releases and an operator-managed backup.
 
-The immutable registry currently declares all three schemas at version 1, so
-confirmed initialization writes only the compatible manifest and changes no
-application records. Later releases run retained migrations before publishing
-the new complete vector.
+The immutable registry now declares ownership and sessions at version 1 and
+pages at version 2. Confirmed initialization or a pages-v1 manifest runs the
+retained source-preserving `pages-v1-to-v2` migration before publishing that
+complete vector. Operators must back up and quiesce v1 page writers before the
+update and keep them stopped through readiness verification and controlled
+cutover. A later v1 write changes the readiness fingerprint and is refused
+rather than overwritten; retained v1 records provide a fallback window, not a
+rollback claim.
 
 Deno Deploy currently uses Deno 2.5.0 for both builder and runtime, so the
 project toolchain and formatting are pinned to that version. Runtime storage
@@ -551,8 +616,10 @@ Tests should cover the behavior that defines the product:
   bytes and endpoint-specific headers;
 - all-or-nothing endpoint-set create/rename, page-wide access, coherent content
   replacement, deletion, and single-row management/exploration;
-- staged Kvdex multi-segment assets never becoming reachable while incomplete,
-  plus compatibility or migration from the existing raw Deno KV keyspace;
+- staged kv-toolbox multi-segment payloads never publishing an asset while
+  incomplete or corrupt, durable aggregate reconstruction/corruption/contention
+  behavior with all eight endpoints and native-transaction headroom, plus
+  source-preserving migration from the existing raw Deno KV keyspace;
 - strict bounded PDF upload, malformed/non-PDF rejection, safe filenames, and a
   browser preview/download acceptance flow.
 

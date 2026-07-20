@@ -131,41 +131,44 @@ behavior as the site.
 The HTTP-independent management core now implements trial publishing and managed
 create, bounded list, source inspection, revision-bound content/access update,
 deletion, and owner-only private delivery. Process-local composition runs this
-behavior through focused immutable-asset/page-aggregate capabilities; the
-raw-Deno-KV adapter retains the compatible `PageRepository` path until its
-replacement. Both paths preserve the current JSON behavior. Fresh collection,
-item, action, and bulk routes now expose the strict bounded management adapter
-with synchronizer CSRF, owner-safe presenters, pagination, and strong revision
-ETags. The composed catch-all route uses the same service and session-derived
-actor for public or owner-private delivery, while deployment storage selection
-targets `PageRepository`. The site renders a creator management panel over these
-same contracts: a server presenter lists the first page of managed rows, and the
-island continues through `/api/pages` for pagination, inspection, editor-based
-content updates, access toggling, and deletion, always revision-bound via the
-published strong ETags. The DS-MANAGE core now adds explicit
-`ManagedPageRenamer` and `ManagedPageDuplicator` contracts plus bounded tag
-mutation and filtering. Rename is revision-bound, keeps stable identity and
-metadata, atomically moves locator and owner indexes, and reports a managed
-destination conflict; duplicate copies one exact source revision, including
-tags, under a bounded generated available name and fresh ID. Managed
-create/update normalize at most ten tags into a lowercase sorted unique set,
-while list supports AND-combined page-name substring, exact access, and exact
-tag filters. Public exploration accepts the same exact tag without disclosing
-private or guest pages. Memory and Deno KV pass common mutation/filter/cursor
-conformance, and old durable records without tags read as untagged.
-`ManagedPageBulkAccessChanger` and `ManagedPageBulkDeleter` now accept a
-prevalidated bounded set of distinct page/revision pairs and return one ordered,
-independently revision-bound, non-disclosing result per page. Partial item
-failure does not undo successful items, while invalid selections fail before any
-mutation. Strict HTTP routes expose tags and managed filters, revision-bound
-rename/duplicate actions, and bulk access/delete with session authentication,
-synchronizer CSRF, and exact source revisions. The web-independent management
-projection now carries locator and canonical tag data, validates API rows and
-ordered bulk outcomes, and prepares every filter/action/bulk request. The
-creator island exposes filter-bound continuation, content/tag editing, rename,
-duplicate, explicit selection of at most 100 visible current revisions, and bulk
-access/delete with one visible result per selected page. Stale individual or
-bulk revisions refresh their affected rows instead of retrying silently.
+behavior through the named immutable-asset/page-aggregate repository contract;
+the conforming v2 Deno KV aggregate implementation and explicit
+source-preserving migration/readiness gate are now complete, while the
+raw-Deno-KV adapter retains the compatible `PageRepository` path until
+controlled cutover. Both paths preserve the current JSON behavior. Fresh
+collection, item, action, and bulk routes now expose the strict bounded
+management adapter with synchronizer CSRF, owner-safe presenters, pagination,
+and strong revision ETags. The composed catch-all route uses the same service
+and session-derived actor for public or owner-private delivery, while deployment
+storage selection targets `PageRepository`. The site renders a creator
+management panel over these same contracts: a server presenter lists the first
+page of managed rows, and the island continues through `/api/pages` for
+pagination, inspection, editor-based content updates, access toggling, and
+deletion, always revision-bound via the published strong ETags. The DS-MANAGE
+core now adds explicit `ManagedPageRenamer` and `ManagedPageDuplicator`
+contracts plus bounded tag mutation and filtering. Rename is revision-bound,
+keeps stable identity and metadata, atomically moves locator and owner indexes,
+and reports a managed destination conflict; duplicate copies one exact source
+revision, including tags, under a bounded generated available name and fresh ID.
+Managed create/update normalize at most ten tags into a lowercase sorted unique
+set, while list supports AND-combined page-name substring, exact access, and
+exact tag filters. Public exploration accepts the same exact tag without
+disclosing private or guest pages. Memory and Deno KV pass common
+mutation/filter/cursor conformance, and old durable records without tags read as
+untagged. `ManagedPageBulkAccessChanger` and `ManagedPageBulkDeleter` now accept
+a prevalidated bounded set of distinct page/revision pairs and return one
+ordered, independently revision-bound, non-disclosing result per page. Partial
+item failure does not undo successful items, while invalid selections fail
+before any mutation. Strict HTTP routes expose tags and managed filters,
+revision-bound rename/duplicate actions, and bulk access/delete with session
+authentication, synchronizer CSRF, and exact source revisions. The
+web-independent management projection now carries locator and canonical tag
+data, validates API rows and ordered bulk outcomes, and prepares every
+filter/action/bulk request. The creator island exposes filter-bound
+continuation, content/tag editing, rename, duplicate, explicit selection of at
+most 100 visible current revisions, and bulk access/delete with one visible
+result per selected page. Stale individual or bulk revisions refresh their
+affected rows instead of retrying silently.
 
 ## CP-EXPLORE — Public exploration
 

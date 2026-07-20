@@ -1,3 +1,4 @@
+import type { KvRecordGateway } from "../storage/kv-gateway.ts";
 import { session_database_schema_version } from "../storage/schema-versions.ts";
 import type {
   RepositoryAuthenticationAttemptConsume,
@@ -291,9 +292,9 @@ interface LoadedRecord {
  * service-level expiry checks remain authoritative because KV expiry is lazy.
  */
 export class DenoKvSessionRepository implements SessionRepository {
-  readonly #kv: Deno.Kv;
+  readonly #kv: KvRecordGateway;
 
-  constructor(kv: Deno.Kv) {
+  constructor(kv: KvRecordGateway) {
     this.#kv = kv;
   }
 
@@ -305,13 +306,14 @@ export class DenoKvSessionRepository implements SessionRepository {
       const initial_index = await this.#kv.get<unknown>(index_key);
       if (initial_index.versionstamp === null) return null;
       const index = deserialize_credential_index(initial_index.value);
-      const [stable_index, record_entry] = await this.#kv.getMany([
+      const [stable_index, record_entry] = await this.#kv.get_many([
         index_key,
         record_key(index.session_id),
       ]);
       if (stable_index.versionstamp !== initial_index.versionstamp) continue;
       if (record_entry.versionstamp === null) {
-        await this.#kv.atomic().check(stable_index).delete(index_key).commit();
+        await this.#kv.native_atomic().check(stable_index).delete(index_key)
+          .commit();
         return null;
       }
       const record = deserialize_record(record_entry.value);
@@ -338,7 +340,7 @@ export class DenoKvSessionRepository implements SessionRepository {
   ): Promise<boolean> {
     const session_key = record_key(record.session_id);
     const index_key = credential_key(record.credential_hash);
-    const [session_entry, index_entry] = await this.#kv.getMany([
+    const [session_entry, index_entry] = await this.#kv.get_many([
       session_key,
       index_key,
     ]);
@@ -348,7 +350,7 @@ export class DenoKvSessionRepository implements SessionRepository {
       return false;
     }
     const expires = expiry_options(record, record.created_at);
-    const commit = await this.#kv.atomic()
+    const commit = await this.#kv.native_atomic()
       .check(session_entry)
       .check(index_entry)
       .set(session_key, stored, expires)
@@ -400,7 +402,7 @@ export class DenoKvSessionRepository implements SessionRepository {
             ? new Date(current.idle_expires_at)
             : later_date(current.idle_expires_at, idle_expires_at),
         };
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .set(
           record_key(session_id),
@@ -455,7 +457,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         current.last_seen_at,
         input.attempt.created_at,
       );
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .set(
           record_key(input.session_id),
@@ -513,7 +515,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         current.last_seen_at,
         input.consumed_at,
       );
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .set(
           record_key(input.session_id),
@@ -573,7 +575,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         authentication_attempts: [],
       };
       const expires = expiry_options(upgraded, input.authenticated_at);
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .check(new_index)
         .delete(credential_key(current.credential_hash))
@@ -620,7 +622,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         revoked_at: new Date(input.logged_out_at),
         authentication_attempts: [],
       };
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .delete(credential_key(current.credential_hash))
         .set(
@@ -666,7 +668,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         revoked_at: new Date(revoked_at),
         authentication_attempts: [],
       };
-      const commit = await this.#kv.atomic()
+      const commit = await this.#kv.native_atomic()
         .check(loaded.entry)
         .delete(credential_key(current.credential_hash))
         .set(

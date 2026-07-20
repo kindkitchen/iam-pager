@@ -5,9 +5,7 @@ import {
 } from "../content/asset.ts";
 import { CryptoContentAssetIdGenerator } from "../content/generators.ts";
 import type {
-  ContentAssetCreator,
   ContentAssetIdGenerator,
-  ContentAssetReader,
   ContentTypeHandler,
 } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
@@ -18,18 +16,7 @@ import {
   type RandomNameGenerator,
 } from "../random-name.ts";
 import { page_aggregate_violation, type PageAggregate } from "./aggregate.ts";
-import type {
-  ManagedPageAggregateCreator,
-  ManagedPageAggregateDeleter,
-  ManagedPageAggregateDuplicator,
-  ManagedPageAggregateLister,
-  ManagedPageAggregateUpdater,
-  PageAggregateReader,
-  PageEndpointResolver,
-  PublicPageAggregateExplorer,
-  PublicPageAggregateLister,
-  TrialPageAggregatePublisher,
-} from "./aggregate-interfaces.ts";
+import type { PageAggregateRepository } from "./aggregate-interfaces.ts";
 import {
   DefaultPageEndpointPlanner,
   type PageEndpointBinding,
@@ -109,25 +96,13 @@ import {
 } from "./model.ts";
 import { CryptoPageIdGenerator, SystemPageClock } from "./generators.ts";
 
-/** Focused persistence capabilities used by the split page/content flow. */
-export type PageServiceAggregatePersistence =
-  & ContentAssetCreator
-  & ContentAssetReader
-  & PageAggregateReader
-  & PageEndpointResolver
-  & ManagedPageAggregateLister
-  & PublicPageAggregateLister
-  & PublicPageAggregateExplorer
-  & TrialPageAggregatePublisher
-  & ManagedPageAggregateCreator
-  & ManagedPageAggregateUpdater
-  & ManagedPageAggregateDuplicator
-  & ManagedPageAggregateDeleter;
+/** Backwards-compatible service name for the split repository contract. */
+export type PageServiceAggregatePersistence = PageAggregateRepository;
 
 export interface PageServiceOptions {
   engine: LocatorEngine;
   /** The split capability set is preferred; `PageRepository` remains for Deno KV migration. */
-  repository: PageServiceAggregatePersistence | PageRepository;
+  repository: PageAggregateRepository | PageRepository;
   namespace_authority: NamespaceAuthorityResolver;
   handlers: readonly ContentTypeHandler<unknown, unknown>[];
   page_id_generator?: PageIdGenerator;
@@ -178,7 +153,7 @@ export class PageService
     PublicPageExplorer,
     PageDeliverer {
   readonly #engine: LocatorEngine;
-  readonly #aggregate_persistence: PageServiceAggregatePersistence | null;
+  readonly #aggregate_persistence: PageAggregateRepository | null;
   readonly #legacy_repository: PageRepository | null;
   readonly #namespace_authority: NamespaceAuthorityResolver;
   readonly #handlers = new Map<
@@ -1591,8 +1566,8 @@ function can_deliver_page_to(
 }
 
 function is_page_service_aggregate_persistence(
-  value: PageServiceAggregatePersistence | PageRepository,
-): value is PageServiceAggregatePersistence {
+  value: PageAggregateRepository | PageRepository,
+): value is PageAggregateRepository {
   const candidate = value as unknown as Record<string, unknown>;
   return [
     "create_content_asset",

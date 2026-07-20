@@ -1,10 +1,12 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { KvToolboxGateway } from "../storage/kv-toolbox-gateway.ts";
 import {
   type DatabaseSchemaDatabaseFactory,
   type DatabaseSchemaOutput,
   deno_kv_access_token_env,
   run_database_schema_cli,
 } from "./cli.ts";
+import { pages_v1_to_v2_readiness_key } from "../storage/pages-v1-to-v2-migration.ts";
 import { database_schema_manifest_key } from "./deno-kv-store.ts";
 
 class CapturedOutput implements DatabaseSchemaOutput {
@@ -21,16 +23,18 @@ class CapturedOutput implements DatabaseSchemaOutput {
 }
 
 class ExistingDatabaseFactory implements DatabaseSchemaDatabaseFactory {
-  readonly kv: Deno.Kv;
+  readonly gateway: KvToolboxGateway;
   opened = 0;
 
   constructor(kv: Deno.Kv) {
-    this.kv = kv;
+    this.gateway = new KvToolboxGateway(kv);
   }
 
-  open(_target: string): Promise<{ kv: Deno.Kv; close(): void }> {
+  open(
+    _target: string,
+  ): Promise<{ gateway: KvToolboxGateway; close(): void }> {
     this.opened += 1;
-    return Promise.resolve({ kv: this.kv, close: () => {} });
+    return Promise.resolve({ gateway: this.gateway, close: () => {} });
   }
 }
 
@@ -175,7 +179,8 @@ Deno.test("confirmed manual database update initializes and verifies the manifes
     );
     const report = output.logs.join("\n");
     assertStringIncludes(report, "update: complete");
-    assertStringIncludes(report, "no data migration was required");
+    assertStringIncludes(report, "pages 1->2");
+    assertStringIncludes(report, "source-preserving v2 aggregate keyspace");
     assertStringIncludes(report, "Database schema: healthy");
 
     const stored = (await kv.get<Record<string, unknown>>(
@@ -184,9 +189,14 @@ Deno.test("confirmed manual database update initializes and verifies the manifes
     assertEquals(stored?.project_id, "iam-pager");
     assertEquals(stored?.schema_versions, [
       { schema_id: "ownership", version: 1 },
-      { schema_id: "pages", version: 1 },
+      { schema_id: "pages", version: 2 },
       { schema_id: "sessions", version: 1 },
     ]);
+    assertEquals(
+      (await kv.get<Record<string, unknown>>(pages_v1_to_v2_readiness_key))
+        .value?.source_page_count,
+      0,
+    );
   } finally {
     kv.close();
   }

@@ -1,5 +1,5 @@
 import { type Locator } from "../locator/model.ts";
-import { page_database_schema_version } from "../storage/schema-versions.ts";
+import type { KvRecordGateway } from "../storage/kv-gateway.ts";
 import {
   compare_page_sort_keys,
   decode_managed_page_list_cursor,
@@ -44,15 +44,26 @@ import {
   type PageRecord,
 } from "./model.ts";
 
-const storage_schema_version = page_database_schema_version;
+const storage_schema_version = 1 as const;
 const max_attempts = 16;
-const by_id_prefix: Deno.KvKey = ["iam-pager", "pages", "by-id"];
-const by_locator_prefix: Deno.KvKey = [
+export const page_v1_by_id_prefix: Deno.KvKey = [
+  "iam-pager",
+  "pages",
+  "by-id",
+];
+export const page_v1_by_locator_prefix: Deno.KvKey = [
   "iam-pager",
   "pages",
   "by-locator",
 ];
-const by_owner_prefix: Deno.KvKey = ["iam-pager", "pages", "by-owner"];
+export const page_v1_by_owner_prefix: Deno.KvKey = [
+  "iam-pager",
+  "pages",
+  "by-owner",
+];
+const by_id_prefix = page_v1_by_id_prefix;
+const by_locator_prefix = page_v1_by_locator_prefix;
+const by_owner_prefix = page_v1_by_owner_prefix;
 const chunk_prefix: Deno.KvKey = ["iam-pager", "pages", "chunks"];
 
 /** Leaves headroom below Deno KV's 64 KiB value limit. */
@@ -253,6 +264,19 @@ function chunk_key(
   index: number,
 ): Deno.KvKey {
   return [...generation_prefix(page_id, generation), index];
+}
+
+/** Stable schema-v1 keys exposed only for explicit compatibility tooling. */
+export function page_v1_storage_key(page_id: string): Deno.KvKey {
+  return id_key(page_id);
+}
+
+export function page_v1_locator_key(locator: Locator): Deno.KvKey {
+  return locator_key(locator);
+}
+
+export function page_v1_owner_key(page: PageRecord): Deno.KvKey {
+  return owner_key(page);
 }
 
 function has_exact_keys(
@@ -678,9 +702,9 @@ function key_equals(a: Deno.KvKey, b: Deno.KvKey): boolean {
  * best-effort basis.
  */
 export class DenoKvPageRepository implements PageRepository {
-  readonly #kv: Deno.Kv;
+  readonly #kv: KvRecordGateway;
 
-  constructor(kv: Deno.Kv) {
+  constructor(kv: KvRecordGateway) {
     this.#kv = kv;
   }
 
@@ -690,7 +714,9 @@ export class DenoKvPageRepository implements PageRepository {
       const index_entry = await this.#kv.get<unknown>(key);
       if (index_entry.versionstamp === null) return null;
       const index = deserialize_locator_index(index_entry.value);
-      const [current_index, envelope_entry] = await this.#kv.getMany<unknown[]>(
+      const [current_index, envelope_entry] = await this.#kv.get_many<
+        unknown[]
+      >(
         [key, id_key(index.page_id)],
       );
       if (current_index.versionstamp !== index_entry.versionstamp) continue;
@@ -705,7 +731,7 @@ export class DenoKvPageRepository implements PageRepository {
         envelope,
       });
       if (page === null) continue;
-      const final_entries = await this.#kv.getMany<unknown[]>([
+      const final_entries = await this.#kv.get_many<unknown[]>([
         key,
         id_key(index.page_id),
         ...(page.stewardship.kind === "managed" ? [owner_key(page)] : []),
@@ -745,7 +771,7 @@ export class DenoKvPageRepository implements PageRepository {
         envelope,
       });
       if (page === null) continue;
-      const final_entries = await this.#kv.getMany<unknown[]>([
+      const final_entries = await this.#kv.get_many<unknown[]>([
         id_key(page_id),
         locator_key(page.locator),
         ...(page.stewardship.kind === "managed" ? [owner_key(page)] : []),
@@ -989,7 +1015,7 @@ export class DenoKvPageRepository implements PageRepository {
       let page_id = request.page_id;
       if (locator_entry.versionstamp !== null) {
         const index = deserialize_locator_index(locator_entry.value);
-        const [current_locator, envelope_entry] = await this.#kv.getMany<
+        const [current_locator, envelope_entry] = await this.#kv.get_many<
           unknown[]
         >(
           [locator_storage_key, id_key(index.page_id)],
@@ -1049,7 +1075,7 @@ export class DenoKvPageRepository implements PageRepository {
       await this.#write_chunks(page_id, generation, chunks);
       const page_id_entry = existing?.entry ??
         await this.#kv.get<unknown>(id_key(page_id));
-      const atomic = this.#kv.atomic()
+      const atomic = this.#kv.native_atomic()
         .check(locator_entry)
         .check(page_id_entry)
         .set(id_key(page_id), envelope)
@@ -1095,7 +1121,7 @@ export class DenoKvPageRepository implements PageRepository {
     const locator_storage_key = locator_key(request.locator);
 
     for (let attempt = 0; attempt < max_attempts; attempt += 1) {
-      const [locator_entry, new_id_entry] = await this.#kv.getMany<unknown[]>([
+      const [locator_entry, new_id_entry] = await this.#kv.get_many<unknown[]>([
         locator_storage_key,
         id_key(request.page_id),
       ]);
@@ -1148,7 +1174,7 @@ export class DenoKvPageRepository implements PageRepository {
         bytes.length,
       );
       await this.#write_chunks(page.page_id, generation, chunks);
-      let atomic = this.#kv.atomic()
+      let atomic = this.#kv.native_atomic()
         .check(locator_entry)
         .check(new_id_entry)
         .set(id_key(page.page_id), envelope)
@@ -1231,7 +1257,7 @@ export class DenoKvPageRepository implements PageRepository {
       }
       const existing_owner_key = owner_key(existing_page);
       const [current_envelope, locator_entry, owner_entry] = await this.#kv
-        .getMany<unknown[]>([
+        .get_many<unknown[]>([
           envelope_entry.key,
           locator_key(envelope_locator(envelope)),
           existing_owner_key,
@@ -1263,7 +1289,7 @@ export class DenoKvPageRepository implements PageRepository {
         chunks?.length ?? envelope.chunk_count,
         serialized?.length ?? envelope.data_byte_length,
       );
-      const atomic = this.#kv.atomic()
+      const atomic = this.#kv.native_atomic()
         .check(envelope_entry)
         .check(locator_entry)
         .check(owner_entry)
@@ -1329,7 +1355,7 @@ export class DenoKvPageRepository implements PageRepository {
       const old_owner_key = owner_key(existing_page);
       const target_locator_key = locator_key(request.locator);
       const same_locator_key = key_equals(old_locator_key, target_locator_key);
-      const base_entries = await this.#kv.getMany<unknown[]>([
+      const base_entries = await this.#kv.get_many<unknown[]>([
         envelope_entry.key,
         old_locator_key,
         old_owner_key,
@@ -1352,7 +1378,7 @@ export class DenoKvPageRepository implements PageRepository {
       let replaced_trial: StoredPageSnapshot | null = null;
       if (target_entry !== null && target_entry.versionstamp !== null) {
         const target_index = deserialize_locator_index(target_entry.value);
-        const [current_target, target_envelope_entry] = await this.#kv.getMany<
+        const [current_target, target_envelope_entry] = await this.#kv.get_many<
           unknown[]
         >([target_locator_key, id_key(target_index.page_id)]);
         if (current_target.versionstamp !== target_entry.versionstamp) continue;
@@ -1388,7 +1414,7 @@ export class DenoKvPageRepository implements PageRepository {
         envelope.data_byte_length,
       );
       const next_owner_key = owner_key(page);
-      let atomic = this.#kv.atomic()
+      let atomic = this.#kv.native_atomic()
         .check(envelope_entry)
         .check(old_locator_entry)
         .check(old_owner_entry)
@@ -1482,7 +1508,7 @@ export class DenoKvPageRepository implements PageRepository {
         source_owner_entry,
         target_entry,
         new_id_entry,
-      ] = await this.#kv.getMany<unknown[]>([
+      ] = await this.#kv.get_many<unknown[]>([
         source_entry.key,
         source_locator_key,
         source_owner_key,
@@ -1500,7 +1526,7 @@ export class DenoKvPageRepository implements PageRepository {
       let replaced_trial: StoredPageSnapshot | null = null;
       if (target_entry.versionstamp !== null) {
         const target_index = deserialize_locator_index(target_entry.value);
-        const [checked_target, target_envelope_entry] = await this.#kv.getMany<
+        const [checked_target, target_envelope_entry] = await this.#kv.get_many<
           unknown[]
         >([target_locator_key, id_key(target_index.page_id)]);
         if (checked_target.versionstamp !== target_entry.versionstamp) continue;
@@ -1547,7 +1573,7 @@ export class DenoKvPageRepository implements PageRepository {
         serialized.length,
       );
       await this.#write_chunks(page.page_id, generation, chunks);
-      let atomic = this.#kv.atomic()
+      let atomic = this.#kv.native_atomic()
         .check(source_entry)
         .check(source_locator_entry)
         .check(source_owner_entry)
@@ -1610,7 +1636,7 @@ export class DenoKvPageRepository implements PageRepository {
       }
       const page = envelope_page(envelope, null);
       const [current_envelope, locator_entry, owner_entry] = await this.#kv
-        .getMany<unknown[]>([
+        .get_many<unknown[]>([
           envelope_entry.key,
           locator_key(envelope_locator(envelope)),
           owner_key(page),
@@ -1619,7 +1645,7 @@ export class DenoKvPageRepository implements PageRepository {
         continue;
       }
       this.#assert_mutation_indexes(locator_entry, owner_entry, envelope);
-      const atomic = this.#kv.atomic()
+      const atomic = this.#kv.native_atomic()
         .check(envelope_entry)
         .check(locator_entry)
         .check(owner_entry)
@@ -1737,7 +1763,7 @@ export class DenoKvPageRepository implements PageRepository {
       start < chunks.length;
       start += chunk_write_batch_size
     ) {
-      const atomic = this.#kv.atomic();
+      const atomic = this.#kv.native_atomic();
       chunks.slice(start, start + chunk_write_batch_size).forEach(
         (chunk, offset) =>
           atomic.set(chunk_key(page_id, generation, start + offset), chunk),
@@ -1770,7 +1796,7 @@ export class DenoKvPageRepository implements PageRepository {
         start < chunk_count;
         start += chunk_write_batch_size
       ) {
-        const atomic = this.#kv.atomic();
+        const atomic = this.#kv.native_atomic();
         for (
           let index = start;
           index < Math.min(start + chunk_write_batch_size, chunk_count);

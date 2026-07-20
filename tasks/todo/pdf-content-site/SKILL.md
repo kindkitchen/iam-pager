@@ -4,12 +4,14 @@ description: Add the secondary site experience for publishing, managing, preview
 created: 2026-07-20
 updated: 2026-07-20
 tags: [frontend, pdf, publishing, management]
-relates: [pdf-content-http, pdf-content-core]
+relates: [pdf-content-http, pdf-content-core, kv-toolbox-content-persistence]
 ---
 
-Todo, chain position 5 of 5. Blocked by the accepted PDF HTTP contract.
+Todo, chain position 5 of 5. Blocked by the accepted PDF HTTP contract and,
+indirectly, the active durable-persistence correction.
 
 The site will project PDF upload, metadata, user-configured ordinary endpoint
 locators/profiles, native preview, replacement, and download actions through
-web-independent presenters. See [[001.draft]] and [[002.decision]]. PDF.js and
-generic binary UI remain later.
+web-independent presenters. It must not import kv-toolbox, inspect storage keys,
+or own persistence/HTTP behavior. See [[001.draft]] and [[002.decision]]. PDF.js
+and generic binary UI remain later.

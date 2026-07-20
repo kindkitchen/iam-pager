@@ -1,3 +1,4 @@
+import type { KvRecordGateway } from "../storage/kv-gateway.ts";
 import {
   database_schema_manifests_equal,
   DatabaseSchemaError,
@@ -92,9 +93,9 @@ export function database_schema_manifest_key(): Deno.KvKey {
 /** Deno KV adapter for the single manual-task manifest. */
 export class DenoKvDatabaseSchemaManifestStore
   implements DatabaseSchemaManifestStore {
-  readonly #kv: Deno.Kv;
+  readonly #kv: KvRecordGateway;
 
-  constructor(kv: Deno.Kv) {
+  constructor(kv: KvRecordGateway) {
     this.#kv = kv;
   }
 
@@ -119,7 +120,7 @@ export class DenoKvDatabaseSchemaManifestStore
       return "conflict";
     }
 
-    const result = await this.#kv.atomic()
+    const result = await this.#kv.native_atomic()
       .check(entry)
       .set(manifest_key, encode_manifest(manifest))
       .commit();

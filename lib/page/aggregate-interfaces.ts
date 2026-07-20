@@ -1,4 +1,8 @@
 import type { ContentAssetId } from "../content/asset.ts";
+import type {
+  ContentAssetCreator,
+  ContentAssetReader,
+} from "../content/interfaces.ts";
 import type { Locator } from "../locator/model.ts";
 import type { PageAggregate, ResolvedPageEndpoint } from "./aggregate.ts";
 import type { PageEndpointSet } from "./endpoint.ts";
@@ -240,3 +244,23 @@ export interface ManagedPageAggregateDeleter {
     request: DeleteManagedPageAggregateRequest,
   ): Promise<DeleteManagedPageAggregateResult>;
 }
+
+/**
+ * Complete page/content persistence capability used by application services and
+ * shared conformance. Implementations own asset staging and one atomic page,
+ * endpoint, owner, and public-index visibility boundary.
+ */
+export interface PageAggregateRepository
+  extends
+    ContentAssetCreator,
+    ContentAssetReader,
+    PageAggregateReader,
+    PageEndpointResolver,
+    ManagedPageAggregateLister,
+    PublicPageAggregateLister,
+    PublicPageAggregateExplorer,
+    TrialPageAggregatePublisher,
+    ManagedPageAggregateCreator,
+    ManagedPageAggregateUpdater,
+    ManagedPageAggregateDuplicator,
+    ManagedPageAggregateDeleter {}
