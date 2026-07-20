@@ -11,9 +11,12 @@ import type {
   SiteNavigation,
   SiteNavigationAction,
 } from "../lib/ui/site-navigation.ts";
+import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
+import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
 
 export interface SiteAppProps {
   readonly navigation: SiteNavigation;
+  readonly breadcrumb?: SiteBreadcrumbTrail;
   readonly namespace_panel: NamespacePanel;
   readonly page_management: PageManagementPanelModel;
   readonly public_exploration: PublicExploration;
@@ -23,6 +26,7 @@ export interface SiteAppProps {
 export function SiteApp(
   {
     navigation,
+    breadcrumb,
     namespace_panel,
     page_management,
     public_exploration,
@@ -33,6 +37,7 @@ export function SiteApp(
     <main class="site-app">
       <header class="hero">
         <SiteSessionNavigation navigation={navigation} />
+        {breadcrumb && <SiteBreadcrumb trail={breadcrumb} />}
         <p class="eyebrow">Content at a URL</p>
         <h1>iam-pager</h1>
         <p class="hero-copy">
@@ -48,6 +53,12 @@ export function SiteApp(
           csrf_token={namespace_panel.csrf_token}
           initial_reservations={namespace_panel.reservations}
         />
+      )}
+
+      {page_management.kind === "creator" && (
+        <p class="manage-page-link">
+          <a href="/site/manage">Open the full-page manager</a>
+        </p>
       )}
 
       {page_management.kind === "creator" && (

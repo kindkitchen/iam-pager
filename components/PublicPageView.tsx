@@ -1,21 +1,25 @@
 import type { PublicPageView } from "../lib/ui/public-page-view.ts";
 import type { SiteNavigation } from "../lib/ui/site-navigation.ts";
+import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
+import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
 import { SiteSessionNavigation } from "./SiteApp.tsx";
 
 export interface PublicPageViewProps {
   readonly navigation: SiteNavigation;
+  readonly breadcrumb?: SiteBreadcrumbTrail;
   readonly view: PublicPageView;
 }
 
 /** Thin Fresh projection over the web-independent DS-VIEW presenter model. */
 export function PublicPageViewPage(
-  { navigation, view }: PublicPageViewProps,
+  { navigation, breadcrumb, view }: PublicPageViewProps,
 ) {
   if (view.kind === "missing") {
     return (
       <main class="site-app public-page-shell">
         <header class="public-page-platform-header">
           <SiteSessionNavigation navigation={navigation} />
+          {breadcrumb && <SiteBreadcrumb trail={breadcrumb} />}
           <a class="public-page-home" href="/site">iam-pager</a>
         </header>
         <section class="public-page-missing">
@@ -32,6 +36,7 @@ export function PublicPageViewPage(
     <main class="site-app public-page-shell">
       <header class="public-page-platform-header">
         <SiteSessionNavigation navigation={navigation} />
+        {breadcrumb && <SiteBreadcrumb trail={breadcrumb} />}
         <div>
           <a class="public-page-home" href="/site">iam-pager</a>
           <span class="public-page-platform-label">Site view</span>

@@ -1,6 +1,7 @@
 import { SiteApp } from "../components/SiteApp.tsx";
 import { app_services } from "../lib/app.ts";
 import { site_navigation_presenter } from "../lib/ui/site-navigation.ts";
+import { site_breadcrumb_presenter } from "../lib/ui/site-breadcrumb.ts";
 import { define } from "../utils.ts";
 
 /** The raw domain root serves the site itself, not raw content. */
@@ -16,6 +17,7 @@ export default define.page(async function Home({ state, url }) {
   return (
     <SiteApp
       navigation={site_navigation_presenter.present(session, url)}
+      breadcrumb={site_breadcrumb_presenter.present({ kind: "home" })}
       namespace_panel={await services.namespace_panel.present(session)}
       page_management={await services.page_management_panel.present(session)}
       public_exploration={public_exploration}
