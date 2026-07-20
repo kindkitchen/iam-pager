@@ -164,12 +164,15 @@ remains the locator URL. External bearer credentials are later; see
 
 ### OQ-CONTENT — Supported content
 
-`md-page` remains the implemented textual type and PDF is selected as the first
-binary type. The PDF slice must settle its exact byte limit and minimum
-structural validation before code accepts files. Its media type is fixed to
-`application/pdf`; filename extension is not trusted as validation. Inline and
-attachment behavior are both required and are endpoint properties over one
-asset.
+`md-page` remains the implemented textual type and PDF is the first selected
+binary type. Its transport-independent handler now accepts at most 16 MiB,
+requires a byte-zero PDF 1.0–1.7 or 2.0 header plus terminal `startxref`/`%%EOF`
+structure pointing to an xref table or xref-stream object, and detaches accepted
+bytes. This is lightweight structural screening, not PDF sanitization, exploit
+detection, or malware certification. Media type is fixed to `application/pdf`;
+filename extension is not trusted as validation. A portable suggested filename
+is required and bounded to 255 UTF-8 bytes. Inline and attachment behavior are
+both declared and remain endpoint properties over one asset.
 
 Active HTML, SVG, scripts, generic raw binary, and broader media-type inference
 remain unselected. Each later type still needs an explicit size band and
@@ -179,9 +182,11 @@ display, download, or isolation policy.
 
 The current JSON API is not an appropriate binary transport. The PDF HTTP task
 must settle a strict bounded multipart or dedicated upload contract without
-leaking base64 into the content/application interfaces. Browser-native viewers
-can consume a bounded full `200` response; byte-range support must either be
-implemented and tested or explicitly deferred with the first PDF size limit.
+leaking base64 into the content/application interfaces. The core's 16 MiB limit
+makes bounded full `200` delivery possible, but does not itself decide HTTP
+buffering. Byte-range support is explicitly deferred to that HTTP task, where it
+must be implemented and tested or rejected as unnecessary for the first
+transport.
 
 ### OQ-LIMITS — Publishing limits
 

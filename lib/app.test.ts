@@ -21,6 +21,7 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
+import { pdf_media_type } from "./content/mod.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import { deliver_page_locator_path, MemoryPageRepository } from "./page/mod.ts";
 import type { AppRequestState } from "./request-context.ts";
@@ -40,6 +41,24 @@ import {
   type SessionRepositoryFactory,
   type SessionStorageConfig,
 } from "./storage/mod.ts";
+
+const text_encoder = new TextEncoder();
+
+function pdf_bytes(): Uint8Array {
+  const before_xref = `%PDF-1.7\n` +
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n` +
+    `2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n`;
+  const xref_offset = text_encoder.encode(before_xref).byteLength;
+  return text_encoder.encode(
+    before_xref +
+      `xref\n0 3\n` +
+      `0000000000 65535 f \n` +
+      `0000000009 00000 n \n` +
+      `0000000062 00000 n \n` +
+      `trailer\n<< /Size 3 /Root 1 0 R >>\n` +
+      `startxref\n${xref_offset}\n%%EOF\n`,
+  );
+}
 
 Deno.test("composition root exposes page HTTP creation and direct delivery over one service", async () => {
   const services = create_app_services();
@@ -70,6 +89,31 @@ Deno.test("composition root exposes page HTTP creation and direct delivery over 
   );
   assertEquals(delivered.status, 200);
   assertStringIncludes(await delivered.text(), "Hi there");
+});
+
+Deno.test("composition root registers the transport-independent PDF core", async () => {
+  const services = create_app_services();
+  const bytes = pdf_bytes();
+  const created = await services.pages.publish_trial({
+    actor: { kind: "guest" },
+    locator: { namespace: "Guest", page_name: "report" },
+    access: "public",
+    content: {
+      content_type: "pdf",
+      input: { bytes, filename: "report.data" },
+    },
+  });
+  assertEquals(created.ok, true);
+
+  const delivered = await services.pages.deliver(
+    { namespace: "Guest", page_name: "report" },
+    { kind: "guest" },
+  );
+  assertEquals(delivered.ok, true);
+  if (!delivered.ok) return;
+  assertEquals(delivered.payload.media_type, pdf_media_type);
+  assertEquals(delivered.payload.download_filename, "report.data");
+  assertEquals(delivered.payload.body, bytes);
 });
 
 Deno.test("composition root exposes public exploration over the shared page service", async () => {

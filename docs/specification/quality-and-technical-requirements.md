@@ -266,16 +266,24 @@ sanitization.
 The first supported set can be small, but the design should not assume that all
 future pages are short text. Content handlers declare a non-empty subset of the
 fixed `inline` and `attachment` endpoint profiles; the implemented `md-page`
-handler permits only `inline`. PDF is the selected next type. Its handler
-receives bounded bytes independently from HTTP, verifies the explicit minimum
-PDF shape, fixes media type to `application/pdf`, and never trusts a filename
-extension to establish type. One asset supports independently configured inline
-and attachment endpoints at ordinary valid locators. Browser-native direct
-viewing and a site wrapper around that URL are the first preview adapters;
-PDF.js, thumbnails, text extraction, generic binary, and unbounded streaming are
-later. The wrapper must retain direct-preview and download fallbacks, and the
-first slice must explicitly decide whether HTTP byte ranges are implemented or
-deferred under a bounded size.
+handler permits only `inline`. The implemented transport-independent `pdf`
+handler permits both. It accepts detached `Uint8Array` input up to 16 MiB,
+requires a byte-zero PDF 1.0–1.7 or 2.0 header and a terminal
+`startxref`/`%%EOF` whose offset targets an xref table or indirect xref-stream
+object, fixes media type to `application/pdf`, and never trusts a filename
+extension to establish type. The required portable filename is at most 255 UTF-8
+bytes and excludes path separators, controls, bidirectional overrides, unsafe
+portable characters, and common reserved-device names. This minimum screen is
+not sanitization, exploit detection, or malware certification.
+
+The handler clones accepted, derived, and rendered byte views, exposes only
+filename/media-type/size/version/replace capability to management inspection,
+and declares independently configured inline and attachment endpoints at
+ordinary valid locators. Browser-native direct viewing and a site wrapper around
+that URL are the first preview adapters; PDF.js, thumbnails, text extraction,
+generic binary, and unbounded streaming are later. The strict binary HTTP task
+owns upload buffering and has the explicit byte-range decision; ranges are not
+part of the content core.
 
 The current `MdPage` form previews Markdown and CSS locally inside a sandboxed
 iframe, without a preview HTTP request. Its Page workspace is collapsible
@@ -336,10 +344,12 @@ frequency limits. Guest publishing uses stricter values and may have shorter
 retention. The app must explain when a limit rejects or removes content.
 
 The current prototype bounds a guest publishing request at 96 KiB and accepts up
-to 64 KiB of Markdown plus 16 KiB of optional CSS, measured as UTF-8 bytes.
-These are initial operational values, not a promise for every future content
-format. Total stored-page capacity, publishing frequency, and guest expiry are
-still unimplemented.
+to 64 KiB of Markdown plus 16 KiB of optional CSS, measured as UTF-8 bytes. The
+transport-independent PDF boundary accepts up to 16 MiB; the current JSON
+request limit and shape intentionally provide no PDF upload path. These are
+initial operational values, not a promise for every future content format. Total
+stored-page capacity, publishing frequency, and guest expiry are still
+unimplemented.
 
 ## QT-AUTHORITY — Authenticated boundaries
 
@@ -471,13 +481,13 @@ foreign, and unauthorized pages to the same item-level `not_found` outcome.
 
 The planned PDF API must not base64-encode bytes into the existing JSON content
 command. A strict bounded multipart or dedicated upload decoder belongs at the
-HTTP edge and produces the transport-independent PDF input. Its metadata carries
-the publisher-supplied endpoint locator/profile set; no route appends `.pdf` or
-otherwise manufactures an endpoint. Managed replacement remains CSRF- and
-exact-revision-bound; inspection returns safe PDF metadata and replacement
-capability, never the full byte payload in JSON. Create, inspect, and public
-representations return the complete canonical/preview/download link model
-without exposing storage IDs. The current JSON `md-page` contract remains
+HTTP edge and produces the implemented transport-independent PDF input. Its
+metadata carries the publisher-supplied endpoint locator/profile set; no route
+appends `.pdf` or otherwise manufactures an endpoint. Managed replacement
+remains CSRF- and exact-revision-bound; inspection returns safe PDF metadata and
+replacement capability, never the full byte payload in JSON. Create, inspect,
+and public representations return the complete canonical/preview/download link
+model without exposing storage IDs. The current JSON `md-page` contract remains
 compatible.
 
 ## QT-SEARCH — Search and privacy

@@ -34,7 +34,7 @@ export type ContentResult<T> =
  * (e.g. html from md) are stored once, not rebuilt per request. `render`
  * runs at delivery time.
  */
-export interface ContentTypeHandler<Input, Data> {
+export interface ContentTypeHandler<Input, Data, Management = Input> {
   readonly content_type: string;
   /** Non-empty endpoint profiles this content type can safely deliver. */
   readonly supported_delivery_profiles: readonly DeliveryProfile[];
@@ -43,11 +43,11 @@ export interface ContentTypeHandler<Input, Data> {
   /** Derive the stored data from valid input (e.g. md -> md + html). */
   derive(input: Input): Data;
   /**
-   * Recover the safe editable input from stored data: the representation a
-   * management client edits and resubmits through `validate`. Must never
-   * expose derived representations or backend-internal fields.
+   * Produce a bounded owner-safe management representation. Text handlers may
+   * return resubmittable source; binary handlers must not expose payload bytes
+   * or backend-internal fields.
    */
-  to_input(data: Data): Input;
+  to_management(data: Data): Management;
   /** Produce the raw delivery payload for stored data. */
   render(data: Data): DeliveryPayload;
 }

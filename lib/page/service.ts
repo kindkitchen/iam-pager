@@ -1281,7 +1281,7 @@ export class PageService
       ...this.#summary(page),
       content: {
         content_type: page.content.content_type,
-        input: handler.to_input(page.content.data),
+        input: handler.to_management(page.content.data),
       },
     };
     return { ok: true, page: inspection };

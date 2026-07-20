@@ -117,10 +117,13 @@ resolution joins its current asset, and management/public queries emit one row.
 Owner/public summaries now add a safe complete endpoint link set while retaining
 canonical locator/path compatibility; site projections show alternates without
 creating rows. Direct HTTP uses the exact resolved profile for inline versus
-attachment disposition. The generic prerequisite is complete. The PDF content
-core, conforming Kvdex-backed Deno KV adapter, strict bounded HTTP
-upload/delivery, and secondary PDF site projection follow. Generic binary
-fallback and external storage remain later.
+attachment disposition. The generic prerequisite is complete. The
+transport-independent PDF content core is now implemented: it validates and
+detaches at most 16 MiB, fixes media type, retains safe filename/version
+metadata, declares both profiles, and keeps bytes out of management inspection.
+Generic application endpoint-set commands, the conforming Kvdex-backed Deno KV
+adapter, strict bounded HTTP upload/delivery, and secondary PDF site projection
+follow. Generic binary fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

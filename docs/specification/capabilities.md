@@ -36,12 +36,20 @@ protection.
 
 ## CP-PDF — PDF content and delivery endpoints
 
-The planned PDF capability will:
+The PDF capability now has a transport-independent content core that:
 
-- validate a bounded PDF input through a transport-independent content handler;
-- store one immutable PDF content asset independently from its locator bindings;
-- bind one logical page to user-configured endpoints, including inline and
-  attachment profiles that can resolve the same exact bytes;
+- validates and detaches PDF input up to 16 MiB with explicit version,
+  terminal-structure, and portable filename rules;
+- fixes media type to `application/pdf`, declares inline and attachment support,
+  and projects bounded owner metadata without payload bytes;
+- composes with immutable content assets independently from locator bindings and
+  resolves the same exact bytes through already-established generic inline and
+  attachment endpoint contracts.
+
+The remaining PDF capability will:
+
+- bind one logical page to user-configured endpoints through application
+  commands, including inline and attachment profiles;
 - validate each supplied locator through the ordinary locator interfaces and
   keep endpoint persistence behind interfaces, without PDF-specific path
   generation;
@@ -51,16 +59,18 @@ The planned PDF capability will:
 - expose browser-native PDF viewing through the site when supported, with direct
   preview and download fallbacks.
 
-PDF handling remains planned. Its generic prerequisites now include the endpoint
+The PDF content core is implemented and registered with `PageService`; strict
+binary HTTP upload is not. Its generic prerequisites include the endpoint
 planner plus immutable-asset and atomic page/endpoint capability contracts, a
-process-local reference, and shared persistence conformance. `PageService` now
-uses those capabilities for the compatible one-canonical-inline-endpoint
-`md-page` command flow, including immutable staging, aggregate query
-projections, and endpoint resolution. Owner/public summaries expose complete
-safe endpoint links without duplicating rows, and direct delivery selects
-disposition from the resolved binding profile. Generic raw-binary content,
-PDF.js, text extraction, thumbnails, and external storage are outside its first
-slice.
+process-local reference, and shared persistence conformance. Core integration
+coverage proves detached immutable bytes, bounded inspection, one-row queries,
+coherent replacement/access/deletion, and identical inline/attachment delivery
+over a generic configured endpoint set. Generic application commands still need
+to accept complete endpoint intent and preserve it through rename and
+duplication. Owner/public summaries already expose complete safe endpoint links
+without duplicating rows, and direct delivery selects disposition from the
+resolved binding profile. Generic raw-binary content, PDF.js, text extraction,
+thumbnails, and external storage are outside its first slice.
 
 ## CP-VIEW — Site-mediated viewing
 

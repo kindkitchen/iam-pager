@@ -3,18 +3,21 @@
 > Implementation status: this contract is composed into Fresh collection, item,
 > action, and bulk routes and backed by the selected page repository.
 >
-> PDF publication is planned but not part of this implemented contract yet. Its
-> future extension will use a strict bounded binary upload boundary rather than
-> base64 inside the JSON content command, and will return one logical page with
-> a complete user-configured set of 1–8 endpoints over the same asset. Exactly
-> one endpoint is explicitly canonical; each binding supplies an ordinary
-> same-namespace locator and a content-supported `inline` or `attachment`
-> profile. No filename suffix has special routing or delivery meaning. The
-> immutable-asset/atomic-endpoint contract now backs the composed process-local
-> `PageService`. The current create/update commands remain the compatible
-> one-canonical-inline-endpoint `md-page` shape, while every owner-safe summary
-> now exposes the complete endpoint link set and direct delivery obeys the
-> resolved binding profile. Binary upload fields are not exposed yet; the
+> PDF publication is not part of this HTTP contract yet. The implemented
+> transport-independent handler accepts validated `Uint8Array` input up to 16
+> MiB, but the future HTTP extension will use a strict bounded binary upload
+> boundary rather than base64 inside the JSON content command. It will return
+> one logical page with a complete user-configured set of 1–8 endpoints over the
+> same asset. Exactly one endpoint is explicitly canonical; each binding
+> supplies an ordinary same-namespace locator and a content-supported `inline`
+> or `attachment` profile. No filename suffix has special routing or delivery
+> meaning. The immutable-asset/atomic-endpoint contract now backs the composed
+> process-local `PageService`. The current create/update commands remain the
+> compatible one-canonical-inline-endpoint `md-page` shape, while every
+> owner-safe summary now exposes the complete endpoint link set and direct
+> delivery obeys the resolved binding profile. PDF management inspection is
+> defined to expose only bounded filename/media-type/size/version/replace
+> metadata, never complete bytes. Binary upload fields are not exposed yet; the
 > retained raw-Deno-KV repository continues through the legacy compatibility
 > path pending its replacement.
 

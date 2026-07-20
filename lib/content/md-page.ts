@@ -89,7 +89,7 @@ export class MdPageHandler
     return { ok: true, value: css === undefined ? { md } : { md, css } };
   }
 
-  to_input(data: MdPageData): MdPageInput {
+  to_management(data: MdPageData): MdPageInput {
     return data.css === undefined
       ? { md: data.md }
       : { md: data.md, css: data.css };

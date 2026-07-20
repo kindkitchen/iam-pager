@@ -2,6 +2,21 @@
 
 ## 2026-07-20
 
+- Began `pdf-content-core` with the complete transport-independent handler step.
+  The registered `pdf` handler accepts detached immutable `Uint8Array` payloads
+  up to 16 MiB, supports PDF 1.0–1.7 and 2.0 after byte-zero header and terminal
+  xref/EOF screening, enforces portable 255-byte UTF-8 filenames, fixes
+  `application/pdf`, and declares inline plus attachment delivery. Content
+  handlers now project a distinct bounded management representation, allowing
+  PDF inspection to expose filename/media-type/size/version/replace metadata
+  without bytes while Markdown retains resubmittable source. Focused handler and
+  memory-service coverage proves input/output isolation, rejection outcomes,
+  one-row endpoint projections, identical inline/attachment bytes, coherent
+  replacement and access, and endpoint-wide deletion. HTTP upload, generic
+  endpoint-set application commands, alternate-preserving rename/duplicate,
+  Kvdex persistence, and site projection remain. All 490 tests, check, and the
+  production build pass.
+
 - Completed `content-endpoint-bindings`. Owner and public page summaries now
   retain canonical locator/path compatibility fields while exposing the full
   canonical/alternate set as safe app-relative links; management, wrapped-view,

@@ -6,6 +6,7 @@ import {
   assertThrows,
 } from "@std/assert";
 import { type MdPageData, MdPageHandler } from "../content/md-page.ts";
+import { pdf_media_type, PdfHandler } from "../content/pdf.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
@@ -27,6 +28,24 @@ const other = { kind: "user", user_id: "other-1" } as const;
 const t1 = new Date("2026-07-19T10:00:00.000Z");
 const t2 = new Date("2026-07-19T11:00:00.000Z");
 const t3 = new Date("2026-07-19T12:00:00.000Z");
+const text_encoder = new TextEncoder();
+
+function pdf_bytes(version = "1.7", marker = "fixture"): Uint8Array {
+  const before_xref = `%PDF-${version}\n` +
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n` +
+    `2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n` +
+    `% ${marker}\n`;
+  const xref_offset = text_encoder.encode(before_xref).byteLength;
+  return text_encoder.encode(
+    before_xref +
+      `xref\n0 3\n` +
+      `0000000000 65535 f \n` +
+      `0000000009 00000 n \n` +
+      `0000000062 00000 n \n` +
+      `trailer\n<< /Size 3 /Root 1 0 R >>\n` +
+      `startxref\n${xref_offset}\n%%EOF\n`,
+  );
+}
 
 class SequenceIds implements PageIdGenerator {
   #ids: string[];
@@ -90,7 +109,7 @@ async function make_fixture(options: {
       ? legacy_repository_only(repository)
       : repository,
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
-    handlers: [new MdPageHandler()],
+    handlers: [new MdPageHandler(), new PdfHandler()],
     page_id_generator: new SequenceIds(options.ids),
     clock: new SequenceClock(options.dates),
     max_page_id_attempts: options.max_page_id_attempts,
@@ -192,6 +211,156 @@ Deno.test("PageService trial publish creates and replaces complete public conten
     new TextEncoder().encode(payload.body as string).byteLength,
   );
   assertFalse((stored.content.data as MdPageData).html.includes("<script>"));
+});
+
+Deno.test("PageService composes PDF assets with generic endpoint contracts", async () => {
+  const submitted = pdf_bytes("1.7", "original");
+  const original = submitted.slice();
+  const replacement_input = pdf_bytes("2.0", "replacement");
+  const replacement = replacement_input.slice();
+  const { service, repository } = await make_fixture({
+    ids: ["pdf-page"],
+    dates: [t1, t3],
+  });
+
+  const created = await service.create_managed({
+    actor: owner,
+    locator: { namespace: "Mine", page_name: "report-preview" },
+    access: "public",
+    content: {
+      content_type: "pdf",
+      input: { bytes: submitted, filename: "report.data" },
+    },
+  });
+  assert(created.ok);
+  submitted.fill(0);
+  assertEquals(created.page.content_type, "pdf");
+  assertEquals(created.page.size_bytes, original.byteLength);
+
+  const aggregate = await repository.find_page_aggregate_by_id(
+    created.page.page_id,
+  );
+  assert(aggregate !== null);
+  const endpoint_update = await repository.update_managed_page_aggregate({
+    page_id: aggregate.page_id,
+    owner_user_id: owner.user_id,
+    expected_revision: 1,
+    patch: {
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "report-preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "report-download" },
+          delivery_profile: "attachment",
+        }],
+      },
+    },
+    now: t2,
+  });
+  assert(endpoint_update.ok);
+
+  const inspected = await service.inspect_managed({
+    actor: owner,
+    page_id: aggregate.page_id,
+  });
+  assert(inspected.ok);
+  assertEquals(inspected.page.revision, 2);
+  assertEquals(inspected.page.content.input, {
+    filename: "report.data",
+    media_type: pdf_media_type,
+    size_bytes: original.byteLength,
+    pdf_version: "1.7",
+    replaceable: true,
+  });
+  assertFalse("bytes" in (inspected.page.content.input as object));
+  assertEquals(inspected.page.endpoints.alternates, [{
+    locator: { namespace: "Mine", page_name: "report-download" },
+    path: "/Mine/report-download",
+    delivery_profile: "attachment",
+  }]);
+
+  const public_pages = await service.list_public({
+    namespace: "Mine",
+    limit: 10,
+  });
+  assert(public_pages.ok);
+  assertEquals(public_pages.pages.length, 1);
+  assertEquals(public_pages.pages[0].endpoints, inspected.page.endpoints);
+
+  const inline = await service.deliver(
+    { namespace: "Mine", page_name: "report-preview" },
+    guest,
+  );
+  const attachment = await service.deliver(
+    { namespace: "Mine", page_name: "report-download" },
+    guest,
+  );
+  assert(inline.ok && attachment.ok);
+  assertEquals(inline.endpoint.delivery_profile, "inline");
+  assertEquals(attachment.endpoint.delivery_profile, "attachment");
+  assertEquals(inline.payload.media_type, pdf_media_type);
+  assertEquals(attachment.payload.download_filename, "report.data");
+  assertEquals(inline.payload.body, original);
+  assertEquals(attachment.payload.body, original);
+
+  const replaced = await service.update_managed({
+    actor: owner,
+    page_id: aggregate.page_id,
+    expected_revision: 2,
+    patch: {
+      content: {
+        content_type: "pdf",
+        input: { bytes: replacement_input, filename: "next.pdf" },
+      },
+    },
+  });
+  assert(replaced.ok);
+  replacement_input.fill(0);
+  assertEquals(replaced.page.revision, 3);
+  assertEquals(replaced.page.endpoints, inspected.page.endpoints);
+  for (const page_name of ["report-preview", "report-download"]) {
+    const delivered = await service.deliver(
+      { namespace: "Mine", page_name },
+      guest,
+    );
+    assert(delivered.ok);
+    assertEquals(delivered.payload.body, replacement);
+    assertEquals(delivered.payload.download_filename, "next.pdf");
+  }
+
+  const made_private = await service.update_managed({
+    actor: owner,
+    page_id: aggregate.page_id,
+    expected_revision: 3,
+    patch: { access: "private" },
+  });
+  assert(made_private.ok);
+  for (const page_name of ["report-preview", "report-download"]) {
+    assertEquals(
+      await service.deliver({ namespace: "Mine", page_name }, guest),
+      { ok: false, reason: "not_found" },
+    );
+    assert(
+      (await service.deliver({ namespace: "Mine", page_name }, owner)).ok,
+    );
+  }
+
+  assertEquals(
+    await service.delete_managed({
+      actor: owner,
+      page_id: aggregate.page_id,
+      expected_revision: 4,
+    }),
+    { ok: true },
+  );
+  for (const page_name of ["report-preview", "report-download"]) {
+    assertEquals(
+      await service.deliver({ namespace: "Mine", page_name }, owner),
+      { ok: false, reason: "not_found" },
+    );
+  }
 });
 
 Deno.test("PageService retains the raw repository compatibility path", async () => {

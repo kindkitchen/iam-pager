@@ -21,7 +21,7 @@ import {
   SiteAuthenticationCallbackFailurePresenter,
 } from "./auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
-import { MdPageHandler } from "./content/mod.ts";
+import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
   MemoryPageRepository,
   type PageDeliverer,
@@ -192,7 +192,7 @@ export function create_app_services(
   const pages = new PageService({
     engine,
     repository: page_repository,
-    handlers: [new MdPageHandler()],
+    handlers: [new MdPageHandler(), new PdfHandler()],
     namespace_authority: new RepositoryNamespaceAuthorityResolver(
       namespace_repository,
     ),

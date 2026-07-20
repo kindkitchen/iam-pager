@@ -298,6 +298,7 @@ export interface PageSummary {
 export interface ManagedPageInspection extends PageSummary {
   content: {
     content_type: string;
+    /** Handler-owned bounded projection; binary types must omit payload bytes. */
     input: unknown;
   };
 }
