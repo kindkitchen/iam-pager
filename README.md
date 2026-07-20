@@ -225,44 +225,57 @@ local workflow assumption rather than CI enforcement. Husky and `core.hooksPath`
 are not used, preserving GitButler's managed hooks. The project pins Deno 2.5.0
 to match the current Deno Deploy builder/runtime formatter.
 
-`deno task pre-deploy` is now read-only. It opens the attached durable database
-and requires its authoritative manifest to identify project `iam-pager` with
-exact `ownership`, `pages`, and `sessions` versions matching code. Missing or
-wrong-project metadata, stale/future versions, pending work, corrupt state,
-unknown schemas, and mixed or memory storage fail before routing. It never runs
-checks, tests, another build, or a schema mutation. Deno Deploy runs this
-command with the target timeline's application context, not the Build context.
-Its attached Deno KV is presented to the Deno CLI through an injected remote
-default path and access token, so the task permits those variables and network
-access; the checker itself still performs only bounded metadata reads.
+Deployment deliberately does no project verification. `deno task pre-deploy` is
+retained only as a platform-compatible placeholder: it echoes where the manual
+database task lives and exits successfully. It opens no database, reads no
+deployment environment, runs no checks/tests/build, and never blocks or mutates
+a release. Application startup also performs no manifest check or migration.
 
-Version 0 means only “the database manifest is absent”; it never
-wildcard-matches versioned data. A developer updates an exact remote Deno KV
-database separately, using its connector URL and an access token that is never a
-command argument:
+Database health is an explicit developer action against one named target. The
+check task reports every missing input and then explains unversioned,
+wrong-project, stale, future, missing, unknown, or malformed manifest state:
 
 ```sh
+# Local Deno KV
+deno task db:check --database=./data/iam-pager.kv
+
+# Remote Deno KV: the token stays in the environment, never in arguments
 export DENO_KV_ACCESS_TOKEN=<personal-or-organization-token>
-deno task db-schema:upgrade \
-  --database-url=https://api.deno.com/v2/databases/<database-id>/connect \
-  --project=iam-pager \
-  --from=ownership:0,pages:0,sessions:0 \
-  --to=ownership:1,pages:1,sessions:1
+deno task db:check \
+  --database=https://api.deno.com/v2/databases/<database-id>/connect
 ```
 
-The complete `from` vector must match the durable manifest, and the complete
-`to` vector must match the immutable code registry. Project or version mismatch
-performs no write. The validated `api.deno.com` connector can return dynamic KV
-data endpoints, so the command permits outbound network access rather than one
-fixed hostname; only the token environment variable is exposed. The explicit
-`0 -> 1` bootstrap is the one unavoidable case where unversioned data cannot
-prove its project identity, so selecting the URL and project is the operator's
-assertion. The guarded writer then reuses the forward-only, adjacent, idempotent
-runner and publishes the new manifest only after all helpers complete;
-interruption keeps deployment blocked and is safe to resume. Since the database
-update happens before the new release can pass its gate, data-changing helpers
-must stay compatible with the currently running release; destructive changes
-require staged expand/deploy/contract releases.
+A healthy check exits zero. An unhealthy check exits nonzero and either prints
+the exact update shape or explains why this checkout cannot update safely. It
+does not alter the manifest or application records. Run it deliberately before
+and after a schema-affecting release; it is not part of `verify`, build, deploy,
+or runtime.
+
+`deno task db:update` derives the project and complete target version vector
+from code, so operators no longer copy `from`/`to` vectors. It first prints the
+same inspection. A write requires the explicit target plus
+`--confirm=iam-pager`:
+
+```sh
+deno task db:update \
+  --database=https://api.deno.com/v2/databases/<database-id>/connect \
+  --confirm=iam-pager
+```
+
+The confirmation is especially important when the manifest is absent, because an
+unversioned database cannot prove its identity. Existing raw records are the
+version-1 baseline. Future version bumps must add one adjacent, repeat-safe
+migration to `lib/database-schema/current-schema.ts`; a gap makes the registry
+invalid before a database is touched. The small manual runner executes retained
+migrations and publishes the complete manifest with one compare-and-set only
+after they succeed. It has no deploy hook, durable lock, pending-step protocol,
+or rollback framework. A failure leaves the manifest unchanged; migrations must
+therefore tolerate a manual retry. A concurrent manifest change is reported and
+requires a fresh `db:check`.
+
+Runtime repositories still reject unknown per-record schema versions. That local
+validation is independent from the manual release manifest and remains the final
+corruption/incompatibility guard while handling data.
 
 ## Next direction: PDF pages
 
@@ -381,19 +394,19 @@ injected into direct page responses.
 
 ## Production startup and deployment
 
-Build, run the read-only gate against the deployment's durable storage
-configuration, then start the generated server with the same environment file:
+Build and start the generated server. The retained pre-deploy task is only an
+informational no-op for platforms that expect that lifecycle slot:
 
 ```sh
 deno task build
-deno task --env-file=.env.production.local pre-deploy
+deno task pre-deploy
 deno task --env-file=.env.production.local start
 ```
 
-The gate performs no build or mutation. If it reports version 0 or stale schema,
-run the explicit remote `db-schema:upgrade` command against that exact database,
-then retry pre-deploy. Memory storage is rejected because it cannot provide a
-durable release manifest.
+No deploy or startup step checks a database. For a schema-affecting release, run
+`db:check` manually against the exact target and, when it reports an available
+path, run the separately confirmed `db:update`. Ordinary code-only releases need
+no database command.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
@@ -418,17 +431,13 @@ IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
 ```
 
 Leave `IAM_PAGER_OWNERSHIP_DENO_KV_PATH` unset on Deno Deploy so every adapter
-uses the attached default database. The three backend selectors may be assigned
-to **All** contexts: Production and Git branch timelines use Deno KV, revision
-previews still force their application repositories back to process memory via
-`DENO_TIMELINE=preview/*`, and the current Build does not compose storage.
-**Local** is pulled only by `deno ... --tunnel`; under All it intentionally uses
-the tunnel-provided Deno KV rather than process memory. To keep tunneled local
-development in memory instead, target only Production and the non-production
-runtime context—named Preview in some dashboards and Development in Deno's
-current documentation. Leave the ownership KV path absent in either setup.
-Changing backend selection does not migrate process-local records or sessions;
-deploy the new configuration and sign in again.
+uses the attached default database. Runtime uses these variables exactly as
+configured; it has no timeline detection or deploy-specific schema behavior.
+Scope the durable selectors only to contexts that should use their attached
+database. Setting them in **All** contexts also selects Deno KV for revision
+previews and `deno ... --tunnel`; use explicit `memory` values in contexts that
+must stay ephemeral. Changing backend selection does not migrate process-local
+records or sessions; deploy the new configuration and sign in again.
 
 For local development or an intentionally ephemeral preview, omit all three
 backend variables or set them explicitly:
@@ -448,11 +457,10 @@ or `not_authenticated` failures from namespace reservation and creator
 publication.
 
 Use a Git branch timeline and its isolated Deno KV database for durable
-authentication/publication review. Deno Deploy currently provisions one shared
-preview database across all revision preview URLs and skips pre-deploy there.
-Migrating that shared database could break older revision URLs, while leaving it
-stale can break newer ones, so `DENO_TIMELINE=preview/*` forces all application
-repositories to memory. Revision previews are only stateless UI/warmup surfaces.
+authentication/publication review. If Deno Deploy shares one database across
+revision preview URLs, keep those contexts explicitly in memory unless every
+revision is known to be record-schema compatible. The application no longer
+silently rewrites preview storage configuration.
 
 A self-hosted durable process can use the three `deno-kv` settings with an
 explicit durable filesystem path:
@@ -489,22 +497,22 @@ KV service or deployment operator. Without the content opt-in, pages still
 disappear on restart.
 
 For Deno Deploy, use `deno task build` as the platform build command,
-`deno task pre-deploy` as the read-only pre-deploy command, and
-`_fresh/server.js` as the application entrypoint. Schema mutation is a separate
-local operator action through the guarded remote command. Apply the appropriate
-storage profile above to production and Git branch timelines; revision previews
-have the shared-database limitation described above. Configure the original-mode
-Google variables for every deployment context that must warm successfully. The
-callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
-used by that context. Dynamic preview contexts using local mock authentication
-can set `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact
-Google, but every matched host intentionally permits fake sign-in and must not
-be treated as a production environment. If original mode uses the pattern, every
-selected callback must still satisfy Google's redirect-URI registration rules.
-Original preview hosts that cannot be registered individually require a stable
-callback broker rather than a broader application regex. The SSR build
-deliberately leaves gauth and Effect as runtime imports so loading the selected
-preset cannot deadlock through circular bundle chunks.
+`deno task pre-deploy` as the no-op pre-deploy placeholder, and
+`_fresh/server.js` as the application entrypoint. Database inspection and
+mutation remain separate local developer actions. Apply the appropriate storage
+profile above to every runtime context; revision previews have the
+shared-database limitation described above. Configure the original-mode Google
+variables for every deployment context that must warm successfully. The callback
+must be an authorized HTTPS `/auth/google/callback` URL for the domain used by
+that context. Dynamic preview contexts using local mock authentication can set
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact Google, but
+every matched host intentionally permits fake sign-in and must not be treated as
+a production environment. If original mode uses the pattern, every selected
+callback must still satisfy Google's redirect-URI registration rules. Original
+preview hosts that cannot be registered individually require a stable callback
+broker rather than a broader application regex. The SSR build deliberately
+leaves gauth and Effect as runtime imports so loading the selected preset cannot
+deadlock through circular bundle chunks.
 
 ## Technical stack
 

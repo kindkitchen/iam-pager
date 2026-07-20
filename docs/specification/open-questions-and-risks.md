@@ -76,46 +76,41 @@ the page service nor HTTP generates a locator, interprets `.pdf`, or infers
 behavior from any path shape. PDF.js, generated preview images, and text
 extraction are later adapters or capabilities.
 
-### OQ-SCHEMA-UPGRADES — Guarded manual forward evolution
+### OQ-SCHEMA-UPGRADES — Explicit manual forward evolution
 
-Deployment never mutates database schema. Its pre-deploy command only compares
-an authoritative database project/version manifest with code and blocks routing
-on any mismatch. A developer separately selects the exact remote database and
-runs the forward updater with an access token plus explicit project, complete
-`from` vector, and complete `to` vector. Project/from mismatch cannot write;
-`to` must equal the immutable code registry.
+Deployment and runtime neither inspect nor mutate the release manifest.
+`pre-deploy` is a successful informational no-op. Database safety is an explicit
+developer workflow: select one exact local path or remote connector URL, run
+`db:check`, and use its diagnostics before deciding whether to run the
+separately confirmed `db:update`. This simplicity means a forgotten manual check
+cannot block release; release discipline and record-level runtime decoding are
+the remaining controls.
 
-Version 0 is settled as the absence of a manifest, not a wildcard. The explicit
-zero-version bootstrap is the only point where database identity cannot be
-verified from metadata; supplying the connector URL and project is the
-operator's assertion. Once written, the manifest binds the database to that
-project and publishes new versions only after all helpers complete. A failed or
-interrupted update leaves the old manifest stale and deployment blocked. Since
-an update precedes the requiring deployment, transformations must remain
-compatible with the running release; destructive evolution is staged as
-expand/deploy/contract.
+Manifest absence remains unversioned, not a wildcard. Since an unversioned
+database cannot prove identity, initialization requires `--confirm=iam-pager`.
+After initialization, wrong-project metadata cannot be updated. The command
+derives current targets from code rather than accepting operator-authored
+`from`/`to` vectors.
 
-There is no automatic schema-diff inference, rollback framework, deploy-time
-mutation, or migration mutex with a stale-lock timeout. Every transformation is
-explicitly authored, repeat-idempotent, and safe under concurrent invocation: a
-second process can observe and resume the same atomic pending claim before the
-first exits. Conditional data writes make overlap safe, while exact completion
-lets one process advance state. A helper may be removed only after every
-supported database is beyond its source version.
+There is no inferred schema diff, rollback framework, deploy mutation,
+per-schema pending state, migration lease, or contention loop. Every future
+transformation is an adjacent retained migration, explicitly authored and safe
+to repeat. Migrations run before one conditional publication of the complete
+manifest. Failure leaves the old manifest and may leave partial repeat-safe data
+work; concurrency can duplicate migration execution, while one compare-and-set
+wins publication. Operators rerun `db:check` after either outcome. A migration
+may be removed only after every supported database is beyond its source version.
 
-The first manifest/state adapter is Deno KV behind agnostic interfaces. Current
-`ownership`, `sessions`, and `pages` targets are version 1; bootstrapping a
-legacy database from manifest version 0 to vector 1 installs metadata without
-rewriting its already-version-1 application records.
+The Deno KV adapter preserves the existing manifest key/format. Current
+`ownership`, `sessions`, and `pages` targets are version 1; confirmed legacy
+initialization writes metadata without rewriting already-version-1 application
+records.
 
-Deno Deploy's revision previews are not schema-isolated today: one preview
-database is shared and the observed platform skips pre-deploy there. Running a
-new migration against that database could break old preview revisions, while not
-running it could break the new one. The composition root therefore forces memory
-repositories for `DENO_TIMELINE=preview/*`. Durable database acceptance uses
-each Git branch timeline's isolated database and branch URL; revision preview
-URLs remain stateless UI/warmup surfaces until per-revision databases and gates
-exist.
+Runtime storage now follows environment selectors without a Deno Deploy timeline
+override. Shared revision-preview databases therefore remain an operator risk:
+configure those contexts as memory or preserve compatibility across every live
+revision. Isolated Git branch databases remain the safer durable acceptance
+target.
 
 ### OQ-API — API surface
 

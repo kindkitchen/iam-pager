@@ -123,7 +123,7 @@ invisible to readers and harmless, but no sweeper reclaims them yet. These
 operational limits must remain visible until broader lifecycle and migration
 behavior is delivered.
 
-## QT-PREDEPLOY — Local verification and database release gate
+## QT-PREDEPLOY — Local verification and manual database health
 
 Formatting, lint, type checks, and the complete tests are developer-side push
 checks, not deployment work. A tracked native `pre-push` hook runs
@@ -133,82 +133,59 @@ default. The hook is intentionally installable per clone rather than replacing
 explicitly bypassed, so this is a repository workflow assumption rather than a
 CI-backed guarantee. Deno Deploy performs its normal build once.
 
-`deno task pre-deploy` is a small read-only database release gate. It validates
-the linked durable storage configuration, opens the database attached to the
-current timeline, reads its project/schema metadata, and succeeds only when the
-stable project ID and every declared schema version exactly match code. Missing
-metadata, a wrong project, stale or future versions, pending transitions,
-corruption, unknown schemas, and mixed or memory repository profiles fail before
-routing. The gate never initializes metadata, claims a step, rewrites data, or
-reruns check, tests, or build. Application startup and requests still perform no
-schema mutation. Deno Deploy executes pre-deploy with the selected timeline's
-Production or non-production runtime context, never Build or Local. The latter
-is named Preview in some dashboards and Development in current Deno
-documentation; Local is reserved for `deno ... --tunnel`. Attached Deno KV is
-exposed to the CLI as an injected remote default path and access token; the task
-therefore grants those environment and dynamic endpoint network permissions
-while the checker remains read-only.
+`deno task pre-deploy` is intentionally only an informational `echo`. It always
+succeeds, opens no database, reads no environment, and runs no check, test,
+build, manifest write, or migration. Build, deploy, application startup, and
+requests have no release-manifest dependency. The task exists only because the
+deployment platform has a useful pre-deploy slot that may gain different work
+later.
 
-One authoritative database manifest binds a database to a stable project ID and
-a complete sorted version vector. Version `0` is not stored: it means only that
-this manifest is absent, never “match any existing version.” Existing
-application records remain in the `iam-pager` keyspace and retain their own
-record schema versions; the manifest identifies the project and release-wide
-schema targets without duplicating those fields into every value. The one-time
-version-0 bootstrap cannot prove the identity of unversioned data, so its exact
-remote database URL and project argument are an explicit operator assertion.
-After bootstrap, project or version mismatch must perform no write.
+Database release health is checked manually with `deno task db:check` against an
+explicit `--database` local path or Deno KV connector URL. Remote access reads
+`DENO_KV_ACCESS_TOKEN` only from the environment. Missing target/token,
+connection failures, absent or malformed metadata, wrong project, stale/future
+versions, and missing/unknown schemas produce bounded, descriptive diagnostics
+and the safe next action. A healthy check exits zero; every other state exits
+nonzero. This command is deliberately absent from `verify`, build, deploy, and
+runtime.
 
-Database mutation is a separate local developer command. It requires an exact
-Deno KV connector URL, `DENO_KV_ACCESS_TOKEN`, the expected project ID, and
-complete explicit per-schema `from` and `to` vectors. The request is validated
-against both durable manifest and immutable code registry before the forward
-runner can write. The accepted `api.deno.com` metadata endpoint may return
-dynamic KV data endpoints, so the command's network permission cannot be safely
-limited to the metadata hostname. Every `from` value must equal the manifest (or
-all must be zero when absent), and every `to` value must equal code's target. A
-successful runner publishes the target manifest only after every selected
-transformation is complete; interruption leaves the old manifest stale so
-pre-deploy remains blocked and the same idempotent command can resume. Because
-the manual update must precede deployment of code that requires its target,
-every data-changing helper must remain compatible with the currently running
-release until that release is drained. Destructive changes require staged
-expand/deploy/contract transitions rather than one in-place helper.
+One authoritative database manifest still binds a database to project
+`iam-pager` and a complete sorted `ownership`/`pages`/`sessions` version vector.
+Manifest absence means unversioned; it never wildcard-matches data. Existing
+application values retain and validate their own record schema versions at
+runtime. The current unversioned baseline is record format 1 for every schema.
+Because absent metadata cannot prove project identity, initializing it requires
+both an explicit target and `--confirm=iam-pager`.
 
-The schema-upgrade core remains storage-agnostic and interface-first. A stable
-schema ID has one current version, one target, and contiguous adjacent
-forward-only helpers. Plans and initial states are preflighted before writes;
-claims and completion are exact; missing helpers, gaps, downgrades, future
-states, unknown pending IDs, corruption, and non-converging contention fail
-closed. There are no down steps, inferred diffs, rollback logs, or automatic
-remote writes.
+`deno task db:update` is the only generic schema mutation entrypoint. It derives
+project and target versions from code, first prints the same inspection, and
+refuses wrong-project, future, missing, unknown, unsupported, malformed, or
+unconfirmed state without writing. Developers no longer transcribe complete
+`from` and `to` vectors. Each target bump must retain one adjacent, descriptive,
+repeat-safe migration in `lib/database-schema/current-schema.ts`; registry gaps
+fail before opening a database.
 
-Deno KV is the first manifest/state implementation. Adapter-owned versioned keys
-and versionstamp checks preserve conditional manifest publication, transition
-claims, and matching completion. A claim is resumable coordination, not a
-process lease, so helpers remain repeat-idempotent and concurrency-safe. Deno KV
-types remain outside core contracts and output is bounded to project/schema IDs,
-versions, steps, and outcomes.
+The manual runner intentionally has only a manifest-store interface, a small
+forward migration registry, and one final compare-and-set manifest publication.
+It has no deploy integration, per-schema coordination records, pending claims,
+leases, contention loop, inferred diff, down migration, or rollback framework. A
+failed migration leaves the old manifest and may leave repeat-safe data work to
+rerun. A concurrent manifest change fails publication and requires another
+manual check. Destructive changes still require staged expand/deploy/contract
+releases and an operator-managed backup.
 
-The immutable registry currently declares `ownership`, `sessions`, and `pages`
-at version 1. A remote database without a manifest is version 0 even when its
-legacy application records already use record format 1; the explicit `0 -> 1`
-bootstrap installs coordination state and the manifest without changing those
-records. Later target bumps must retain every required helper.
+The immutable registry currently declares all three schemas at version 1, so
+confirmed initialization writes only the compatible manifest and changes no
+application records. Later releases run retained migrations before publishing
+the new complete vector.
 
 Deno Deploy currently uses Deno 2.5.0 for both builder and runtime, so the
-project toolchain and formatting are pinned to that version. Revision preview
-URLs currently share one preview database and skip pre-deploy; the composition
-root therefore forces all three application repositories to memory whenever
-`DENO_TIMELINE` starts with `preview/`. They are stateless UI/warmup surfaces,
-not durable-schema acceptance. Git branch timelines retain configured storage,
-receive isolated databases, and execute pre-deploy, so database-dependent review
-uses branch URLs. The three backend selectors may apply to All contexts: the
-current Build does not compose storage, revision-preview composition still
-forces memory, and Local deliberately selects the tunnel-provided Deno KV when
-running `deno ... --tunnel`. Operators who require tunneled local process-memory
-repositories instead scope the selectors to Production and the non-production
-runtime context (Preview in some dashboards, Development in Deno documentation).
+project toolchain and formatting are pinned to that version. Runtime storage
+selection now follows configured backend variables directly in every context;
+there is no `DENO_TIMELINE` override. Operators must explicitly keep shared
+revision-preview databases in memory or ensure cross-revision record
+compatibility. Git branch timelines with isolated databases remain the safer
+durable review target.
 
 ## QT-ROUTING — Routing and HTTP behavior
 

@@ -2,6 +2,17 @@
 
 ## 2026-07-20
 
+- Reduced database release handling to an explicit developer workflow. The
+  retained `pre-deploy` task now only echoes a pointer and always succeeds;
+  deploy and runtime no longer inspect schemas or rewrite timeline storage.
+  Replaced the per-schema claim/state/writer system with manual `db:check` and
+  confirmed `db:update` tasks over one manifest interface, a small adjacent
+  repeat-safe migration registry, and final compare-and-set publication. The
+  commands diagnose every missing input and incompatible state with a concrete
+  next action while preserving the existing Deno KV manifest and per-record
+  runtime validation. Updated deployment/storage guidance; all 446 tests,
+  checks, and the production build pass.
+
 - Corrected the manual schema gate after its first live Deno Deploy rollout:
   timeline pre-deploy now permits the injected remote Deno KV path/token and
   dynamic network endpoints, the explicit remote updater permits data endpoints
