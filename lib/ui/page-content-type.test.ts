@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { WebPdfMultipartDecoder } from "../page/pdf-http.ts";
 import {
   page_content_type_options,
+  pdf_delivery_profile_options,
   pdf_publish_draft_violation,
   type PdfPublishDraft,
   prepare_pdf_publish_request,
@@ -29,10 +30,14 @@ function draft(overrides: Partial<PdfPublishDraft> = {}): PdfPublishDraft {
   };
 }
 
-Deno.test("content type options expose markdown and pdf without UI logic", () => {
+Deno.test("content and PDF delivery options stay explicit and UI-independent", () => {
   assertEquals(page_content_type_options.map((option) => option.value), [
     "md-page",
     "pdf",
+  ]);
+  assertEquals(pdf_delivery_profile_options.map((option) => option.value), [
+    "inline",
+    "attachment",
   ]);
 });
 
@@ -118,6 +123,26 @@ Deno.test("advisory violation guides without replacing server authority", () => 
       }),
     ),
     "the canonical endpoint must deliver the PDF inline",
+  );
+  assertEquals(
+    pdf_publish_draft_violation(draft({
+      alternates: [{
+        namespace: "other",
+        page_name: "report/download",
+        delivery_profile: "attachment",
+      }],
+    })),
+    "each PDF endpoint must use the canonical namespace",
+  );
+  assertEquals(
+    pdf_publish_draft_violation(draft({
+      alternates: [{
+        namespace: "ALICE",
+        page_name: "REPORT",
+        delivery_profile: "attachment",
+      }],
+    })),
+    "each PDF endpoint needs a unique locator",
   );
   assertEquals(
     pdf_publish_draft_violation(draft({ alternates: [] })),
