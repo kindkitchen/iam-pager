@@ -84,6 +84,7 @@ Deno.test("pre-deploy schema check rejects memory or incompatible storage", asyn
     const test_environment of [
       environment({}),
       environment({ [SESSION_STORAGE_BACKEND_ENV]: "deno-kv" }),
+      environment({ [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv" }),
     ]
   ) {
     const output = new RecordingOutput();

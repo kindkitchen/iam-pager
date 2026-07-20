@@ -71,8 +71,22 @@ export function parse_database_schema_storage_config(
 ): DatabaseSchemaStorageConfig {
   try {
     const ownership_config = parse_ownership_storage_config(environment);
-    parse_session_storage_config(environment, ownership_config);
-    parse_page_storage_config(environment, ownership_config);
+    const session_config = parse_session_storage_config(
+      environment,
+      ownership_config,
+    );
+    const page_config = parse_page_storage_config(
+      environment,
+      ownership_config,
+    );
+    if (
+      session_config.backend !== ownership_config.backend ||
+      page_config.backend !== ownership_config.backend
+    ) {
+      throw new TypeError(
+        "database schema checks require one consistent storage backend",
+      );
+    }
     return ownership_config.backend === "memory"
       ? { backend: "memory" }
       : ownership_config.path === undefined
