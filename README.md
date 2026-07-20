@@ -165,13 +165,14 @@ The first publishing slice currently provides:
 - the split page/content persistence foundation: immutable `ContentAsset`
   identities are created and read through focused capabilities, while a separate
   `PageAggregate` stores one asset reference and a complete canonical/alternate
-  endpoint set. Atomic capability interfaces cover trial and managed creation,
-  combined revision-bound content, endpoint, access, and tag mutation,
-  immutable-asset-sharing duplication, deletion, and logical-page owner/public
-  queries. The process-local reference passes shared backend-neutral conformance
-  for staging, collision, takeover, concurrency, all-or-none endpoint movement,
-  coherent asset switches, retained shared assets, and one-row projections.
-  `PageService` now uses these capabilities directly for the compatible
+  endpoint set. The named `PageAggregateRepository` composes asset
+  creation/read, endpoint resolution, trial and managed creation, combined
+  revision-bound content/endpoint/access/tag mutation, immutable-asset-sharing
+  duplication, deletion, and logical-page owner/public queries. The
+  process-local reference passes shared backend-neutral conformance for staging,
+  collision, takeover, concurrency, all-or-none endpoint movement, coherent
+  asset switches, retained shared assets, and one-row projections. `PageService`
+  now uses these capabilities directly for the compatible
   one-canonical-inline-endpoint `md-page` flow: validated content is staged as
   an asset, access-only changes retain it, content changes atomically flip the
   reference, and direct delivery resolves the endpoint before reading content.
@@ -194,9 +195,15 @@ The first publishing slice currently provides:
   CAS losses remove staging, while ambiguous commit exceptions retain possibly
   referenced payloads. Cross-instance, contention, corruption, interrupted
   batch, and accepted 16 MiB PDF coverage pass in the adapter-owned v1 keyspace.
-  Page/endpoint aggregate persistence and raw-keyspace compatibility remain
-  incomplete, so the raw-Deno-KV repository stays on its legacy service path and
-  deployment selection is unchanged;
+  `KvPageAggregateRepository` now satisfies the same named aggregate contract in
+  an adjacent v2 keyspace: one strict envelope references one manifest-backed
+  asset, case-normalized endpoint claims and ordered owner/public projections
+  carry its revision, and every visibility mutation uses one native atomic
+  commit. Restart, corruption, retry exhaustion, injected commit loss, all-eight
+  endpoint, and worst-case 87-check transaction coverage pass with 13 checks of
+  Deno KV headroom. Raw-keyspace compatibility and migration remain incomplete,
+  so the raw-Deno-KV repository stays on its legacy service path and deployment
+  selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -371,15 +378,18 @@ wrappers, later-batch interruption, cleanup/retry, missing/truncated state,
 removal, and lifecycle ownership. Every staged write is read back before success
 because a segmented batch may fail after an earlier commit. The explicit `v8-1`
 codec seam round-trips current Markdown/PDF data and decodes the retained
-prototype fixture. Next, this foundation replaces the unselected immutable-asset
-prototype while preserving random staging, SHA-256/codec verification, and
-native manifest publication. The complete aggregate adapter, repeat-safe
-source-preserving raw-keyspace migration, strict bounded upload/direct delivery,
-and the PDF site projection follow. The retained raw-Deno-KV repository remains
-selected and rejects non-compatible endpoint sets without partial mutation.
-Existing raw Deno KV records require explicit compatibility or migration before
-the aggregate adapter can become durable default. Generic raw-binary publishing,
-PDF.js, thumbnails, text extraction, and external storage remain later work.
+prototype fixture. The immutable-asset replacement and complete durable
+aggregate adapter now pass their shared and fault-specific gates. Aggregate
+records live beside raw records in an adapter-owned v2 keyspace and use one
+native commit for the envelope, up to eight endpoint claims, and owner/public
+projections; the worst supported takeover/duplication shape uses 87 of 100 Deno
+KV checks. Repeat-safe source-preserving raw-keyspace migration, controlled
+composition cutover, strict bounded upload/direct delivery, and the PDF site
+projection follow. The retained raw-Deno-KV repository remains selected and
+rejects non-compatible endpoint sets without partial mutation. Existing raw Deno
+KV records require explicit compatibility or migration before the aggregate
+adapter can become durable default. Generic raw-binary publishing, PDF.js,
+thumbnails, text extraction, and external storage remain later work.
 
 ## Local development
 

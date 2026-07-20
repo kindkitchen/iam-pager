@@ -276,7 +276,9 @@ results, so it cannot provide all-or-none page, endpoint, owner, revision,
 index, or manifest visibility. The project gateway exposes a separate
 native-atomic capability backed by `toolbox.db.atomic()` for those explicit
 adapter-owned record commits. Batched atomic remains opt-in; no repository can
-accidentally select it by receiving the concrete wrapper. Deployment continues
-to select the legacy raw Deno KV page repository until unchanged aggregate
-conformance passes and a manual, repeat-safe, source-preserving schema-v1
-migration prevents an existing database from being presented as empty.
+accidentally select it by receiving the concrete wrapper. The durable aggregate
+adapter now passes unchanged conformance and commits its worst supported
+multi-trial, eight-endpoint mutation with 87 of 100 native checks. Deployment
+still selects the legacy raw Deno KV page repository until a manual,
+repeat-safe, source-preserving schema-v1 migration prevents an existing database
+from being presented as empty and the composition cutover is explicit.

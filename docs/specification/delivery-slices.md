@@ -138,10 +138,14 @@ length/SHA-256/codec/domain coherence, and publishes one strict manifest with
 native CAS. Reads reverify all integrity fields; known races clean staging and
 ambiguous commit exceptions retain possibly referenced payloads. Cross-instance,
 contention, corruption, interrupted-batch/retry, legacy-keyspace, and accepted
-16 MiB PDF coverage pass. Native-atomic page/endpoint persistence, aggregate
-conformance, source-preserving raw-keyspace migration, strict bounded HTTP
-upload/delivery, and the secondary PDF site projection follow. Generic binary
-fallback and external storage remain later.
+16 MiB PDF coverage pass. The named aggregate repository now also has a durable
+v2 implementation with manifest-backed envelopes, revision-bearing endpoint and
+owner/public indexes, and one native visibility commit. Shared conformance,
+restart/corruption/retry-exhaustion coverage, all eight endpoints, and the
+worst-case 87-of-100-check transaction pass. Source-preserving raw-keyspace
+migration and controlled cutover still precede strict bounded HTTP
+upload/delivery and the secondary PDF site projection. Generic binary fallback
+and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

@@ -2,6 +2,21 @@
 
 ## 2026-07-20
 
+- Completed the durable page-aggregate checkpoint. Named the composed
+  `PageAggregateRepository` contract and made the service, memory reference, and
+  shared conformance depend on it. Added an unselected
+  `KvPageAggregateRepository` over strict manifest-backed v2 envelopes,
+  revision-bearing case-normalized endpoint claims, and ordered owner/public
+  projections; create, trial replacement, managed takeover, combined update,
+  duplication, and deletion now expose all visibility through one native atomic
+  commit while retaining immutable assets. Shared conformance plus restart,
+  malformed record/index/manifest, retry, exhaustion, eight-endpoint, and
+  worst-case 87-of-100-check transaction coverage pass. The raw Deno KV adapter,
+  production records, schema registry, and deployment selection remain unchanged
+  pending source-preserving migration and controlled cutover. All 533 tests,
+  tracked-source formatting/lint/type checks, frozen dependency resolution, and
+  the production build pass.
+
 - Replaced the unselected Kvdex immutable-asset prototype with an
   interface-backed KV gateway adapter and removed Kvdex code, imports, and lock
   roots. The replacement snapshots input, encodes once with `v8-1`, stages under

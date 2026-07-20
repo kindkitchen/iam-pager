@@ -41,14 +41,15 @@ managed page behavior. It receives a typed actor and resolves namespace
 authority through an interface, while persistence alone owns atomic endpoint,
 ID, and revision conditions. Owner-safe summaries and inspection input exclude
 stewardship IDs and stored derivations. The process-local composition now runs
-this service through focused content-asset/page-aggregate capabilities; the
+this service through the named `PageAggregateRepository` capability; the
 retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
-path until the conforming kv-toolbox-backed aggregate adapter replaces it. The
-service and strict HTTP boundary are still exposed once, and Fresh
-collection/item/direct routes remain thin adapters. Public exploration extends
-that boundary through `PublicPageExplorer`: callers supply optional name queries
-and an opaque continuation, while the selected persistence decides whether the
-MVP scan or a future index satisfies it.
+path until source-preserving migration and controlled cutover select the now-
+conforming kv-toolbox-backed aggregate adapter. The service and strict HTTP
+boundary are still exposed once, and Fresh collection/item/direct routes remain
+thin adapters. Public exploration extends that boundary through
+`PublicPageExplorer`: callers supply optional name queries and an opaque
+continuation, while the selected persistence decides whether the MVP scan or a
+future index satisfies it.
 
 The endpoint foundation exposes a transport/storage-neutral
 `PageEndpointPlanner` interface and default implementation. It accepts one
@@ -60,15 +61,15 @@ inline-only delivery.
 
 The persistence foundation now adds immutable `ContentAsset` identity, creation,
 and read capabilities plus a separate `PageAggregate` with one asset reference
-and a complete endpoint set. Focused capabilities cover endpoint resolution,
-trial/managed creation, one revision-bound combined mutation, duplication, and
-deletion instead of making the web or content type depend on a single broad
-adapter interface. Asset creation is a staging operation; only a fully created
-asset can enter an atomic page/endpoint commit. The memory reference and shared
-backend-neutral conformance cover complete endpoint claims/moves,
-content-reference flips, immutable sharing, concurrency, and retention after
-page deletion. Focused managed/public query capabilities return logical page
-aggregates rather than endpoint rows.
+and a complete endpoint set. The named `PageAggregateRepository` composes the
+focused endpoint resolution, trial/managed creation, revision-bound combined
+mutation, duplication, deletion, and logical query capabilities without making
+web or content types depend on its implementation. Asset creation is a staging
+operation; only a fully created asset can enter an atomic page/endpoint commit.
+The memory reference and shared backend-neutral conformance cover complete
+endpoint claims/moves, content-reference flips, immutable sharing, concurrency,
+and retention after page deletion. Focused managed/public query capabilities
+return logical page aggregates rather than endpoint rows.
 
 `PageService` now stages each validated `md-page` representation as an immutable
 asset before atomic page publication, resolves direct requests through endpoint
@@ -141,8 +142,21 @@ capabilities sort and cursor logical pages by their canonical locator, so
 alternates cannot duplicate rows. `MemoryPageRepository` is now only a
 one-endpoint compatibility projection over that reference, and the composed
 process-local `PageService` detects and uses the focused capabilities directly.
-The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
-complete kv-toolbox-backed aggregate adapter and explicit record migration.
+`KvPageAggregateRepository` is the durable implementation of the same named
+contract. It stores one strict authoritative envelope in an adjacent
+`page-aggregates/v2` keyspace, revision-bearing case-normalized endpoint claims,
+and ordered canonical owner/public projections. Assets publish first; each page
+mutation checks the strict manifest entry and commits the envelope plus every
+endpoint and projection through one native atomic operation. Reads validate
+schema, key/value identity, endpoint completeness, revision coherence, and
+projection eligibility. Conditional retries are bounded, while commit exceptions
+remain ambiguous and are propagated rather than replayed blindly. The maximum
+supported duplication/takeover shape—eight source endpoints and eight
+eight-endpoint trials—uses 87 of Deno KV's 100 atomic checks, leaving 13 checks
+of tested headroom. Shared conformance plus reconstruction, malformed
+record/index, manifest, rejected-commit, exhaustion, and maximum-transaction
+coverage pass. The raw-Deno-KV `PageRepository` remains selected pending
+explicit source-preserving record migration and controlled cutover.
 
 The required Deno KV utility is exactly pinned `@kitsonk/kv-toolbox` 0.31.0. The
 project-owned gateway is implemented, and selected identity, namespace, session,
@@ -585,8 +599,9 @@ Tests should cover the behavior that defines the product:
 - all-or-nothing endpoint-set create/rename, page-wide access, coherent content
   replacement, deletion, and single-row management/exploration;
 - staged kv-toolbox multi-segment payloads never publishing an asset while
-  incomplete or corrupt, plus source-preserving migration from the existing raw
-  Deno KV keyspace;
+  incomplete or corrupt, durable aggregate reconstruction/corruption/contention
+  behavior with all eight endpoints and native-transaction headroom, plus
+  source-preserving migration from the existing raw Deno KV keyspace;
 - strict bounded PDF upload, malformed/non-PDF rejection, safe filenames, and a
   browser preview/download acceptance flow.
 

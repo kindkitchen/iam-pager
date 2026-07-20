@@ -1,47 +1,21 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ContentAsset } from "../content/asset.ts";
-import type {
-  ContentAssetCreator,
-  ContentAssetReader,
-} from "../content/interfaces.ts";
 import type { PageAggregate } from "./aggregate.ts";
-import type {
-  ManagedPageAggregateCreator,
-  ManagedPageAggregateDeleter,
-  ManagedPageAggregateDuplicator,
-  ManagedPageAggregateLister,
-  ManagedPageAggregateUpdater,
-  PageAggregateReader,
-  PageEndpointResolver,
-  PublicPageAggregateExplorer,
-  PublicPageAggregateLister,
-  TrialPageAggregatePublisher,
-} from "./aggregate-interfaces.ts";
+import type { PageAggregateRepository } from "./aggregate-interfaces.ts";
 import type { PageEndpointBinding, PageEndpointSet } from "./endpoint.ts";
 
-export type PageAggregateConformanceSubject =
-  & ContentAssetCreator
-  & ContentAssetReader
-  & PageAggregateReader
-  & PageEndpointResolver
-  & ManagedPageAggregateLister
-  & PublicPageAggregateLister
-  & PublicPageAggregateExplorer
-  & TrialPageAggregatePublisher
-  & ManagedPageAggregateCreator
-  & ManagedPageAggregateUpdater
-  & ManagedPageAggregateDuplicator
-  & ManagedPageAggregateDeleter;
+/** Backwards-compatible conformance name for the named repository contract. */
+export type PageAggregateConformanceSubject = PageAggregateRepository;
 
 export interface PageAggregateRepositoryConformanceOptions {
   /** Implementation name used as the test-name prefix. */
   readonly name: string;
   /** Must return fresh, empty persistence for every test. */
   readonly make_subject: () =>
-    | PageAggregateConformanceSubject
-    | Promise<PageAggregateConformanceSubject>;
+    | PageAggregateRepository
+    | Promise<PageAggregateRepository>;
   readonly teardown?: (
-    subject: PageAggregateConformanceSubject,
+    subject: PageAggregateRepository,
   ) => void | Promise<void>;
 }
 

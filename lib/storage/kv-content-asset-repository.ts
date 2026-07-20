@@ -45,6 +45,13 @@ export interface StoredContentAssetManifest {
   readonly created_at: string;
 }
 
+/** Storage-local manifest snapshot used by atomic page publication. */
+export interface ContentAssetManifestEntryReader {
+  find_content_asset_manifest_entry(
+    content_asset_id: ContentAssetId,
+  ): Promise<Deno.KvEntry<StoredContentAssetManifest> | null>;
+}
+
 /** Storage-local source of random, unreachable payload identities. */
 export interface ContentAssetPayloadIdGenerator {
   generate(): string;
@@ -202,7 +209,10 @@ function manifest_asset(
  * unreachable until one strict manifest is published with native Deno KV CAS.
  */
 export class KvContentAssetRepository
-  implements ContentAssetCreator, ContentAssetReader {
+  implements
+    ContentAssetCreator,
+    ContentAssetReader,
+    ContentAssetManifestEntryReader {
   readonly #kv: KvGateway;
   readonly #codec: ContentDataCodec;
   readonly #payload_id_generator: ContentAssetPayloadIdGenerator;
@@ -220,6 +230,28 @@ export class KvContentAssetRepository
         /^[A-Za-z0-9_-]{1,64}$/.test(this.#codec.encoding_version),
       "codec encoding_version must be a storage-safe identifier",
     );
+  }
+
+  async find_content_asset_manifest_entry(
+    content_asset_id: ContentAssetId,
+  ): Promise<Deno.KvEntry<StoredContentAssetManifest> | null> {
+    require(
+      is_valid_content_asset_id(content_asset_id),
+      "content_asset_id must be a route-safe opaque id",
+    );
+    const entry = await this.#kv.get<unknown>(
+      content_asset_manifest_key(content_asset_id),
+    );
+    if (entry.versionstamp === null) return null;
+    return {
+      key: entry.key,
+      value: deserialize_manifest(
+        content_asset_id,
+        this.#codec.encoding_version,
+        entry,
+      ),
+      versionstamp: entry.versionstamp,
+    };
   }
 
   async create_content_asset(
@@ -311,17 +343,12 @@ export class KvContentAssetRepository
       is_valid_content_asset_id(content_asset_id),
       "content_asset_id must be a route-safe opaque id",
     );
-    const entry = await this.#kv.get<unknown>(
-      content_asset_manifest_key(content_asset_id),
-    );
-    if (entry.versionstamp === null) return null;
-    const manifest = deserialize_manifest(
+    const entry = await this.find_content_asset_manifest_entry(
       content_asset_id,
-      this.#codec.encoding_version,
-      entry,
     );
-    const data = await this.#read_verified_payload(manifest);
-    return manifest_asset(manifest, data);
+    if (entry === null) return null;
+    const data = await this.#read_verified_payload(entry.value);
+    return manifest_asset(entry.value, data);
   }
 
   async #read_verified_payload(
