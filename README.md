@@ -229,8 +229,12 @@ to match the current Deno Deploy builder/runtime formatter.
 and requires its authoritative manifest to identify project `iam-pager` with
 exact `ownership`, `pages`, and `sessions` versions matching code. Missing or
 wrong-project metadata, stale/future versions, pending work, corrupt state,
-unknown schemas, and memory storage fail before routing. It never runs checks,
-tests, another build, or a schema mutation.
+unknown schemas, and mixed or memory storage fail before routing. It never runs
+checks, tests, another build, or a schema mutation. Deno Deploy runs this
+command with the target timeline's application context, not the Build context.
+Its attached Deno KV is presented to the Deno CLI through an injected remote
+default path and access token, so the task permits those variables and network
+access; the checker itself still performs only bounded metadata reads.
 
 Version 0 means only “the database manifest is absent”; it never
 wildcard-matches versioned data. A developer updates an exact remote Deno KV
@@ -248,14 +252,17 @@ deno task db-schema:upgrade \
 
 The complete `from` vector must match the durable manifest, and the complete
 `to` vector must match the immutable code registry. Project or version mismatch
-performs no write. The explicit `0 -> 1` bootstrap is the one unavoidable case
-where unversioned data cannot prove its project identity, so selecting the URL
-and project is the operator's assertion. The guarded writer then reuses the
-forward-only, adjacent, idempotent runner and publishes the new manifest only
-after all helpers complete; interruption keeps deployment blocked and is safe to
-resume. Since the database update happens before the new release can pass its
-gate, data-changing helpers must stay compatible with the currently running
-release; destructive changes require staged expand/deploy/contract releases.
+performs no write. The validated `api.deno.com` connector can return dynamic KV
+data endpoints, so the command permits outbound network access rather than one
+fixed hostname; only the token environment variable is exposed. The explicit
+`0 -> 1` bootstrap is the one unavoidable case where unversioned data cannot
+prove its project identity, so selecting the URL and project is the operator's
+assertion. The guarded writer then reuses the forward-only, adjacent, idempotent
+runner and publishes the new manifest only after all helpers complete;
+interruption keeps deployment blocked and is safe to resume. Since the database
+update happens before the new release can pass its gate, data-changing helpers
+must stay compatible with the currently running release; destructive changes
+require staged expand/deploy/contract releases.
 
 ## Next direction: PDF pages
 
@@ -400,9 +407,9 @@ database to a deployment only makes it available to `Deno.openKv()`; it does not
 select any application backend. An unset backend, or an explicit `memory` value,
 keeps that repository process-local.
 
-For a Deno Deploy production context that must preserve sign-in, namespace
-reservations, and published pages, attach a KV database to that context and set
-all three backend variables there:
+For Deno Deploy production and Git branch timelines that must preserve sign-in,
+namespace reservations, and published pages, attach Deno KV to the app and set
+all three backend variables:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
@@ -411,9 +418,17 @@ IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
 ```
 
 Leave `IAM_PAGER_OWNERSHIP_DENO_KV_PATH` unset on Deno Deploy so every adapter
-uses the attached default database. Scope these values to the production
-context. Changing backend selection does not migrate process-local records or
-sessions; deploy the new configuration and sign in again.
+uses the attached default database. The three backend selectors may be assigned
+to **All** contexts: Production and Git branch timelines use Deno KV, revision
+previews still force their application repositories back to process memory via
+`DENO_TIMELINE=preview/*`, and the current Build does not compose storage.
+**Local** is pulled only by `deno ... --tunnel`; under All it intentionally uses
+the tunnel-provided Deno KV rather than process memory. To keep tunneled local
+development in memory instead, target only Production and the non-production
+runtime context—named Preview in some dashboards and Development in Deno's
+current documentation. Leave the ownership KV path absent in either setup.
+Changing backend selection does not migrate process-local records or sessions;
+deploy the new configuration and sign in again.
 
 For local development or an intentionally ephemeral preview, omit all three
 backend variables or set them explicitly:
@@ -433,10 +448,10 @@ or `not_authenticated` failures from namespace reservation and creator
 publication.
 
 Use a Git branch timeline and its isolated Deno KV database for durable
-authentication/publication review. Deno Deploy currently shares one preview
-database across all revision preview URLs and skips pre-deploy there. Migrating
-that shared database could break older revision URLs, while leaving it stale can
-break newer ones, so `DENO_TIMELINE=preview/*` forces all application
+authentication/publication review. Deno Deploy currently provisions one shared
+preview database across all revision preview URLs and skips pre-deploy there.
+Migrating that shared database could break older revision URLs, while leaving it
+stale can break newer ones, so `DENO_TIMELINE=preview/*` forces all application
 repositories to memory. Revision previews are only stateless UI/warmup surfaces.
 
 A self-hosted durable process can use the three `deno-kv` settings with an

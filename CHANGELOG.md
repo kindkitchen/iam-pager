@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Corrected the manual schema gate after its first live Deno Deploy rollout:
+  timeline pre-deploy now permits the injected remote Deno KV path/token and
+  dynamic network endpoints, the explicit remote updater permits data endpoints
+  returned by its validated metadata URL, and schema checks reject mixed durable
+  and memory repository selections. Deployment guidance now supports assigning
+  backend selectors to All contexts: revision previews retain their
+  process-memory override, Build currently does not compose storage, and Local
+  deliberately selects tunnel-provided Deno KV. Targeted Production plus the
+  non-production runtime context remains available when tunneled local work must
+  stay in memory. All 475 tests, check, and the production build pass; a live
+  timeline redeploy remains the external verification step.
+
 - Reworked database release safety after validating current Deno Deploy timeline
   behavior. Local Git/GitButler pushes and review creation now use an
   installable native pre-push hook for check and all tests; deployment

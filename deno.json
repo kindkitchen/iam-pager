@@ -19,11 +19,11 @@
     },
     "pre-deploy": {
       "description": "Read and verify the attached database schema",
-      "command": "deno run --allow-env=IAM_PAGER_OWNERSHIP_STORAGE_BACKEND,IAM_PAGER_OWNERSHIP_DENO_KV_PATH,IAM_PAGER_SESSION_STORAGE_BACKEND,IAM_PAGER_CONTENT_STORAGE_BACKEND --allow-read --allow-write scripts/pre-deploy/check-db-schema.ts"
+      "command": "deno run --allow-env=IAM_PAGER_OWNERSHIP_STORAGE_BACKEND,IAM_PAGER_OWNERSHIP_DENO_KV_PATH,IAM_PAGER_SESSION_STORAGE_BACKEND,IAM_PAGER_CONTENT_STORAGE_BACKEND,DENO_KV_DEFAULT_PATH,DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/pre-deploy/check-db-schema.ts"
     },
     "db-schema:upgrade": {
       "description": "Apply an explicit guarded remote database-schema update",
-      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net=api.deno.com scripts/database/upgrade-db-schema.ts"
+      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net scripts/database/upgrade-db-schema.ts"
     }
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },

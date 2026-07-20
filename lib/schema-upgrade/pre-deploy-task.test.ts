@@ -31,6 +31,9 @@ Deno.test("pre-deploy only reads attached database schema", () => {
   assertEquals(pre_deploy.command?.includes("deno task test"), false);
   assertEquals(pre_deploy.command?.includes("deno task build"), false);
   assertEquals(pre_deploy.command?.includes("upgrade"), false);
+  assert(pre_deploy.command?.includes("DENO_KV_DEFAULT_PATH"));
+  assert(pre_deploy.command?.includes("DENO_KV_ACCESS_TOKEN"));
+  assert(pre_deploy.command?.includes("--allow-net"));
 });
 
 Deno.test("remote schema mutation is explicit and independent from deploy", () => {
@@ -38,7 +41,8 @@ Deno.test("remote schema mutation is explicit and independent from deploy", () =
   assertEquals(upgrade.dependencies, undefined);
   assert(upgrade.command?.includes("scripts/database/upgrade-db-schema.ts"));
   assert(upgrade.command?.includes("--allow-env=DENO_KV_ACCESS_TOKEN"));
-  assert(upgrade.command?.includes("--allow-net=api.deno.com"));
+  assert(upgrade.command?.includes("--allow-net"));
+  assertEquals(upgrade.command?.includes("--allow-net="), false);
   assertEquals(upgrade.command?.includes("--allow-read"), false);
   assertEquals(upgrade.command?.includes("--allow-write"), false);
 });

@@ -138,10 +138,16 @@ the linked durable storage configuration, opens the database attached to the
 current timeline, reads its project/schema metadata, and succeeds only when the
 stable project ID and every declared schema version exactly match code. Missing
 metadata, a wrong project, stale or future versions, pending transitions,
-corruption, memory storage, and unknown schemas fail before routing. The gate
-never initializes metadata, claims a step, rewrites data, or reruns check,
-tests, or build. Application startup and requests still perform no schema
-mutation.
+corruption, unknown schemas, and mixed or memory repository profiles fail before
+routing. The gate never initializes metadata, claims a step, rewrites data, or
+reruns check, tests, or build. Application startup and requests still perform no
+schema mutation. Deno Deploy executes pre-deploy with the selected timeline's
+Production or non-production runtime context, never Build or Local. The latter
+is named Preview in some dashboards and Development in current Deno
+documentation; Local is reserved for `deno ... --tunnel`. Attached Deno KV is
+exposed to the CLI as an injected remote default path and access token; the task
+therefore grants those environment and dynamic endpoint network permissions
+while the checker remains read-only.
 
 One authoritative database manifest binds a database to a stable project ID and
 a complete sorted version vector. Version `0` is not stored: it means only that
@@ -157,15 +163,17 @@ Database mutation is a separate local developer command. It requires an exact
 Deno KV connector URL, `DENO_KV_ACCESS_TOKEN`, the expected project ID, and
 complete explicit per-schema `from` and `to` vectors. The request is validated
 against both durable manifest and immutable code registry before the forward
-runner can write. Every `from` value must equal the manifest (or all must be
-zero when absent), and every `to` value must equal code's target. A successful
-runner publishes the target manifest only after every selected transformation is
-complete; interruption leaves the old manifest stale so pre-deploy remains
-blocked and the same idempotent command can resume. Because the manual update
-must precede deployment of code that requires its target, every data-changing
-helper must remain compatible with the currently running release until that
-release is drained. Destructive changes require staged expand/deploy/contract
-transitions rather than one in-place helper.
+runner can write. The accepted `api.deno.com` metadata endpoint may return
+dynamic KV data endpoints, so the command's network permission cannot be safely
+limited to the metadata hostname. Every `from` value must equal the manifest (or
+all must be zero when absent), and every `to` value must equal code's target. A
+successful runner publishes the target manifest only after every selected
+transformation is complete; interruption leaves the old manifest stale so
+pre-deploy remains blocked and the same idempotent command can resume. Because
+the manual update must precede deployment of code that requires its target,
+every data-changing helper must remain compatible with the currently running
+release until that release is drained. Destructive changes require staged
+expand/deploy/contract transitions rather than one in-place helper.
 
 The schema-upgrade core remains storage-agnostic and interface-first. A stable
 schema ID has one current version, one target, and contiguous adjacent
@@ -195,7 +203,12 @@ root therefore forces all three application repositories to memory whenever
 `DENO_TIMELINE` starts with `preview/`. They are stateless UI/warmup surfaces,
 not durable-schema acceptance. Git branch timelines retain configured storage,
 receive isolated databases, and execute pre-deploy, so database-dependent review
-uses branch URLs.
+uses branch URLs. The three backend selectors may apply to All contexts: the
+current Build does not compose storage, revision-preview composition still
+forces memory, and Local deliberately selects the tunnel-provided Deno KV when
+running `deno ... --tunnel`. Operators who require tunneled local process-memory
+repositories instead scope the selectors to Production and the non-production
+runtime context (Preview in some dashboards, Development in Deno documentation).
 
 ## QT-ROUTING — Routing and HTTP behavior
 
