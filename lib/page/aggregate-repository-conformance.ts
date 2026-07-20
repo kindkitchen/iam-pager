@@ -9,9 +9,12 @@ import type {
   ManagedPageAggregateCreator,
   ManagedPageAggregateDeleter,
   ManagedPageAggregateDuplicator,
+  ManagedPageAggregateLister,
   ManagedPageAggregateUpdater,
   PageAggregateReader,
   PageEndpointResolver,
+  PublicPageAggregateExplorer,
+  PublicPageAggregateLister,
   TrialPageAggregatePublisher,
 } from "./aggregate-interfaces.ts";
 import type { PageEndpointBinding, PageEndpointSet } from "./endpoint.ts";
@@ -21,6 +24,9 @@ export type PageAggregateConformanceSubject =
   & ContentAssetReader
   & PageAggregateReader
   & PageEndpointResolver
+  & ManagedPageAggregateLister
+  & PublicPageAggregateLister
+  & PublicPageAggregateExplorer
   & TrialPageAggregatePublisher
   & ManagedPageAggregateCreator
   & ManagedPageAggregateUpdater
@@ -822,6 +828,71 @@ export function test_page_aggregate_repository_conformance(
           replaced.page,
         );
       }
+    },
+  );
+
+  conformance_test(
+    "management and public queries return each logical page once",
+    async (subject) => {
+      for (const asset_id of ["asset-public", "asset-private", "asset-trial"]) {
+        await create_asset(subject, asset_id);
+      }
+      await create_managed(
+        subject,
+        "public-page",
+        "asset-public",
+        endpoint_set("Preview", [binding("Download", "attachment")]),
+      );
+      await create_managed(
+        subject,
+        "private-page",
+        "asset-private",
+        endpoint_set("Private"),
+        "private",
+      );
+      const trial = await subject.put_trial_page_aggregate({
+        page_id: "trial-page",
+        endpoint_set: endpoint_set("Trial"),
+        content_asset_id: "asset-trial",
+        now: t1,
+      });
+      assert(trial.ok);
+
+      const managed = await subject.list_managed_page_aggregates({
+        owner_user_id: "owner-1",
+        namespace: "ALICE",
+        page_name_query: "view",
+        access: "public",
+        tag: "reference",
+        limit: 10,
+      });
+      assert(managed.ok);
+      assertEquals(managed.pages.map((page) => page.page_id), ["public-page"]);
+      assertEquals(managed.next_cursor, null);
+
+      const listed = await subject.list_public_page_aggregates({
+        namespace: "alice",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(listed.pages.map((page) => page.page_id), ["public-page"]);
+
+      const explored = await subject.explore_public_page_aggregates({
+        namespace_query: "ali",
+        page_name_query: "preview",
+        tag: "reference",
+        limit: 10,
+      });
+      assert(explored.ok);
+      assertEquals(explored.pages.map((page) => page.page_id), ["public-page"]);
+      assertEquals(
+        await subject.list_public_page_aggregates({
+          namespace: "alice",
+          limit: 10,
+          cursor: "invalid",
+        }),
+        { ok: false, reason: "invalid_cursor" },
+      );
     },
   );
 

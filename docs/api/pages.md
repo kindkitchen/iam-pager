@@ -10,9 +10,12 @@
 > one endpoint is explicitly canonical; each binding supplies an ordinary
 > same-namespace locator and a content-supported `inline` or `attachment`
 > profile. No filename suffix has special routing or delivery meaning. The
-> immutable-asset/atomic-endpoint memory contract now exists below the
-> application layer, but this HTTP contract remains on the composed compatible
-> one-endpoint `md-page` path until the service refactor.
+> immutable-asset/atomic-endpoint contract now backs the composed process-local
+> `PageService`, but this HTTP contract deliberately remains the compatible
+> one-canonical-inline-endpoint `md-page` shape. Explicit endpoint links and
+> binary upload/delivery fields are not exposed yet; the retained raw-Deno-KV
+> repository continues through the legacy compatibility path pending its
+> replacement.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the

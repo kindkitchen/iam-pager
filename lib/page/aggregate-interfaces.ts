@@ -14,6 +14,75 @@ export interface PageEndpointResolver {
   resolve_page_endpoint(locator: Locator): Promise<ResolvedPageEndpoint | null>;
 }
 
+/** Bounded owner projection over logical pages, never endpoint rows. */
+export interface ListManagedPageAggregatesRequest {
+  readonly owner_user_id: string;
+  readonly namespace?: string;
+  readonly page_name_query?: string;
+  readonly access?: PageAccess;
+  readonly tag?: PageTag;
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export type ListManagedPageAggregatesResult =
+  | {
+    readonly ok: true;
+    readonly pages: PageAggregate[];
+    readonly next_cursor: string | null;
+  }
+  | { readonly ok: false; readonly reason: "invalid_cursor" };
+
+export interface ManagedPageAggregateLister {
+  list_managed_page_aggregates(
+    request: ListManagedPageAggregatesRequest,
+  ): Promise<ListManagedPageAggregatesResult>;
+}
+
+/** Bounded public managed-page projection for one namespace. */
+export interface ListPublicPageAggregatesRequest {
+  readonly namespace: string;
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export type ListPublicPageAggregatesResult =
+  | {
+    readonly ok: true;
+    readonly pages: PageAggregate[];
+    readonly next_cursor: string | null;
+  }
+  | { readonly ok: false; readonly reason: "invalid_cursor" };
+
+export interface PublicPageAggregateLister {
+  list_public_page_aggregates(
+    request: ListPublicPageAggregatesRequest,
+  ): Promise<ListPublicPageAggregatesResult>;
+}
+
+/** Bounded cross-namespace public exploration over logical pages. */
+export interface ExplorePublicPageAggregatesRequest {
+  readonly namespace_query?: string;
+  readonly page_name_query?: string;
+  readonly tag?: PageTag;
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export type ExplorePublicPageAggregatesResult =
+  | {
+    readonly ok: true;
+    readonly pages: PageAggregate[];
+    readonly next_cursor: string | null;
+  }
+  | { readonly ok: false; readonly reason: "invalid_cursor" };
+
+export interface PublicPageAggregateExplorer {
+  explore_public_page_aggregates(
+    request: ExplorePublicPageAggregatesRequest,
+  ): Promise<ExplorePublicPageAggregatesResult>;
+}
+
 export interface PutTrialPageAggregateRequest {
   /** Generated identity, used only when no claimed endpoint already has a trial. */
   readonly page_id: PageId;

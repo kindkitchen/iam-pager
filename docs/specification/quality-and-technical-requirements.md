@@ -36,17 +36,19 @@ stable domain boundary is practical:
 A concrete deployment still selects integrations and a public URL mapping, but
 those choices should not require rewriting the corresponding product rules.
 
-The new `PageService` is the HTTP/session-independent application boundary for
-trial and managed page behavior. It receives a typed actor and resolves
-namespace authority through an interface, while repositories alone own atomic
-locator, ID, and revision conditions. Owner-safe summaries and inspection input
-exclude stewardship IDs and stored derivations. This service runs against either
-conforming page repository. The composition root selects the memory or Deno KV
-adapter, exposes the service and strict HTTP boundary once, and Fresh
-collection/item/direct routes remain thin adapters over those interfaces. Public
-exploration extends that boundary through `PublicPageExplorer`: callers supply
-optional name queries and an opaque continuation, while the selected repository
-decides whether the MVP scan or a future index satisfies it.
+`PageService` is the HTTP/session-independent application boundary for trial and
+managed page behavior. It receives a typed actor and resolves namespace
+authority through an interface, while persistence alone owns atomic endpoint,
+ID, and revision conditions. Owner-safe summaries and inspection input exclude
+stewardship IDs and stored derivations. The process-local composition now runs
+this service through focused content-asset/page-aggregate capabilities; the
+retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
+path until the conforming Kvdex adapter replaces it. The service and strict HTTP
+boundary are still exposed once, and Fresh collection/item/direct routes remain
+thin adapters. Public exploration extends that boundary through
+`PublicPageExplorer`: callers supply optional name queries and an opaque
+continuation, while the selected persistence decides whether the MVP scan or a
+future index satisfies it.
 
 The endpoint foundation exposes a transport/storage-neutral
 `PageEndpointPlanner` interface and default implementation. It accepts one
@@ -65,14 +67,17 @@ adapter interface. Asset creation is a staging operation; only a fully created
 asset can enter an atomic page/endpoint commit. The memory reference and shared
 backend-neutral conformance cover complete endpoint claims/moves,
 content-reference flips, immutable sharing, concurrency, and retention after
-page deletion. The current `PageService`, selected repositories, and API
-intentionally remain on their compatible one-endpoint `md-page` path until the
-next refactor step.
+page deletion. Focused managed/public query capabilities return logical page
+aggregates rather than endpoint rows.
 
-That refactor will keep one management/exploration representation while endpoint
-resolution selects an inline or attachment delivery profile and then reads its
-shared content asset. Fresh, `Request`, `Response`, multipart parsing, browser
-preview, Deno KV, and Kvdex types remain outside these contracts.
+`PageService` now stages each validated `md-page` representation as an immutable
+asset before atomic page publication, resolves direct requests through endpoint
+bindings, materializes management/public projections from the aggregate plus its
+asset, and keeps access-only changes on the existing asset. The current JSON and
+HTTP behavior deliberately remains one canonical inline endpoint. Explicit
+endpoint links and endpoint-selected attachment responses are the next
+projection step. Fresh, `Request`, `Response`, multipart parsing, browser
+preview, Deno KV, and Kvdex types remain outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -121,12 +126,16 @@ conditions clean unreferenced new chunks best-effort. Neither ownership nor
 session settings alone imply that pages survive a restart; only the explicit
 page-storage opt-in selects durable page persistence.
 
-`MemoryPageAggregateRepository` is the reference for the new split model. Its
+`MemoryPageAggregateRepository` is the reference for the split model. Its
 synchronous check/set phases atomically update the logical page and every
 case-insensitive endpoint index, while immutable assets are cloned at boundaries
-and never overwritten or deleted by page operations. It is a contract reference,
-not yet the composed runtime store; the existing memory and raw-Deno-KV
-`PageRepository` adapters continue serving the current API during migration.
+and never overwritten or deleted by page operations. Managed/public query
+capabilities sort and cursor logical pages by their canonical locator, so
+alternates cannot duplicate rows. `MemoryPageRepository` is now only a
+one-endpoint compatibility projection over that reference, and the composed
+process-local `PageService` detects and uses the focused capabilities directly.
+The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
+planned Kvdex adapter and explicit record migration.
 
 The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
 implementation detail over Deno KV. It must satisfy the new aggregate

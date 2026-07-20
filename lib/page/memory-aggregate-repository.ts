@@ -16,6 +16,19 @@ import {
   type PageAggregate,
   type ResolvedPageEndpoint,
 } from "./aggregate.ts";
+import {
+  compare_page_sort_keys,
+  decode_managed_page_list_cursor,
+  decode_page_exploration_cursor,
+  decode_page_list_cursor,
+  encode_managed_page_list_cursor,
+  encode_page_exploration_cursor,
+  encode_page_list_cursor,
+  type ManagedPageListCursorScope,
+  page_sort_key,
+  type PageExplorationCursorScope,
+  type PageSortKey,
+} from "./cursor.ts";
 import type {
   CreateManagedPageAggregateRequest,
   CreateManagedPageAggregateResult,
@@ -23,12 +36,21 @@ import type {
   DeleteManagedPageAggregateResult,
   DuplicateManagedPageAggregateRequest,
   DuplicateManagedPageAggregateResult,
+  ExplorePublicPageAggregatesRequest,
+  ExplorePublicPageAggregatesResult,
+  ListManagedPageAggregatesRequest,
+  ListManagedPageAggregatesResult,
+  ListPublicPageAggregatesRequest,
+  ListPublicPageAggregatesResult,
   ManagedPageAggregateCreator,
   ManagedPageAggregateDeleter,
   ManagedPageAggregateDuplicator,
+  ManagedPageAggregateLister,
   ManagedPageAggregateUpdater,
   PageAggregateReader,
   PageEndpointResolver,
+  PublicPageAggregateExplorer,
+  PublicPageAggregateLister,
   PutTrialPageAggregateRequest,
   PutTrialPageAggregateResult,
   TrialPageAggregatePublisher,
@@ -71,6 +93,9 @@ export class MemoryPageAggregateRepository
     ContentAssetReader,
     PageAggregateReader,
     PageEndpointResolver,
+    ManagedPageAggregateLister,
+    PublicPageAggregateLister,
+    PublicPageAggregateExplorer,
     TrialPageAggregatePublisher,
     ManagedPageAggregateCreator,
     ManagedPageAggregateUpdater,
@@ -132,6 +157,132 @@ export class MemoryPageAggregateRepository
     );
     if (endpoint === undefined) return this.#invariant_violation();
     return clone({ page, endpoint });
+  }
+
+  // deno-lint-ignore require-await
+  async list_managed_page_aggregates(
+    request: ListManagedPageAggregatesRequest,
+  ): Promise<ListManagedPageAggregatesResult> {
+    this.#require_owner(request.owner_user_id);
+    require_positive_limit(request.limit);
+    require(
+      request.namespace === undefined || request.namespace !== "",
+      "namespace filter must be non-empty when present",
+    );
+    require_normalized_managed_list_request(request);
+    const scope: ManagedPageListCursorScope = {
+      namespace: request.namespace?.toLowerCase() ?? null,
+      page_name_query: request.page_name_query ?? null,
+      access: request.access ?? null,
+      tag: request.tag ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_managed_page_list_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; page: PageAggregate }[] = [];
+    for (const page of this.#pages.values()) {
+      if (page.stewardship.kind !== "managed") continue;
+      if (page.stewardship.owner_user_id !== request.owner_user_id) continue;
+      const key = aggregate_sort_key(page);
+      if (!matches_managed_list(page, key, scope)) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, page });
+    }
+    candidates.sort((left, right) =>
+      compare_page_sort_keys(left.key, right.key)
+    );
+    const selected = candidates.slice(0, request.limit);
+    return {
+      ok: true,
+      pages: selected.map(({ page }) => clone(page)),
+      next_cursor: candidates.length > request.limit
+        ? encode_managed_page_list_cursor(
+          selected[selected.length - 1].key,
+          scope,
+        )
+        : null,
+    };
+  }
+
+  // deno-lint-ignore require-await
+  async list_public_page_aggregates(
+    request: ListPublicPageAggregatesRequest,
+  ): Promise<ListPublicPageAggregatesResult> {
+    require(request.namespace !== "", "namespace must be non-empty");
+    require_positive_limit(request.limit);
+    const namespace_key = request.namespace.toLowerCase();
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_list_cursor(request.cursor, namespace_key);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; page: PageAggregate }[] = [];
+    for (const page of this.#pages.values()) {
+      if (page.stewardship.kind !== "managed" || page.access !== "public") {
+        continue;
+      }
+      const key = aggregate_sort_key(page);
+      if (key.namespace_key !== namespace_key) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, page });
+    }
+    candidates.sort((left, right) =>
+      compare_page_sort_keys(left.key, right.key)
+    );
+    const selected = candidates.slice(0, request.limit);
+    return {
+      ok: true,
+      pages: selected.map(({ page }) => clone(page)),
+      next_cursor: candidates.length > request.limit
+        ? encode_page_list_cursor(
+          selected[selected.length - 1].key,
+          namespace_key,
+        )
+        : null,
+    };
+  }
+
+  // deno-lint-ignore require-await
+  async explore_public_page_aggregates(
+    request: ExplorePublicPageAggregatesRequest,
+  ): Promise<ExplorePublicPageAggregatesResult> {
+    require_normalized_exploration_request(request);
+    const scope: PageExplorationCursorScope = {
+      namespace_query: request.namespace_query ?? null,
+      page_name_query: request.page_name_query ?? null,
+      tag: request.tag ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_exploration_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; page: PageAggregate }[] = [];
+    for (const page of this.#pages.values()) {
+      if (page.stewardship.kind !== "managed" || page.access !== "public") {
+        continue;
+      }
+      const key = aggregate_sort_key(page);
+      if (!matches_exploration(page, key, scope)) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, page });
+    }
+    candidates.sort((left, right) =>
+      compare_page_sort_keys(left.key, right.key)
+    );
+    const selected = candidates.slice(0, request.limit);
+    return {
+      ok: true,
+      pages: selected.map(({ page }) => clone(page)),
+      next_cursor: candidates.length > request.limit
+        ? encode_page_exploration_cursor(
+          selected[selected.length - 1].key,
+          scope,
+        )
+        : null,
+    };
   }
 
   // deno-lint-ignore require-await
@@ -528,4 +679,88 @@ export class MemoryPageAggregateRepository
   #invariant_violation(): never {
     throw new Error("page aggregate repository invariant violated");
   }
+}
+
+function aggregate_sort_key(page: PageAggregate): PageSortKey {
+  return page_sort_key({
+    page_id: page.page_id,
+    locator: page.endpoint_set.canonical.locator,
+  });
+}
+
+function require_positive_limit(limit: number): void {
+  require(
+    Number.isSafeInteger(limit) && limit >= 1,
+    "limit must be a positive safe integer",
+  );
+}
+
+function require_normalized_managed_list_request(
+  request: ListManagedPageAggregatesRequest,
+): void {
+  if (request.page_name_query !== undefined) {
+    require(
+      request.page_name_query !== "" &&
+        request.page_name_query === request.page_name_query.trim() &&
+        request.page_name_query === request.page_name_query.toLowerCase(),
+      "page_name_query must be a normalized lowercase substring when present",
+    );
+  }
+  require(
+    request.access === undefined || is_valid_page_access(request.access),
+    "access filter must be public or private when present",
+  );
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag filter must be canonical when present",
+  );
+}
+
+function matches_managed_list(
+  page: PageAggregate,
+  key: PageSortKey,
+  scope: ManagedPageListCursorScope,
+): boolean {
+  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.access === null || page.access === scope.access) &&
+    (scope.tag === null || page.tags.includes(scope.tag));
+}
+
+function require_normalized_exploration_request(
+  request: ExplorePublicPageAggregatesRequest,
+): void {
+  require_positive_limit(request.limit);
+  for (
+    const [name, query] of [
+      ["namespace_query", request.namespace_query],
+      ["page_name_query", request.page_name_query],
+    ] as const
+  ) {
+    require(
+      query === undefined ||
+        (query !== "" && query === query.trim() &&
+          query === query.toLowerCase()),
+      `${name} must be a normalized lowercase substring when present`,
+    );
+  }
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag must be canonical when present",
+  );
+}
+
+function matches_exploration(
+  page: PageAggregate,
+  key: PageSortKey,
+  scope: PageExplorationCursorScope,
+): boolean {
+  return (scope.namespace_query === null ||
+    key.namespace_key.includes(scope.namespace_query)) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.tag === null || page.tags.includes(scope.tag));
 }

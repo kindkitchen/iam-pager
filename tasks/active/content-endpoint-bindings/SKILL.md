@@ -7,14 +7,15 @@ tags: [backend, content, domain, interfaces]
 relates: [pdf-content-core, kvdex-content-persistence]
 ---
 
-Active, chain position 1 of 5. Endpoint-set planning plus the split persistence
-foundation are implemented. Immutable content assets are staged behind focused
-create/read capabilities; a logical page aggregate references one asset and one
-complete canonical/alternate endpoint set. Granular atomic mutation contracts,
-the process-local reference, and shared conformance cover complete claims,
-takeover, moves, coherent asset switches, immutable sharing, and deletion.
+Active, chain position 1 of 5. Endpoint planning, immutable assets, atomic page
+aggregates, and logical-page query capabilities are implemented. The
+process-local `PageService` now stages `md-page` assets, mutates aggregate
+references/endpoints, resolves delivery through endpoint bindings, and projects
+one canonical row without JSON/API behavior drift. The memory compatibility
+repository is backed by the split reference; raw Deno KV deliberately remains on
+the legacy service path pending its planned replacement.
 
-The composed service, old repositories, and JSON API deliberately still expose
-one canonical inline `md-page` endpoint. Next: refactor `PageService` and current
-projections onto the split capabilities without behavior drift, then expose safe
-explicit endpoint links. See [[006.decision]] and [[007.decision]].
+Current HTTP/JSON behavior still exposes one canonical inline `md-page`
+endpoint. Next: add safe explicit endpoint links to owner/public projections and
+endpoint-selected direct delivery without allowing aliases into list/search
+cardinality. See [[006.decision]], [[007.decision]], and [[008.log]].

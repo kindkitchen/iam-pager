@@ -108,15 +108,16 @@ not generate or reserve a special path shape. Creation, access, endpoint-set
 change, replacement, duplication, and deletion preserve the complete endpoint
 set without partial visibility.
 
-The first interface-first stage has settled and implemented pure endpoint-set
-planning: one explicit canonical binding plus at most seven alternates, all in
-one case-insensitive namespace, with unique validated locators and only profiles
-declared by the content type. `md-page` is inline-only; PDF will declare inline
-and attachment. The next stage separates immutable content identity and atomic
-page/endpoint persistence behind interfaces, then supplies the memory reference
-and shared conformance suite before the PDF content core, conforming
-Kvdex-backed Deno KV adapter, strict bounded HTTP upload/delivery, and secondary
-site projection. Generic binary fallback and external storage remain later.
+The generic prerequisite now includes pure endpoint-set planning, immutable
+content assets, an atomic page/endpoint aggregate, logical-page query
+capabilities, the process-local reference, and shared persistence conformance.
+`PageService` uses that split path for current `md-page`: validated content is
+staged before publication, each page has one canonical inline endpoint, direct
+resolution joins its current asset, and management/public queries emit one row.
+The JSON contract remains unchanged. Explicit endpoint links come next, followed
+by the PDF content core, conforming Kvdex-backed Deno KV adapter, strict bounded
+HTTP upload/delivery, and secondary site projection. Generic binary fallback and
+external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

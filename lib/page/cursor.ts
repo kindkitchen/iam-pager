@@ -1,5 +1,5 @@
-import type { PageRecord } from "./model.ts";
-import { is_valid_page_id } from "./model.ts";
+import type { Locator } from "../locator/model.ts";
+import { is_valid_page_id, type PageId } from "./model.ts";
 
 /**
  * Logical, locale-independent sort position of a page in owner listings:
@@ -16,7 +16,10 @@ export interface PageSortKey {
   page_id: string;
 }
 
-export function page_sort_key(record: PageRecord): PageSortKey {
+export function page_sort_key(record: {
+  readonly page_id: PageId;
+  readonly locator: Locator;
+}): PageSortKey {
   const page_name = record.locator.page_name;
   return {
     namespace_key: record.locator.namespace.toLowerCase(),

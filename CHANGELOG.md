@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Refactored the process-local `PageService` and current `md-page` flow onto the
+  immutable-asset/page-aggregate capabilities without changing HTTP or JSON
+  behavior. Validated content is staged before page visibility; content changes
+  atomically flip the asset reference; access/tag changes retain it; rename,
+  duplicate, delete, and direct resolution use the split contracts. Added
+  focused managed/public aggregate queries that emit one canonical page row
+  regardless of endpoint count, made `MemoryPageRepository` a compatibility
+  projection over the split reference, and retained the raw-Deno-KV service path
+  until its planned replacement. Aggregate conformance and service coverage now
+  include query cardinality, asset/reference behavior, and legacy compatibility.
+  All 475 tests, check, and the production build pass.
+
 - Implemented the immutable-asset/atomic-persistence foundation for
   `content-endpoint-bindings`. Added opaque immutable `ContentAsset` records and
   focused create/read capabilities; a separate logical `PageAggregate` with one

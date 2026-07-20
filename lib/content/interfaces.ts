@@ -1,6 +1,11 @@
 import type { ContentAsset, ContentAssetId } from "./asset.ts";
 import type { DeliveryPayload, DeliveryProfile } from "./model.ts";
 
+/** Produces opaque route-safe immutable asset identities. */
+export interface ContentAssetIdGenerator {
+  generate(): ContentAssetId;
+}
+
 export type CreateContentAssetResult =
   | { readonly ok: true; readonly asset: ContentAsset }
   | { readonly ok: false; readonly reason: "content_asset_id_conflict" };

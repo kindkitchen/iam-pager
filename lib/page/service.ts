@@ -1,4 +1,15 @@
-import type { ContentTypeHandler } from "../content/interfaces.ts";
+import {
+  type ContentAsset,
+  type ContentAssetId,
+  is_valid_content_asset_id,
+} from "../content/asset.ts";
+import { CryptoContentAssetIdGenerator } from "../content/generators.ts";
+import type {
+  ContentAssetCreator,
+  ContentAssetIdGenerator,
+  ContentAssetReader,
+  ContentTypeHandler,
+} from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
@@ -6,6 +17,24 @@ import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
 } from "../random-name.ts";
+import { page_aggregate_violation, type PageAggregate } from "./aggregate.ts";
+import type {
+  ManagedPageAggregateCreator,
+  ManagedPageAggregateDeleter,
+  ManagedPageAggregateDuplicator,
+  ManagedPageAggregateLister,
+  ManagedPageAggregateUpdater,
+  PageAggregateReader,
+  PageEndpointResolver,
+  PublicPageAggregateExplorer,
+  PublicPageAggregateLister,
+  TrialPageAggregatePublisher,
+} from "./aggregate-interfaces.ts";
+import {
+  DefaultPageEndpointPlanner,
+  type PageEndpointPlanner,
+  type PageEndpointSet,
+} from "./endpoint.ts";
 import {
   max_bulk_managed_pages,
   max_managed_page_name_query_length,
@@ -76,12 +105,30 @@ import {
 } from "./model.ts";
 import { CryptoPageIdGenerator, SystemPageClock } from "./generators.ts";
 
+/** Focused persistence capabilities used by the split page/content flow. */
+export type PageServiceAggregatePersistence =
+  & ContentAssetCreator
+  & ContentAssetReader
+  & PageAggregateReader
+  & PageEndpointResolver
+  & ManagedPageAggregateLister
+  & PublicPageAggregateLister
+  & PublicPageAggregateExplorer
+  & TrialPageAggregatePublisher
+  & ManagedPageAggregateCreator
+  & ManagedPageAggregateUpdater
+  & ManagedPageAggregateDuplicator
+  & ManagedPageAggregateDeleter;
+
 export interface PageServiceOptions {
   engine: LocatorEngine;
-  repository: PageRepository;
+  /** The split capability set is preferred; `PageRepository` remains for Deno KV migration. */
+  repository: PageServiceAggregatePersistence | PageRepository;
   namespace_authority: NamespaceAuthorityResolver;
   handlers: readonly ContentTypeHandler<unknown, unknown>[];
   page_id_generator?: PageIdGenerator;
+  content_asset_id_generator?: ContentAssetIdGenerator;
+  endpoint_planner?: PageEndpointPlanner;
   clock?: PageClock;
   /** Bounded retries for generated-id collisions. Defaults to 3. */
   max_page_id_attempts?: number;
@@ -120,13 +167,16 @@ export class PageService
     PublicPageExplorer,
     PageDeliverer {
   readonly #engine: LocatorEngine;
-  readonly #repository: PageRepository;
+  readonly #aggregate_persistence: PageServiceAggregatePersistence | null;
+  readonly #legacy_repository: PageRepository | null;
   readonly #namespace_authority: NamespaceAuthorityResolver;
   readonly #handlers = new Map<
     string,
     ContentTypeHandler<unknown, unknown>
   >();
   readonly #page_id_generator: PageIdGenerator;
+  readonly #content_asset_id_generator: ContentAssetIdGenerator;
+  readonly #endpoint_planner: PageEndpointPlanner;
   readonly #clock: PageClock;
   readonly #max_page_id_attempts: number;
   readonly #page_name_generator: RandomNameGenerator;
@@ -149,10 +199,20 @@ export class PageService
       throw new Error("max_page_id_attempts must be a positive safe integer");
     }
     this.#engine = options.engine;
-    this.#repository = options.repository;
+    if (is_page_service_aggregate_persistence(options.repository)) {
+      this.#aggregate_persistence = options.repository;
+      this.#legacy_repository = null;
+    } else {
+      this.#aggregate_persistence = null;
+      this.#legacy_repository = options.repository;
+    }
     this.#namespace_authority = options.namespace_authority;
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
+    this.#content_asset_id_generator = options.content_asset_id_generator ??
+      new CryptoContentAssetIdGenerator();
+    this.#endpoint_planner = options.endpoint_planner ??
+      new DefaultPageEndpointPlanner(options.engine);
     this.#clock = options.clock ?? new SystemPageClock();
     const max_page_name_attempts = options.max_page_name_attempts ?? 16;
     if (
@@ -191,7 +251,7 @@ export class PageService
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
       const page_id = this.#generate_page_id();
-      const result = await this.#repository.put_trial({
+      const result = await this.#put_trial({
         page_id,
         locator: request.locator,
         content: prepared.content,
@@ -238,7 +298,7 @@ export class PageService
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
       const page_id = this.#generate_page_id();
-      const result = await this.#repository.create_managed({
+      const result = await this.#create_managed_record({
         page_id,
         locator: request.locator,
         owner_user_id: request.actor.user_id,
@@ -298,7 +358,7 @@ export class PageService
     ) {
       return { ok: false, reason: "invalid_filter" };
     }
-    const listed = await this.#repository.list_managed({
+    const listed = await this.#list_managed_records({
       owner_user_id: request.actor.user_id,
       ...(namespace === undefined ? {} : { namespace }),
       ...(page_name_query === undefined ? {} : { page_name_query }),
@@ -368,7 +428,7 @@ export class PageService
       if (!prepared.ok) return prepared;
       content = prepared.content;
     }
-    const replaced = await this.#repository.replace_managed({
+    const replaced = await this.#replace_managed_record({
       page_id: page.page_id,
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
@@ -424,7 +484,7 @@ export class PageService
         continue;
       }
       now ??= this.#operation_time();
-      const replaced = await this.#repository.replace_managed({
+      const replaced = await this.#replace_managed_record({
         page_id: page.page_id,
         owner_user_id: request.actor.user_id,
         expected_revision: selected.expected_revision,
@@ -481,13 +541,13 @@ export class PageService
     if (existing.revision === Number.MAX_SAFE_INTEGER) {
       return { ok: false, reason: "revision_exhausted" };
     }
-    const renamed = await this.#repository.rename_managed({
+    const renamed = await this.#rename_managed_record({
       page_id: existing.page_id,
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
       locator,
       now: this.#operation_time(),
-    });
+    }, existing.content.content_type);
     if (!renamed.ok) {
       if (renamed.reason === "locator_conflict") {
         return { ok: false, reason: "page_exists" };
@@ -545,14 +605,14 @@ export class PageService
         id_attempt += 1
       ) {
         const page_id = this.#generate_page_id();
-        const duplicated = await this.#repository.duplicate_managed({
+        const duplicated = await this.#duplicate_managed_record({
           source_page_id: source.page_id,
           owner_user_id: request.actor.user_id,
           expected_revision: request.expected_revision,
           page_id,
           locator,
           now,
-        });
+        }, source.content.content_type);
         if (duplicated.ok) {
           const inspection = this.#inspection(duplicated.page);
           return inspection.ok
@@ -593,7 +653,7 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
-    return await this.#repository.delete_managed({
+    return await this.#delete_managed_record({
       page_id: page.page_id,
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
@@ -622,7 +682,7 @@ export class PageService
         });
         continue;
       }
-      const deleted = await this.#repository.delete_managed({
+      const deleted = await this.#delete_managed_record({
         page_id: page.page_id,
         owner_user_id: request.actor.user_id,
         expected_revision: selected.expected_revision,
@@ -642,7 +702,7 @@ export class PageService
     if (!this.#engine.validate(locator).ok) {
       return { ok: false, reason: "not_found" };
     }
-    const page = await this.#repository.find_by_locator(locator);
+    const page = await this.#find_public_record_by_locator(locator);
     if (
       page === null || page.access !== "public" ||
       page_record_violation(page) !== null
@@ -671,7 +731,7 @@ export class PageService
           : "invalid_namespace",
       };
     }
-    const listed = await this.#repository.list_public({
+    const listed = await this.#list_public_records({
       namespace: validation.locator.namespace,
       limit: request.limit,
       cursor: request.cursor,
@@ -697,7 +757,7 @@ export class PageService
     if (namespace_query === null || page_name_query === null || tag === null) {
       return { ok: false, reason: "invalid_query" };
     }
-    const explored = await this.#repository.explore_public({
+    const explored = await this.#explore_public_records({
       ...(namespace_query === undefined ? {} : { namespace_query }),
       ...(page_name_query === undefined ? {} : { page_name_query }),
       ...(tag === undefined ? {} : { tag }),
@@ -716,25 +776,9 @@ export class PageService
     locator: Locator,
     actor: { kind: "guest" } | UserPageActor,
   ) {
-    const page = await this.#repository.find_by_locator(locator);
-    if (page === null) {
-      return { ok: false as const, reason: "not_found" as const };
-    }
-    const violation = page_record_violation(page);
-    if (violation !== null) {
-      if (page.access === "private") {
-        return { ok: false as const, reason: "not_found" as const };
-      }
-      return { ok: false as const, reason: "corrupt" as const };
-    }
-    if (page.access === "private") {
-      if (
-        page.stewardship.kind !== "managed" || actor.kind !== "user" ||
-        actor.user_id !== page.stewardship.owner_user_id
-      ) {
-        return { ok: false as const, reason: "not_found" as const };
-      }
-    }
+    const resolved = await this.#resolve_delivery_record(locator, actor);
+    if (!resolved.ok) return resolved;
+    const page = resolved.page;
     const handler = this.#handlers.get(page.content.content_type);
     if (handler === undefined) {
       return { ok: false as const, reason: "unknown_content_type" as const };
@@ -744,6 +788,399 @@ export class PageService
       page,
       payload: handler.render(page.content.data),
     };
+  }
+
+  async #put_trial(
+    request: Parameters<PageRepository["put_trial"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["put_trial"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.put_trial(request);
+    }
+    const content_asset_id = await this.#stage_content_asset(
+      request.content,
+      request.now,
+    );
+    const result = await this.#aggregate_persistence.put_trial_page_aggregate({
+      page_id: request.page_id,
+      endpoint_set: this.#canonical_inline_endpoint_set(
+        request.locator,
+        request.content.content_type,
+      ),
+      content_asset_id,
+      now: request.now,
+    });
+    if (!result.ok) {
+      if (result.reason === "managed_conflict") {
+        return { ok: false, reason: "managed_conflict" };
+      }
+      return { ok: false, reason: "page_id_conflict" };
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize_aggregate(result.page),
+    };
+  }
+
+  async #create_managed_record(
+    request: Parameters<PageRepository["create_managed"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["create_managed"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.create_managed(request);
+    }
+    const content_asset_id = await this.#stage_content_asset(
+      request.content,
+      request.now,
+    );
+    const result = await this.#aggregate_persistence
+      .create_managed_page_aggregate({
+        page_id: request.page_id,
+        endpoint_set: this.#canonical_inline_endpoint_set(
+          request.locator,
+          request.content.content_type,
+        ),
+        owner_user_id: request.owner_user_id,
+        access: request.access,
+        tags: request.tags,
+        content_asset_id,
+        now: request.now,
+      });
+    if (!result.ok) {
+      if (result.reason === "managed_conflict") {
+        return { ok: false, reason: "managed_conflict" };
+      }
+      return { ok: false, reason: "page_id_conflict" };
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize_aggregate(result.page),
+    };
+  }
+
+  async #list_managed_records(
+    request: Parameters<PageRepository["list_managed"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["list_managed"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.list_managed(request);
+    }
+    const result = await this.#aggregate_persistence
+      .list_managed_page_aggregates(request);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      pages: await Promise.all(
+        result.pages.map((page) => this.#materialize_aggregate(page)),
+      ),
+      next_cursor: result.next_cursor,
+    };
+  }
+
+  async #list_public_records(
+    request: Parameters<PageRepository["list_public"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["list_public"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.list_public(request);
+    }
+    const result = await this.#aggregate_persistence
+      .list_public_page_aggregates(request);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      pages: await Promise.all(
+        result.pages.map((page) => this.#materialize_aggregate(page)),
+      ),
+      next_cursor: result.next_cursor,
+    };
+  }
+
+  async #explore_public_records(
+    request: Parameters<PageRepository["explore_public"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["explore_public"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.explore_public(request);
+    }
+    const result = await this.#aggregate_persistence
+      .explore_public_page_aggregates(request);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      pages: await Promise.all(
+        result.pages.map((page) => this.#materialize_aggregate(page)),
+      ),
+      next_cursor: result.next_cursor,
+    };
+  }
+
+  async #replace_managed_record(
+    request: Parameters<PageRepository["replace_managed"]>[0],
+  ): Promise<Awaited<ReturnType<PageRepository["replace_managed"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.replace_managed(request);
+    }
+    const content_asset_id = request.content === undefined
+      ? undefined
+      : await this.#stage_content_asset(request.content, request.now);
+    const result = await this.#aggregate_persistence
+      .update_managed_page_aggregate({
+        page_id: request.page_id,
+        owner_user_id: request.owner_user_id,
+        expected_revision: request.expected_revision,
+        patch: {
+          access: request.access,
+          ...(request.tags === undefined ? {} : { tags: request.tags }),
+          ...(content_asset_id === undefined ? {} : { content_asset_id }),
+        },
+        now: request.now,
+      });
+    if (!result.ok) {
+      if (
+        result.reason === "not_found" ||
+        result.reason === "revision_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page service persistence: ${result.reason}`);
+    }
+    return { ok: true, page: await this.#materialize_aggregate(result.page) };
+  }
+
+  async #rename_managed_record(
+    request: Parameters<PageRepository["rename_managed"]>[0],
+    content_type: string,
+  ): Promise<Awaited<ReturnType<PageRepository["rename_managed"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.rename_managed(request);
+    }
+    const result = await this.#aggregate_persistence
+      .update_managed_page_aggregate({
+        page_id: request.page_id,
+        owner_user_id: request.owner_user_id,
+        expected_revision: request.expected_revision,
+        patch: {
+          endpoint_set: this.#canonical_inline_endpoint_set(
+            request.locator,
+            content_type,
+          ),
+        },
+        now: request.now,
+      });
+    if (!result.ok) {
+      if (result.reason === "endpoint_conflict") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      if (
+        result.reason === "not_found" ||
+        result.reason === "revision_conflict"
+      ) {
+        return { ok: false, reason: result.reason };
+      }
+      throw new Error(`page service persistence: ${result.reason}`);
+    }
+    return {
+      ok: true,
+      outcome: result.outcome === "updated" ? "renamed" : "replaced_trial",
+      page: await this.#materialize_aggregate(result.page),
+    };
+  }
+
+  async #duplicate_managed_record(
+    request: Parameters<PageRepository["duplicate_managed"]>[0],
+    content_type: string,
+  ): Promise<Awaited<ReturnType<PageRepository["duplicate_managed"]>>> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.duplicate_managed(request);
+    }
+    const result = await this.#aggregate_persistence
+      .duplicate_managed_page_aggregate({
+        source_page_id: request.source_page_id,
+        owner_user_id: request.owner_user_id,
+        expected_revision: request.expected_revision,
+        page_id: request.page_id,
+        endpoint_set: this.#canonical_inline_endpoint_set(
+          request.locator,
+          content_type,
+        ),
+        now: request.now,
+      });
+    if (!result.ok) {
+      if (result.reason === "endpoint_conflict") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      return { ok: false, reason: result.reason };
+    }
+    return {
+      ok: true,
+      outcome: result.outcome,
+      page: await this.#materialize_aggregate(result.page),
+    };
+  }
+
+  #delete_managed_record(
+    request: Parameters<PageRepository["delete_managed"]>[0],
+  ): ReturnType<PageRepository["delete_managed"]> {
+    return this.#aggregate_persistence === null
+      ? this.#legacy_repository!.delete_managed(request)
+      : this.#aggregate_persistence.delete_managed_page_aggregate(request);
+  }
+
+  async #find_public_record_by_locator(
+    locator: Locator,
+  ): Promise<PageRecord | null> {
+    if (this.#aggregate_persistence === null) {
+      return await this.#legacy_repository!.find_by_locator(locator);
+    }
+    const resolved = await this.#aggregate_persistence.resolve_page_endpoint(
+      locator,
+    );
+    if (
+      resolved === null || resolved.page.access !== "public" ||
+      page_aggregate_violation(resolved.page) !== null
+    ) {
+      return null;
+    }
+    const asset = await this.#aggregate_persistence.find_content_asset_by_id(
+      resolved.page.content_asset_id,
+    );
+    return asset === null
+      ? null
+      : this.#materialize_aggregate_with_asset(resolved.page, asset);
+  }
+
+  async #resolve_delivery_record(
+    locator: Locator,
+    actor: { kind: "guest" } | UserPageActor,
+  ): Promise<
+    | { readonly ok: true; readonly page: PageRecord }
+    | { readonly ok: false; readonly reason: "not_found" | "corrupt" }
+  > {
+    if (this.#aggregate_persistence === null) {
+      const page = await this.#legacy_repository!.find_by_locator(locator);
+      if (page === null) return { ok: false, reason: "not_found" };
+      const violation = page_record_violation(page);
+      if (violation !== null) {
+        return page.access === "private"
+          ? { ok: false, reason: "not_found" }
+          : { ok: false, reason: "corrupt" };
+      }
+      if (!can_deliver_page_to(page, actor)) {
+        return { ok: false, reason: "not_found" };
+      }
+      return { ok: true, page };
+    }
+
+    const resolved = await this.#aggregate_persistence.resolve_page_endpoint(
+      locator,
+    );
+    if (resolved === null) return { ok: false, reason: "not_found" };
+    const violation = page_aggregate_violation(resolved.page);
+    if (violation !== null) {
+      return resolved.page.access === "private"
+        ? { ok: false, reason: "not_found" }
+        : { ok: false, reason: "corrupt" };
+    }
+    if (!can_deliver_page_to(resolved.page, actor)) {
+      return { ok: false, reason: "not_found" };
+    }
+    const asset = await this.#aggregate_persistence.find_content_asset_by_id(
+      resolved.page.content_asset_id,
+    );
+    if (asset === null) {
+      return resolved.page.access === "private"
+        ? { ok: false, reason: "not_found" }
+        : { ok: false, reason: "corrupt" };
+    }
+    return {
+      ok: true,
+      page: this.#materialize_aggregate_with_asset(resolved.page, asset),
+    };
+  }
+
+  async #stage_content_asset(
+    content: PageContent,
+    created_at: Date,
+  ): Promise<ContentAssetId> {
+    if (this.#aggregate_persistence === null) {
+      throw new Error("split content staging requires aggregate persistence");
+    }
+    for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt += 1) {
+      const content_asset_id = this.#content_asset_id_generator.generate();
+      if (!is_valid_content_asset_id(content_asset_id)) {
+        throw new Error(
+          "ContentAssetIdGenerator produced an invalid content asset id",
+        );
+      }
+      const asset: ContentAsset = {
+        content_asset_id,
+        content_type: content.content_type,
+        data: content.data,
+        meta: content.meta,
+        created_at,
+      };
+      const result = await this.#aggregate_persistence.create_content_asset(
+        asset,
+      );
+      if (result.ok) return result.asset.content_asset_id;
+    }
+    throw new Error("content asset id generation exhausted");
+  }
+
+  async #materialize_aggregate(page: PageAggregate): Promise<PageRecord> {
+    if (this.#aggregate_persistence === null) {
+      throw new Error("aggregate materialization requires split persistence");
+    }
+    const asset = await this.#aggregate_persistence.find_content_asset_by_id(
+      page.content_asset_id,
+    );
+    if (asset === null) {
+      throw new Error("page aggregate references a missing content asset");
+    }
+    return this.#materialize_aggregate_with_asset(page, asset);
+  }
+
+  #materialize_aggregate_with_asset(
+    page: PageAggregate,
+    asset: ContentAsset,
+  ): PageRecord {
+    return {
+      page_id: page.page_id,
+      locator: structuredClone(page.endpoint_set.canonical.locator),
+      stewardship: structuredClone(page.stewardship),
+      access: page.access,
+      tags: [...page.tags],
+      revision: page.revision,
+      content: {
+        content_type: asset.content_type,
+        data: structuredClone(asset.data),
+        meta: structuredClone(asset.meta),
+      },
+      created_at: new Date(page.created_at),
+      updated_at: new Date(page.updated_at),
+    };
+  }
+
+  #canonical_inline_endpoint_set(
+    locator: Locator,
+    content_type: string,
+  ): PageEndpointSet {
+    const handler = this.#handlers.get(content_type);
+    if (handler === undefined) {
+      throw new Error(
+        `unknown content type during endpoint planning: ${content_type}`,
+      );
+    }
+    const planned = this.#endpoint_planner.plan({
+      endpoint_set: {
+        canonical: { locator, delivery_profile: "inline" },
+      },
+      supported_delivery_profiles: handler.supported_delivery_profiles,
+    });
+    if (!planned.ok) {
+      throw new Error(
+        `canonical inline endpoint planning failed: ${planned.reason}`,
+      );
+    }
+    return planned.endpoint_set;
   }
 
   #prepare_content(command: PageContentCommand): ContentPreparationResult {
@@ -768,7 +1205,25 @@ export class PageService
     page_id: string,
   ): Promise<PageRecord | null> {
     if (!is_valid_page_id(page_id)) return null;
-    const page = await this.#repository.find_by_id(page_id);
+    if (this.#aggregate_persistence !== null) {
+      const aggregate = await this.#aggregate_persistence
+        .find_page_aggregate_by_id(page_id);
+      if (
+        aggregate === null || aggregate.stewardship.kind !== "managed" ||
+        aggregate.stewardship.owner_user_id !== actor.user_id
+      ) {
+        return null;
+      }
+      const authority = await this.#namespace_authority.resolve(
+        actor,
+        aggregate.endpoint_set.canonical.locator.namespace,
+      );
+      return authority.kind === "owned"
+        ? await this.#materialize_aggregate(aggregate)
+        : null;
+    }
+
+    const page = await this.#legacy_repository!.find_by_id(page_id);
     if (
       page === null || page.stewardship.kind !== "managed" ||
       page.stewardship.owner_user_id !== actor.user_id
@@ -864,6 +1319,35 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function can_deliver_page_to(
+  page: Pick<PageAggregate, "access" | "stewardship">,
+  actor: { kind: "guest" } | UserPageActor,
+): boolean {
+  return page.access !== "private" ||
+    (page.stewardship.kind === "managed" && actor.kind === "user" &&
+      actor.user_id === page.stewardship.owner_user_id);
+}
+
+function is_page_service_aggregate_persistence(
+  value: PageServiceAggregatePersistence | PageRepository,
+): value is PageServiceAggregatePersistence {
+  const candidate = value as unknown as Record<string, unknown>;
+  return [
+    "create_content_asset",
+    "find_content_asset_by_id",
+    "find_page_aggregate_by_id",
+    "resolve_page_endpoint",
+    "list_managed_page_aggregates",
+    "list_public_page_aggregates",
+    "explore_public_page_aggregates",
+    "put_trial_page_aggregate",
+    "create_managed_page_aggregate",
+    "update_managed_page_aggregate",
+    "duplicate_managed_page_aggregate",
+    "delete_managed_page_aggregate",
+  ].every((name) => typeof candidate[name] === "function");
 }
 
 function is_valid_bulk_selection(
