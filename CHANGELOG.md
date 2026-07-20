@@ -2,6 +2,14 @@
 
 ## 2026-07-21
 
+- Completed the public PDF site wrapper and the PDF site task. Public views now
+  derive the canonical native preview and attachment downloads from returned
+  endpoint profiles, embed the PDF without serializing its bytes, and retain
+  Back, direct-open, download, and unsupported-browser fallback navigation.
+  Exploration coverage verifies one logical PDF row with content type and size;
+  responsive Chromium mobile/desktop acceptance, all 579 tests, tracked-source
+  checks, and the production build pass.
+
 - Added typed page API failure presentation and the creator PDF management
   slice. Publishing now distinguishes endpoint, PDF, size, authority, stale, and
   deployment failures without rendering unknown response detail. Creator rows

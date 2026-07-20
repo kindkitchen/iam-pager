@@ -83,7 +83,8 @@ select:focus,
 textarea:focus,
 button:focus,
 a:focus,
-iframe:focus {
+iframe:focus,
+object:focus {
   outline: 3px solid rgb(49 127 78 / 35%);
   outline-offset: 2px;
 }
@@ -1483,9 +1484,15 @@ h2 {
 
 .public-page-actions a,
 .public-content-fallback a,
+.public-pdf-alternative a,
 .public-page-related a {
   color: #1c5333;
   font-weight: 750;
+}
+
+.public-page-actions a,
+.public-content-fallback a {
+  overflow-wrap: anywhere;
 }
 
 .public-content-frame {
@@ -1504,7 +1511,8 @@ h2 {
   background: #e9eee8;
 }
 
-.public-content-frame iframe {
+.public-content-frame iframe,
+.public-pdf-preview object {
   display: block;
   width: 100%;
   min-height: min(65rem, 72vh);
@@ -1514,6 +1522,20 @@ h2 {
 
 .public-content-fallback {
   padding: clamp(2rem, 6vw, 4rem);
+  text-align: center;
+}
+
+.public-content-fallback a + a {
+  margin-left: 1rem;
+}
+
+.public-pdf-alternative {
+  margin: 0;
+  border-top: 1px solid #c9cec7;
+  padding: 0.75rem 1rem;
+  color: #59635c;
+  background: #f7f8f4;
+  font-size: 0.9rem;
   text-align: center;
 }
 

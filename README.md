@@ -366,13 +366,13 @@ Runtime repositories still reject unknown per-record schema versions. That local
 validation is independent from the manual release manifest and remains the final
 corruption/incompatibility guard while handling data.
 
-## Next direction: PDF pages
+## PDF pages
 
-The next chain first separates logical pages, immutable content assets, and
-delivery endpoint bindings. One asset may back multiple locators while the page
-keeps one ID, revision, access policy, management row, and exploration row. For
-PDF, one configured endpoint can use `application/pdf` with inline disposition
-and another configured endpoint can serve the same bytes as an attachment. The
+The PDF chain separates logical pages, immutable content assets, and delivery
+endpoint bindings. One asset may back multiple locators while the page keeps one
+ID, revision, access policy, management row, and exploration row. For PDF, one
+configured endpoint can use `application/pdf` with inline disposition and
+another configured endpoint can serve the same bytes as an attachment. The
 publisher supplies both valid locators and each delivery profile. A path ending
 in `.pdf` is only an example and has no special routing, generation, or delivery
 semantics; behavior is stored on the endpoint binding.
@@ -433,20 +433,26 @@ alternate. Direct PDF responses provide opaque strong validators,
 endpoint-selected disposition over identical bytes. The PDF site projection now
 publishes through the strict multipart boundary, presents typed API failures,
 and gives creators bounded metadata plus profile-derived preview/download and
-revision-bound replacement controls. The public browser-native wrapper follows.
-The readiness check runs only when v2 storage is deliberately selected and never
-migrates at startup or deploy. Generic raw-binary publishing, PDF.js,
-thumbnails, text extraction, and external storage remain later work.
+revision-bound replacement controls. Public site views embed the canonical
+inline endpoint in the browser-native PDF viewer while keeping Back,
+direct-open, and attachment-download links outside it; unsupported browsers
+receive the same explicit fallback links. Public exploration remains one logical
+row with PDF content type and size regardless of endpoint count. The readiness
+check runs only when v2 storage is deliberately selected and never migrates at
+startup or deploy. Generic raw-binary publishing, PDF.js, thumbnails, text
+extraction, and external storage remain later work.
 
 ## Local development
 
 Run `deno task dev`, open `http://localhost:5173`, browse or search current
-public creator pages, draft Markdown and CSS with the live preview, publish the
-page, and use the resulting link to open its direct URL. Prefix that locator
-with `/site` to open the wrapped public view. The development task explicitly
-sets `IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
-`iam_pager_session_local` cookie for localhost. It also explicitly selects the
-local gauth preset with the localhost Google callback and mock-consent URLs.
+public creator pages, draft Markdown and CSS or select a bounded PDF, publish
+the page, and use the resulting link to open its direct URL. Prefix that locator
+with `/site` to open the wrapped public view; PDF views retain direct preview
+and attachment-download fallbacks around the browser-native viewer. The
+development task explicitly sets `IAM_PAGER_SESSION_COOKIE_MODE=local`,
+selecting the non-secure `iam_pager_session_local` cookie for localhost. It also
+explicitly selects the local gauth preset with the localhost Google callback and
+mock-consent URLs.
 
 The site's `Sign in with Google` header action starts the local sign-in flow,
 and the package-rendered consent screen returns through the callback to the
