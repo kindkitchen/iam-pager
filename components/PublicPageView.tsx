@@ -41,7 +41,14 @@ export function PublicPageViewPage(
           Public content at <strong>{view.page.locator.namespace}</strong>
         </p>
         <nav class="public-page-actions" aria-label="Page actions">
-          <a href={view.direct_path}>Open direct content</a>
+          <a href={view.page.endpoints.canonical.path}>
+            Open canonical {view.page.endpoints.canonical.delivery_profile}
+          </a>
+          {view.page.endpoints.alternates.map((endpoint) => (
+            <a key={endpoint.path} href={endpoint.path}>
+              Open alternate {endpoint.delivery_profile}: {endpoint.path}
+            </a>
+          ))}
           {view.default_page !== null && (
             <a href={view.default_page.site_path}>Creator default page</a>
           )}
@@ -67,7 +74,9 @@ export function PublicPageViewPage(
                 ({view.preview.size_bytes}{" "}
                 bytes). Open the direct content to view or download it.
               </p>
-              <a href={view.direct_path}>Open direct content</a>
+              <a href={view.page.endpoints.canonical.path}>
+                Open canonical {view.page.endpoints.canonical.delivery_profile}
+              </a>
             </div>
           )}
       </section>

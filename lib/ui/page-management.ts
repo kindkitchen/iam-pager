@@ -1,4 +1,10 @@
-import type { Locator } from "../locator/model.ts";
+import { type Locator, locator_key } from "../locator/model.ts";
+import {
+  is_safe_page_path,
+  page_endpoint_set_violation,
+  type PageEndpointLink,
+  type PageEndpointLinks,
+} from "../page/endpoint.ts";
 import { format_page_etag, parse_page_etag } from "../page/etag.ts";
 import {
   type ManagedPageLister,
@@ -23,6 +29,7 @@ export interface PageManagementSummary {
   readonly page_id: string;
   readonly locator: Locator;
   readonly path: string;
+  readonly endpoints: PageEndpointLinks;
   readonly access: PageAccess;
   readonly content_type: string;
   readonly size_bytes: number;
@@ -101,6 +108,7 @@ export function present_management_summary(
     page_id: page.page_id,
     locator: structuredClone(page.locator),
     path: page.path,
+    endpoints: structuredClone(page.endpoints),
     access: page.access,
     content_type: page.content_type,
     size_bytes: page.size_bytes,
@@ -126,6 +134,7 @@ export function management_summary_from_api(
     page_id,
     locator,
     path,
+    endpoints,
     access,
     content_type,
     size_bytes,
@@ -135,10 +144,13 @@ export function management_summary_from_api(
     etag,
     management_url,
   } = record;
+  const parsed_endpoints = management_endpoint_links(endpoints);
   if (
     typeof page_id !== "string" || !is_valid_page_id(page_id) ||
-    !is_management_locator(locator) ||
-    typeof path !== "string" || !path.startsWith("/") ||
+    !is_management_locator(locator) || !is_safe_page_path(path) ||
+    parsed_endpoints === null ||
+    locator_key(parsed_endpoints.canonical.locator) !== locator_key(locator) ||
+    parsed_endpoints.canonical.path !== path ||
     (access !== "public" && access !== "private") ||
     typeof content_type !== "string" || content_type === "" ||
     typeof size_bytes !== "number" || !Number.isSafeInteger(size_bytes) ||
@@ -156,6 +168,7 @@ export function management_summary_from_api(
     page_id,
     locator: structuredClone(locator),
     path,
+    endpoints: parsed_endpoints,
     access,
     content_type,
     size_bytes,
@@ -479,6 +492,62 @@ export function format_size_bytes(size_bytes: number): string {
   const kib = size_bytes / 1024;
   if (kib < 1024) return `${format_scaled(kib)} KiB`;
   return `${format_scaled(kib / 1024)} MiB`;
+}
+
+function management_endpoint_links(
+  value: unknown,
+): PageEndpointLinks | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.alternates)) return null;
+  const canonical = management_endpoint_link(record.canonical);
+  const alternates = record.alternates.map(management_endpoint_link);
+  if (canonical === null || alternates.some((link) => link === null)) {
+    return null;
+  }
+  const typed_alternates = alternates as PageEndpointLink[];
+  if (
+    page_endpoint_set_violation({
+      canonical: {
+        locator: canonical.locator,
+        delivery_profile: canonical.delivery_profile,
+      },
+      alternates: typed_alternates.map((link) => ({
+        locator: link.locator,
+        delivery_profile: link.delivery_profile,
+      })),
+    }) !== null
+  ) {
+    return null;
+  }
+  const paths = [canonical.path, ...typed_alternates.map((link) => link.path)];
+  if (new Set(paths).size !== paths.length) return null;
+  return {
+    canonical: structuredClone(canonical),
+    alternates: structuredClone(typed_alternates),
+  };
+}
+
+function management_endpoint_link(value: unknown): PageEndpointLink | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    !is_management_locator(record.locator) ||
+    !is_safe_page_path(record.path) ||
+    (record.delivery_profile !== "inline" &&
+      record.delivery_profile !== "attachment")
+  ) {
+    return null;
+  }
+  return {
+    locator: structuredClone(record.locator),
+    path: record.path,
+    delivery_profile: record.delivery_profile,
+  };
 }
 
 function is_management_locator(value: unknown): value is Locator {

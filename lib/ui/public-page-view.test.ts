@@ -24,6 +24,10 @@ function summary(
   return {
     locator,
     path,
+    endpoints: {
+      canonical: { locator, path, delivery_profile: "inline" },
+      alternates: [],
+    },
     stewardship,
     content_type: "md-page",
     media_type: "text/html; charset=utf-8",

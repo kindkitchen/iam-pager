@@ -88,9 +88,10 @@ ownership guarantee.
 
 Content can have different formats. It may be HTML, text, a PDF, an image, or
 another supported type. Depending on the endpoint profile, a direct URL may
-display the content or download it. PDF is the next planned type: one stored PDF
-may have user-configured browser-native inline and attachment endpoints at
-independently chosen valid locators.
+display the content or download it. The transport-independent PDF content core
+is implemented; binary upload and user-configured endpoint commands remain
+planned. One stored PDF may have browser-native inline and attachment endpoints
+at independently chosen valid locators.
 
 ## Current implementation
 
@@ -174,9 +175,19 @@ The first publishing slice currently provides:
   one-canonical-inline-endpoint `md-page` flow: validated content is staged as
   an asset, access-only changes retain it, content changes atomically flip the
   reference, and direct delivery resolves the endpoint before reading content.
-  The raw-Deno-KV repository stays on a legacy service compatibility path until
-  the planned conforming adapter and migration;
+  Owner/public summaries expose a complete safe canonical/alternate link set,
+  the site renders configured alternates without creating extra page rows, and
+  direct HTTP disposition follows the resolved binding profile rather than a
+  suffix or filename hint. The raw-Deno-KV repository stays on a legacy service
+  compatibility path until the planned conforming adapter and migration;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
+- a transport-independent `pdf` handler, registered with the page service, that
+  accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
+  supports inline and attachment profiles, validates a portable filename of at
+  most 255 UTF-8 bytes, and exposes bounded management metadata without bytes.
+  It accepts PDF 1.0–1.7 and 2.0 only when the header is at byte zero and a
+  terminal `startxref`/`%%EOF` points to an xref table or xref-stream object;
+  this lightweight screen is not sanitization or malware certification;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with soft in-field four-word random locator helpers, a collapsible
   Page workspace with exclusive Markdown/CSS source panes, split or full-width
@@ -206,8 +217,10 @@ The first publishing slice currently provides:
   for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
   length, cache, disposition, and active-content isolation headers;
-- prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, and 16
-  KiB of CSS (all content limits are measured as UTF-8 bytes).
+- prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, 16 KiB
+  of CSS (text limits are measured as UTF-8 bytes), and 16 MiB per PDF at the
+  transport-independent content boundary. The current JSON API cannot upload PDF
+  bytes.
 
 Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
@@ -303,24 +316,34 @@ publisher supplies both valid locators and each delivery profile. A path ending
 in `.pdf` is only an example and has no special routing, generation, or delivery
 semantics; behavior is stored on the endpoint binding.
 
-The first three foundation steps are implemented. Endpoint intent has one
-explicit canonical binding plus at most seven alternates, all at unique valid
-locators in one case-insensitive namespace. The pure planner applies the content
-type's declared delivery-profile support, preserves publisher spelling, and
-gives alternate input order no meaning; `md-page` declares inline-only delivery.
-Immutable `ContentAsset` identity/read/create capabilities sit beside a
-`PageAggregate` whose content reference and complete endpoint set change through
-focused atomic persistence capabilities. Logical-page query capabilities keep
-aliases out of managed/public rows. The process-local reference passes shared
-backend-neutral conformance for staged assets, all-or-none endpoint claims and
-moves, concurrent winners, coherent asset switches, safe immutable sharing,
-endpoint-wide deletion, and one-row query cardinality.
+The generic foundation and first transport-independent PDF handler are
+implemented. Endpoint intent has one explicit canonical binding plus at most
+seven alternates, all at unique valid locators in one case-insensitive
+namespace. The pure planner applies the content type's declared delivery-profile
+support, preserves publisher spelling, and gives alternate input order no
+meaning; `md-page` declares inline-only delivery while `pdf` declares inline and
+attachment delivery. Immutable `ContentAsset` identity/read/create capabilities
+sit beside a `PageAggregate` whose content reference and complete endpoint set
+change through focused atomic persistence capabilities. Logical-page query
+capabilities keep aliases out of managed/public rows. The process-local
+reference passes shared backend-neutral conformance for staged assets,
+all-or-none endpoint claims and moves, concurrent winners, coherent asset
+switches, safe immutable sharing, endpoint-wide deletion, and one-row query
+cardinality.
 
 `PageService` and the process-local `md-page` composition now run on those split
-contracts without changing JSON/API behavior. The remaining active-task step is
-to expose safe explicit endpoint links while keeping one page projection. PDF
-content logic, a conforming Kvdex-backed Deno KV page/content adapter, strict
-bounded upload/direct delivery, and the site projection follow. The retained
+contracts. Owner and public summaries retain canonical `locator`/`path`
+compatibility fields and add a complete safe `endpoints` link set; management,
+wrapped-view, and exploration projections preserve one logical row while showing
+alternates. Direct delivery returns the exact resolved binding, rejects a
+profile unsupported by the content handler, and maps that profile—not a path
+suffix or filename hint—to inline or attachment disposition. This completes the
+content/endpoint prerequisite. The PDF content core now validates and detaches
+bounded bytes and safe filename metadata, derives fixed delivery metadata, and
+keeps bytes out of management inspection. Generic application commands still
+need complete endpoint-set inputs that preserve alternates through rename and
+duplication. A conforming Kvdex-backed Deno KV page/content adapter, strict
+bounded upload/direct delivery, and the PDF site projection follow. The retained
 raw-Deno-KV repository still uses the legacy compatibility path. Kvdex remains
 inside the durable adapter. Its segmented blob writes do not by themselves
 preserve atomic visibility, so immutable assets must be fully staged before page

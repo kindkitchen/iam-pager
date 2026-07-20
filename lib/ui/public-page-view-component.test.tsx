@@ -19,6 +19,18 @@ Deno.test("public page wrapper isolates creator HTML and renders platform links"
     page: {
       locator: { namespace: "Alice", page_name: "notes" },
       path: "/Alice/notes",
+      endpoints: {
+        canonical: {
+          locator: { namespace: "Alice", page_name: "notes" },
+          path: "/Alice/notes",
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Alice", page_name: "notes-download" },
+          path: "/Alice/notes-download",
+          delivery_profile: "attachment",
+        }],
+      },
       stewardship: "managed",
       content_type: "md-page",
       media_type: "text/html; charset=utf-8",
@@ -50,6 +62,8 @@ Deno.test("public page wrapper isolates creator HTML and renders platform links"
   assertStringIncludes(html, "sandbox");
   assertStringIncludes(html, "srcdoc=");
   assertStringIncludes(html, 'href="/Alice/notes"');
+  assertStringIncludes(html, 'href="/Alice/notes-download"');
+  assertStringIncludes(html, "Open alternate attachment");
   assertStringIncludes(html, 'href="/site/Alice"');
   assertStringIncludes(html, 'href="/site/Alice/about"');
   assertStringIncludes(html, "Creator content");

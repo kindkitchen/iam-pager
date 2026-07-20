@@ -103,24 +103,26 @@ Deno.test("render neutralizes style-tag breakout in css", () => {
   assertFalse((payload.body as string).includes("<script"));
 });
 
-Deno.test("to_input returns editable source and never derived html", () => {
-  const with_css = handler.to_input(
+Deno.test("to_management returns editable source and never derived html", () => {
+  const with_css = handler.to_management(
     handler.derive({ md: "# Hi", css: "body { color: red; }" }),
   );
   assertEquals(with_css, { md: "# Hi", css: "body { color: red; }" });
-  const without_css = handler.to_input(handler.derive({ md: "# Hi" }));
+  const without_css = handler.to_management(handler.derive({ md: "# Hi" }));
   assertEquals(without_css, { md: "# Hi" });
   assertFalse("html" in without_css);
 });
 
-Deno.test("validate accepts to_input output and preserves the source", () => {
+Deno.test("validate accepts markdown management output and preserves source", () => {
   for (
     const input of [
       { md: "# Round trip <script>alert(1)</script>" },
       { md: "plain", css: "</style>body { color: red; }" },
     ]
   ) {
-    const result = handler.validate(handler.to_input(handler.derive(input)));
+    const result = handler.validate(
+      handler.to_management(handler.derive(input)),
+    );
     assert(result.ok);
     assertEquals(result.value, input);
   }

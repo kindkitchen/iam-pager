@@ -1,5 +1,6 @@
 import type { DeliveryPayload } from "../content/model.ts";
 import type { Locator } from "../locator/model.ts";
+import type { PageEndpointLink, PageEndpointLinks } from "./endpoint.ts";
 import type {
   PageAccess,
   PageContent,
@@ -265,8 +266,10 @@ export interface PageRepository {
  * discovery metadata and trial summaries always carry an empty set.
  */
 export interface PublicPageSummary {
+  /** Canonical compatibility fields; complete delivery links are in `endpoints`. */
   locator: Locator;
   path: string;
+  endpoints: PageEndpointLinks;
   stewardship: "trial" | "managed";
   content_type: string;
   media_type: string;
@@ -279,8 +282,10 @@ export interface PublicPageSummary {
 /** Owner-safe management representation; stewardship and source are omitted. */
 export interface PageSummary {
   page_id: PageId;
+  /** Canonical compatibility fields; complete delivery links are in `endpoints`. */
   locator: Locator;
   path: string;
+  endpoints: PageEndpointLinks;
   access: PageAccess;
   content_type: string;
   size_bytes: number;
@@ -293,6 +298,7 @@ export interface PageSummary {
 export interface ManagedPageInspection extends PageSummary {
   content: {
     content_type: string;
+    /** Handler-owned bounded projection; binary types must omit payload bytes. */
     input: unknown;
   };
 }
@@ -561,7 +567,13 @@ export type ExplorePublicPagesResult =
   | { ok: false; reason: "invalid_query" | "invalid_cursor" };
 
 export type DeliverPageResult =
-  | { ok: true; page: PageRecord; payload: DeliveryPayload }
+  | {
+    ok: true;
+    page: PageRecord;
+    /** Exact resolved binding; HTTP disposition is selected from its profile. */
+    endpoint: PageEndpointLink;
+    payload: DeliveryPayload;
+  }
   | {
     ok: false;
     reason: "not_found" | "unknown_content_type" | "corrupt";

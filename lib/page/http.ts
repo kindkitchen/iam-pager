@@ -1179,6 +1179,10 @@ function present_summary(page: PageSummary, managed: boolean) {
     page_id: page.page_id,
     locator: structuredClone(page.locator),
     path: page.path,
+    endpoints: {
+      canonical: present_endpoint_link(page.endpoints.canonical),
+      alternates: page.endpoints.alternates.map(present_endpoint_link),
+    },
     access: page.access,
     content_type: page.content_type,
     size_bytes: page.size_bytes,
@@ -1192,6 +1196,16 @@ function present_summary(page: PageSummary, managed: boolean) {
         management_url: `/api/pages/${page.page_id}`,
       }
       : {}),
+  };
+}
+
+function present_endpoint_link(
+  endpoint: PageSummary["endpoints"]["canonical"],
+) {
+  return {
+    locator: structuredClone(endpoint.locator),
+    path: endpoint.path,
+    delivery_profile: endpoint.delivery_profile,
   };
 }
 

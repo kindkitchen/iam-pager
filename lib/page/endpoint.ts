@@ -22,6 +22,73 @@ export interface PageEndpointSet {
   readonly alternates: readonly PageEndpointBinding[];
 }
 
+/** Safe application-relative link for one stored delivery binding. */
+export interface PageEndpointLink extends PageEndpointBinding {
+  readonly path: string;
+}
+
+/** Complete link projection that preserves the singular canonical endpoint. */
+export interface PageEndpointLinks {
+  readonly canonical: PageEndpointLink;
+  readonly alternates: readonly PageEndpointLink[];
+}
+
+/** Minimal locator formatting capability required by endpoint projection. */
+export interface PageEndpointPathFormatter {
+  format(locator: Locator): string;
+}
+
+/** True only for an app-relative direct path that cannot become an external URL. */
+export function is_safe_page_path(value: unknown): value is string {
+  if (
+    typeof value !== "string" || !value.startsWith("/") ||
+    value.startsWith("//")
+  ) {
+    return false;
+  }
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (
+      code <= 0x1f || code === 0x7f || character === "\\" ||
+      character === "?" || character === "#"
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Maps one complete stored set to detached safe links. URL formatting stays at
+ * the locator boundary; callers never infer endpoint behavior from a suffix.
+ */
+export function project_page_endpoint_links(
+  endpoint_set: PageEndpointSet,
+  formatter: PageEndpointPathFormatter,
+): PageEndpointLinks {
+  const violation = page_endpoint_set_violation(endpoint_set);
+  if (violation !== null) {
+    throw new Error(`endpoint link projection: ${violation}`);
+  }
+  const project = (binding: PageEndpointBinding): PageEndpointLink => {
+    const path = formatter.format(binding.locator);
+    if (!is_safe_page_path(path)) {
+      throw new Error(
+        "endpoint link projection: formatter produced unsafe path",
+      );
+    }
+    return {
+      locator: structuredClone(binding.locator),
+      path,
+      delivery_profile: binding.delivery_profile,
+    };
+  };
+  return {
+    canonical: project(endpoint_set.canonical),
+    alternates: endpoint_set.alternates.map(project),
+  };
+}
+
 /**
  * First storage-level endpoint-set invariant violation. Locator policy remains
  * the planner's responsibility; persistence enforces only coherent structure,

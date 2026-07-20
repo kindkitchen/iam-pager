@@ -165,6 +165,14 @@ Deno.test("page HTTP creates and replaces bounded guest trials", async () => {
   assertEquals(first_body.outcome, "created");
   assertEquals(first_body.path, "/Free/notes/today");
   assertEquals(first_body.url, "https://pager.test/Free/notes/today");
+  assertEquals(first_body.page.endpoints, {
+    canonical: {
+      locator: { namespace: "Free", page_name: "notes/today" },
+      path: "/Free/notes/today",
+      delivery_profile: "inline",
+    },
+    alternates: [],
+  });
   assertEquals("management_url" in first_body, false);
   assertEquals("owner_user_id" in first_body.page, false);
 
@@ -231,6 +239,9 @@ Deno.test("page HTTP managed create requires CSRF and presents management identi
   assertEquals(body.management_url, "/api/pages/page-1");
   assertEquals(body.page.access, "private");
   assertEquals(body.page.created_at, now.toISOString());
+  assertEquals(body.page.endpoints.canonical.path, "/Mine/notes");
+  assertEquals(body.page.endpoints.canonical.delivery_profile, "inline");
+  assertEquals(body.page.endpoints.alternates, []);
   assertEquals("owner_user_id" in body.page, false);
 
   const unreserved = await adapter.collection(

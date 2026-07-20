@@ -869,6 +869,18 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                   <a class="page-management-path" href={page.path}>
                     {page.path}
                   </a>
+                  {page.endpoints.alternates.length > 0 && (
+                    <nav
+                      class="page-management-endpoints"
+                      aria-label={`${page.path} alternate delivery endpoints`}
+                    >
+                      {page.endpoints.alternates.map((endpoint) => (
+                        <a key={endpoint.path} href={endpoint.path}>
+                          {endpoint.delivery_profile}: {endpoint.path}
+                        </a>
+                      ))}
+                    </nav>
+                  )}
                   <span
                     class={`page-management-access page-management-access-${page.access}`}
                   >

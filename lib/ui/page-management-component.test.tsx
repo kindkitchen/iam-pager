@@ -10,6 +10,18 @@ Deno.test("creator management component renders DS-MANAGE controls and safe rows
         page_id: "page-1",
         locator: { namespace: "Mine", page_name: "notes" },
         path: "/Mine/notes",
+        endpoints: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "notes" },
+            path: "/Mine/notes",
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "notes-copy" },
+            path: "/Mine/notes-copy",
+            delivery_profile: "inline",
+          }],
+        },
         access: "private",
         content_type: "md-page",
         size_bytes: 42,
@@ -31,6 +43,7 @@ Deno.test("creator management component renders DS-MANAGE controls and safe rows
   assertStringIncludes(html, "Delete selected");
   assertStringIncludes(html, "Select /Mine/notes");
   assertStringIncludes(html, "tags: notes, work");
+  assertStringIncludes(html, "inline: /Mine/notes-copy");
   assertStringIncludes(html, "Rename");
   assertStringIncludes(html, "Duplicate");
   assertStringIncludes(html, "Make public");

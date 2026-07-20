@@ -104,6 +104,14 @@ function api_summary(
     page_id: "p1",
     locator: { namespace: "Mine", page_name: "notes" },
     path: "/Mine/notes",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes" },
+        path: "/Mine/notes",
+        delivery_profile: "inline",
+      },
+      alternates: [],
+    },
     access: "private",
     content_type: "md-page",
     size_bytes: 10,
@@ -132,6 +140,14 @@ Deno.test("panel lists creator pages as API-shaped rows", async () => {
     page_id: "page-1",
     locator: { namespace: "Mine", page_name: "notes/today" },
     path: "/Mine/notes/today",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes/today" },
+        path: "/Mine/notes/today",
+        delivery_profile: "inline",
+      },
+      alternates: [],
+    },
     access: "private",
     content_type: "md-page",
     size_bytes: panel.pages[0]!.size_bytes,
@@ -177,6 +193,30 @@ Deno.test("management_summary_from_api rejects malformed rows", () => {
   assertEquals(management_summary_from_api({ ...valid, locator: null }), null);
   assertEquals(
     management_summary_from_api({ ...valid, path: "javascript:alert(1)" }),
+    null,
+  );
+  assertEquals(
+    management_summary_from_api({
+      ...valid,
+      endpoints: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "notes" },
+          path: "//outside.test/notes",
+          delivery_profile: "inline",
+        },
+        alternates: [],
+      },
+    }),
+    null,
+  );
+  assertEquals(
+    management_summary_from_api({
+      ...valid,
+      endpoints: {
+        canonical: valid.endpoints,
+        alternates: [],
+      },
+    }),
     null,
   );
   assertEquals(
@@ -332,6 +372,14 @@ Deno.test("bulk requests use current explicit revisions and strict JSON shapes",
     page_id: "p2",
     locator: { namespace: "Mine", page_name: "other" },
     path: "/Mine/other",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "other" },
+        path: "/Mine/other",
+        delivery_profile: "inline",
+      },
+      alternates: [],
+    },
     revision: 3,
     etag: '"page-p2-r3"',
     management_url: "/api/pages/p2",

@@ -1,3 +1,4 @@
+import type { PageEndpointLinks } from "../page/endpoint.ts";
 import type {
   ExplorePublicPagesRequest,
   PublicPageExplorer,
@@ -17,6 +18,7 @@ export interface PublicExplorationItem {
   readonly label: string;
   readonly direct_path: string;
   readonly site_path: string;
+  readonly endpoints: PageEndpointLinks;
   readonly content_type: string;
   readonly size_bytes: number;
   readonly tags: readonly string[];
@@ -115,6 +117,7 @@ function public_exploration_item(
     label: page.locator.page_name ?? "Default page",
     direct_path: page.path,
     site_path: `/site${page.path}`,
+    endpoints: structuredClone(page.endpoints),
     content_type: page.content_type,
     size_bytes: page.size_bytes,
     tags: [...page.tags],

@@ -67,6 +67,16 @@ function fixed_deliverer(result: DeliverPageResult): PageDeliverer {
   return { deliver: () => Promise.resolve(result) };
 }
 
+function delivery_endpoint(
+  delivery_profile: "inline" | "attachment" = "inline",
+) {
+  return {
+    locator: { namespace: "Ada", page_name: "notes" },
+    path: "/Ada/notes",
+    delivery_profile,
+  } as const;
+}
+
 Deno.test("direct delivery maps active content to intentional isolated headers", async () => {
   const body = "<h1>Hello</h1>";
   const response = await deliver_page_locator_path(
@@ -77,6 +87,7 @@ Deno.test("direct delivery maps active content to intentional isolated headers",
         "text/html; charset=utf-8",
         new TextEncoder().encode(body).byteLength,
       ),
+      endpoint: delivery_endpoint(),
       payload: { body, media_type: "text/html; charset=utf-8" },
     }),
     "/ada/notes",
@@ -106,6 +117,7 @@ Deno.test("direct delivery encodes attachment filenames without active isolation
     fixed_deliverer({
       ok: true,
       page: page_with_meta("text/plain; charset=utf-8", 7),
+      endpoint: delivery_endpoint("attachment"),
       payload: {
         body: "payload",
         media_type: "text/plain; charset=utf-8",
@@ -124,6 +136,43 @@ Deno.test("direct delivery encodes attachment filenames without active isolation
       `filename*=UTF-8''notes%20d%C3%A9taill%C3%A9es.txt`,
   );
   await response.body?.cancel();
+});
+
+Deno.test("direct delivery disposition follows the endpoint rather than filename hints", async () => {
+  const inline = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer({
+      ok: true,
+      page: page_with_meta("application/octet-stream", 7),
+      endpoint: delivery_endpoint("inline"),
+      payload: {
+        body: "payload",
+        media_type: "application/octet-stream",
+        download_filename: "suggested.bin",
+      },
+    }),
+    "/ada/notes",
+    guest_actor,
+  );
+  assertEquals(inline.headers.get("content-disposition"), "inline");
+  await inline.body?.cancel();
+
+  const unnamed_attachment = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer({
+      ok: true,
+      page: page_with_meta("application/octet-stream", 7),
+      endpoint: delivery_endpoint("attachment"),
+      payload: { body: "payload", media_type: "application/octet-stream" },
+    }),
+    "/ada/notes",
+    guest_actor,
+  );
+  assertEquals(
+    unnamed_attachment.headers.get("content-disposition"),
+    "attachment",
+  );
+  await unnamed_attachment.body?.cancel();
 });
 
 Deno.test("direct delivery keeps invalid, missing, and undeliverable outcomes explicit", async () => {

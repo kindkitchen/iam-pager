@@ -2,6 +2,33 @@
 
 ## 2026-07-20
 
+- Began `pdf-content-core` with the complete transport-independent handler step.
+  The registered `pdf` handler accepts detached immutable `Uint8Array` payloads
+  up to 16 MiB, supports PDF 1.0–1.7 and 2.0 after byte-zero header and terminal
+  xref/EOF screening, enforces portable 255-byte UTF-8 filenames, fixes
+  `application/pdf`, and declares inline plus attachment delivery. Content
+  handlers now project a distinct bounded management representation, allowing
+  PDF inspection to expose filename/media-type/size/version/replace metadata
+  without bytes while Markdown retains resubmittable source. Focused handler and
+  memory-service coverage proves input/output isolation, rejection outcomes,
+  one-row endpoint projections, identical inline/attachment bytes, coherent
+  replacement and access, and endpoint-wide deletion. HTTP upload, generic
+  endpoint-set application commands, alternate-preserving rename/duplicate,
+  Kvdex persistence, and site projection remain. All 490 tests, check, and the
+  production build pass.
+
+- Completed `content-endpoint-bindings`. Owner and public page summaries now
+  retain canonical locator/path compatibility fields while exposing the full
+  canonical/alternate set as safe app-relative links; management, wrapped-view,
+  and exploration projections show configured alternates without creating extra
+  page rows. Direct delivery carries the exact resolved binding, rejects
+  content/profile incoherence, and selects inline versus attachment disposition
+  from that binding rather than a suffix or filename hint. The legacy
+  raw-Deno-KV path projects its existing canonical inline endpoint until the
+  planned Kvdex replacement. Focused service, HTTP, presenter, component,
+  path-safety, and disposition coverage was added, and `pdf-content-core` is now
+  the ready next task. All 479 tests, check, and the production build pass.
+
 - Refactored the process-local `PageService` and current `md-page` flow onto the
   immutable-asset/page-aggregate capabilities without changing HTTP or JSON
   behavior. Validated content is staged before page visibility; content changes

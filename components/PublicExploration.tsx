@@ -102,7 +102,15 @@ export function PublicExplorationPanel(
                 </p>
                 <nav aria-label={`${page.label} links`}>
                   <a href={page.site_path}>Open site view</a>
-                  <a href={page.direct_path}>Open direct content</a>
+                  <a href={page.endpoints.canonical.path}>
+                    Open canonical {page.endpoints.canonical.delivery_profile}
+                  </a>
+                  {page.endpoints.alternates.map((endpoint) => (
+                    <a key={endpoint.path} href={endpoint.path}>
+                      Open alternate {endpoint.delivery_profile}:{" "}
+                      {endpoint.path}
+                    </a>
+                  ))}
                 </nav>
               </li>
             ))}

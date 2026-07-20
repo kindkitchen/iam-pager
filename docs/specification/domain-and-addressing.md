@@ -105,11 +105,13 @@ from gaining access to authenticated management sessions.
 
 The product should support varied formats and size bands over time. The MVP must
 explicitly list the formats and limits it actually accepts rather than
-pretending every file can be displayed safely. `md-page` is implemented. PDF is
-the next selected binary type; it will use `application/pdf`, browser-native
-inline delivery where available, and a user-configured attachment endpoint over
-the same bytes. Either profile may use any valid, non-conflicting locator.
-Generic raw-binary handling remains later.
+pretending every file can be displayed safely. `md-page` is implemented. The
+transport-independent `pdf` handler is also implemented with a 16 MiB bound,
+fixed `application/pdf` media type, detached immutable bytes, bounded safe
+filename metadata, and both inline and attachment profile support. Binary upload
+and user-configured endpoint application commands remain later; either profile
+may use any valid, non-conflicting locator. Generic raw-binary handling remains
+later.
 
 ## DA-ACCESS — Access
 
