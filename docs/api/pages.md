@@ -152,6 +152,11 @@ Malformed framing, fields, or metadata returns `400`; oversized total, metadata,
 or file data returns `413`; wrong request or part media types return `415`;
 invalid access/tags/endpoints/PDF content returns `422` without mutation.
 
+The first-party publishing form prepares this same two-part contract from its
+bounded picker and explicit endpoint controls. Filename, size, and endpoint
+feedback in the browser is advisory; this HTTP contract remains authoritative.
+The form neither generates a suffix nor derives a delivery profile from a path.
+
 ## List — `GET /api/pages`
 
 Requires an authenticated session. Optional query fields are:

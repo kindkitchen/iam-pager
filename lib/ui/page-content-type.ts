@@ -2,6 +2,7 @@ import type { DeliveryProfile } from "../content/model.ts";
 import { is_valid_delivery_profile } from "../content/model.ts";
 import { default_pdf_limits, pdf_filename_violation } from "../content/pdf.ts";
 import type { Locator } from "../locator/model.ts";
+import { locator_key } from "../locator/model.ts";
 import type { PageAccess } from "../page/model.ts";
 import type { PageEndpointBinding } from "../page/endpoint.ts";
 import { max_page_endpoints } from "../page/endpoint.ts";
@@ -33,6 +34,19 @@ export const page_content_type_options: readonly PageContentTypeOption[] = [
     description: "Publish a PDF at ordinary endpoints you configure.",
   },
 ];
+
+/** One explicit PDF delivery profile; path shape never selects a profile. */
+export interface PdfDeliveryProfileOption {
+  readonly value: DeliveryProfile;
+  readonly label: string;
+}
+
+/** Profiles the PDF endpoint controls may offer without interpreting URLs. */
+export const pdf_delivery_profile_options: readonly PdfDeliveryProfileOption[] =
+  [
+    { value: "inline", label: "Open in browser" },
+    { value: "attachment", label: "Download attachment" },
+  ];
 
 /**
  * One user-configured endpoint row: an ordinary locator plus a chosen delivery
@@ -143,10 +157,20 @@ export function pdf_publish_draft_violation(
   if (endpoints.length > max_page_endpoints) {
     return `configure at most ${max_page_endpoints} endpoints`;
   }
+  const canonical_namespace = draft.canonical.namespace.trim().toLowerCase();
+  const endpoint_keys = new Set<string>();
   for (const endpoint of endpoints) {
     if (endpoint.namespace.trim() === "") {
       return "each endpoint needs a namespace";
     }
+    if (endpoint.namespace.trim().toLowerCase() !== canonical_namespace) {
+      return "each PDF endpoint must use the canonical namespace";
+    }
+    const key = locator_key(endpoint_binding(endpoint).locator);
+    if (endpoint_keys.has(key)) {
+      return "each PDF endpoint needs a unique locator";
+    }
+    endpoint_keys.add(key);
     if (!is_valid_delivery_profile(endpoint.delivery_profile)) {
       return "each endpoint needs a supported delivery profile";
     }

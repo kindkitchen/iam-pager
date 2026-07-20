@@ -151,7 +151,10 @@ now complete: create and revision-bound replacement accept one bounded
 metadata/PDF multipart pair, require publisher-configured canonical-inline and
 attachment-alternate endpoints, and direct delivery provides opaque validators
 plus strict single-range `206`/`416` over byte-identical responses. The
-secondary PDF site projection follows. Generic binary fallback and external
+secondary site publishing projection now has a raw content-type/file-selection
+model, advisory filename/size feedback, explicit ordinary endpoint/profile
+controls, and multipart submission. Creator PDF inspection/replacement and the
+public native-preview wrapper follow. Generic binary fallback and external
 storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage

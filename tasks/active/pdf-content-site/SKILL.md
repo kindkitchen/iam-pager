@@ -18,9 +18,13 @@ Done:
   raw-code location model + presenter rendered by `SiteBreadcrumb`, wired into
   home, the public view, and a prototype `/site/manage` split. See
   [[007.analysis]] and [[009.log]].
+- Site PDF publication — a raw bounded file-selection presenter and accessible
+  picker now feed the multipart boundary from the existing publish island with
+  explicit ordinary endpoint/profile controls and preserved API-error draft
+  state. See [[010.log]].
 
-Next: bounded PDF file-selection UI feeding the step-1 boundary, then creator
-PDF metadata/preview/replace/download, then the public native-preview wrapper
-with download and fallback. Must not import kv-toolbox, inspect storage keys, or
-own persistence/HTTP behavior. PDF.js and generic binary UI remain later. See
-[[001.draft]] and [[002.decision]].
+Next: typed PDF/API failure presentation and creator PDF metadata,
+preview/download, and revision-bound replacement, then the public native-preview
+wrapper with download and fallback. Must not import kv-toolbox, inspect storage
+keys, or own persistence/HTTP behavior. PDF.js and generic binary UI remain
+later. See [[001.draft]] and [[002.decision]].

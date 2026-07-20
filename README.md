@@ -88,10 +88,11 @@ ownership guarantee.
 
 Content can have different formats. It may be HTML, text, a PDF, an image, or
 another supported type. Depending on the endpoint profile, a direct URL may
-display the content or download it. The transport-independent PDF content core
-and user-configured endpoint application commands are implemented; strict binary
-HTTP upload remains planned. One stored PDF may have browser-native inline and
-attachment endpoints at independently chosen valid locators.
+display the content or download it. The transport-independent PDF content core,
+user-configured endpoint application commands, strict binary HTTP upload, and
+first-party bounded file-selection/publishing controls are implemented. One
+stored PDF may have browser-native inline and attachment endpoints at
+independently chosen valid locators in the same namespace.
 
 ## Current implementation
 
@@ -158,10 +159,11 @@ The first publishing slice currently provides:
   indexes and immutable binary-safe content chunks in a fresh keyspace. The
   composition root selects one page persistence path and exposes this service
   plus its strict HTTP adapter to thin Fresh collection, item, action, bulk,
-  direct-delivery, and wrapped-view routes. The current publishing form sends
-  the nested explicit public-create request and creator CSRF token without
-  losing draft state on API errors; see
-  [the page API contract](docs/api/pages.md);
+  direct-delivery, and wrapped-view routes. The current publishing form selects
+  Markdown or PDF from a raw presentation model, sends either the nested JSON
+  create request or exact metadata/file multipart request with creator CSRF,
+  keeps the selected PDF on API errors, and never infers an endpoint suffix or
+  delivery profile; see [the page API contract](docs/api/pages.md);
 - the split page/content persistence foundation: immutable `ContentAsset`
   identities are created and read through focused capabilities, while a separate
   `PageAggregate` stores one asset reference and a complete canonical/alternate
@@ -221,12 +223,15 @@ The first publishing slice currently provides:
   terminal `startxref`/`%%EOF` points to an xref table or xref-stream object;
   this lightweight screen is not sanitization or malware certification;
 - the site shell and mobile-first guest/creator publishing form at `/` and
-  `/site`, with soft in-field four-word random locator helpers, a collapsible
-  Page workspace with exclusive Markdown/CSS source panes, split or full-width
-  preview layouts, fullscreen preview, raw and guided Markdown section editing,
-  fenced code-block sections, grip-driven section ordering and value merging,
-  CSS-reactive sandboxed section previews, editable element-based CSS presets,
-  CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
+  `/site`, with a Markdown/PDF chooser, a bounded PDF picker with filename/size
+  feedback, explicit canonical/alternate locator and delivery-profile controls,
+  and no inferred PDF path convention. Markdown retains soft in-field four-word
+  random locator helpers, a collapsible Page workspace with exclusive
+  Markdown/CSS source panes, split or full-width preview layouts, fullscreen
+  preview, raw and guided Markdown section editing, fenced code-block sections,
+  grip-driven section ordering and value merging, CSS-reactive sandboxed section
+  previews, editable element-based CSS presets, CDN-backed CSS syntax
+  highlighting, and a sandboxed live Markdown/CSS preview;
 - a thin public wrapper at `/site/<locator>` with a sandboxed, no-referrer HTML
   preview or content fallback, direct-content and creator-default links, and
   bounded links to other public managed pages; trial pages remain known-locator

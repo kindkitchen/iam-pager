@@ -2,6 +2,14 @@
 
 ## 2026-07-20
 
+- Added first-party PDF publishing to the site form. A raw presenter now derives
+  bounded filename/size feedback and advisory file checks; the accessible picker
+  feeds the strict multipart request boundary while retaining the selected file
+  on API failures. Publishers explicitly choose Markdown or PDF and configure
+  ordinary canonical/alternate locators and delivery profiles without inferred
+  suffixes. Added presenter, multipart round-trip, component, and integrated
+  form coverage; all 569 tests, tracked-source checks, and the production build
+  pass.
 - Prototyped the site navigation split. Added a raw-code breadcrumb model and
   presenter (`lib/ui/site-breadcrumb.ts`) rendered by a `SiteBreadcrumb`
   component, with trails on the home and public-page views and a new
