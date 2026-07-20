@@ -76,28 +76,46 @@ the page service nor HTTP generates a locator, interprets `.pdf`, or infers
 behavior from any path shape. PDF.js, generated preview images, and text
 extraction are later adapters or capabilities.
 
-### OQ-SCHEMA-UPGRADES — Explicit forward-only database evolution
+### OQ-SCHEMA-UPGRADES — Guarded manual forward evolution
 
-Database schema evolution runs only through the explicit pre-deploy command; the
-application does not mutate schema during startup or a normal request. Code
-declares a target version and adjacent forward steps for each stable schema ID.
-The runner preflights every plan and durable state, applies only missing steps,
-and returns a no-change success after the target is reached.
+Deployment never mutates database schema. Its pre-deploy command only compares
+an authoritative database project/version manifest with code and blocks routing
+on any mismatch. A developer separately selects the exact remote database and
+runs the forward updater with an access token plus explicit project, complete
+`from` vector, and complete `to` vector. Project/from mismatch cannot write;
+`to` must equal the immutable code registry.
 
-There is no automatic schema-diff inference, rollback framework, or migration
-mutex with a stale-lock timeout. Every transformation is explicitly authored,
-repeat-idempotent, and safe under concurrent invocation: a second process can
-observe and resume the same atomic pending claim before the first process has
-exited. Conditional data writes make that overlap safe, while exact claim
-completion lets only one process advance the durable version. A one-way helper
-may be removed only after every supported environment can no longer start below
-its source version.
+Version 0 is settled as the absence of a manifest, not a wildcard. The explicit
+zero-version bootstrap is the only point where database identity cannot be
+verified from metadata; supplying the connector URL and project is the
+operator's assertion. Once written, the manifest binds the database to that
+project and publishes new versions only after all helpers complete. A failed or
+interrupted update leaves the old manifest stale and deployment blocked. Since
+an update precedes the requiring deployment, transformations must remain
+compatible with the running release; destructive evolution is staged as
+expand/deploy/contract.
 
-The first state/coordination adapter is Deno KV behind agnostic interfaces. Its
-initial `ownership`, `sessions`, and `pages` plans define missing framework
-metadata as baseline version 1 for both fresh and existing raw-KV databases. All
-current targets are version 1, so installing the framework does not inspect or
-rewrite application records.
+There is no automatic schema-diff inference, rollback framework, deploy-time
+mutation, or migration mutex with a stale-lock timeout. Every transformation is
+explicitly authored, repeat-idempotent, and safe under concurrent invocation: a
+second process can observe and resume the same atomic pending claim before the
+first exits. Conditional data writes make overlap safe, while exact completion
+lets one process advance state. A helper may be removed only after every
+supported database is beyond its source version.
+
+The first manifest/state adapter is Deno KV behind agnostic interfaces. Current
+`ownership`, `sessions`, and `pages` targets are version 1; bootstrapping a
+legacy database from manifest version 0 to vector 1 installs metadata without
+rewriting its already-version-1 application records.
+
+Deno Deploy's revision previews are not schema-isolated today: one preview
+database is shared and the observed platform skips pre-deploy there. Running a
+new migration against that database could break old preview revisions, while not
+running it could break the new one. The composition root therefore forces memory
+repositories for `DENO_TIMELINE=preview/*`. Durable database acceptance uses
+each Git branch timeline's isolated database and branch URL; revision preview
+URLs remain stateless UI/warmup surfaces until per-revision databases and gates
+exist.
 
 ### OQ-API — API surface
 

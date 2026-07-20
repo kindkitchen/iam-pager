@@ -1,0 +1,8 @@
+#!/bin/sh
+# IAM_PAGER_PRE_PUSH_V1
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+exec deno task verify

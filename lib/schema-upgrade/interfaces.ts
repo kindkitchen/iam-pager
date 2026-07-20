@@ -12,6 +12,31 @@ export interface SchemaUpgradeState {
 
 export type SchemaUpgradeStateMutationResult = "applied" | "conflict";
 
+export interface DatabaseSchemaVersion {
+  readonly schema_id: string;
+  readonly version: number;
+}
+
+/** Authoritative identity and complete published version vector for one DB. */
+export interface DatabaseSchemaManifest {
+  readonly project_id: string;
+  readonly schema_versions: readonly DatabaseSchemaVersion[];
+}
+
+/** Storage-neutral compare-and-set boundary for manifest publication. */
+export interface DatabaseSchemaManifestRepository {
+  read_manifest(): Promise<DatabaseSchemaManifest | null>;
+
+  initialize_manifest(
+    manifest: DatabaseSchemaManifest,
+  ): Promise<SchemaUpgradeStateMutationResult>;
+
+  replace_manifest(input: {
+    readonly expected_manifest: DatabaseSchemaManifest;
+    readonly manifest: DatabaseSchemaManifest;
+  }): Promise<SchemaUpgradeStateMutationResult>;
+}
+
 /**
  * Storage-neutral compare-and-set boundary for schema progress.
  *
@@ -72,4 +97,51 @@ export interface DatabaseSchemaUpgradeReport {
 
 export interface DatabaseSchemaUpgrader<Context> {
   upgrade(context: Context): Promise<DatabaseSchemaUpgradeReport>;
+}
+
+export type DatabaseSchemaVersionOutcome =
+  | "current"
+  | "stale"
+  | "future"
+  | "pending"
+  | "unversioned";
+
+export interface DatabaseSchemaVersionReport extends DatabaseSchemaVersion {
+  readonly target_version: number;
+  readonly outcome: DatabaseSchemaVersionOutcome;
+}
+
+export type DatabaseSchemaCheckOutcome =
+  | DatabaseSchemaVersionOutcome
+  | "wrong_project";
+
+export interface DatabaseSchemaCheckReport {
+  readonly project_id: string;
+  readonly outcome: DatabaseSchemaCheckOutcome;
+  readonly schemas: readonly DatabaseSchemaVersionReport[];
+}
+
+export interface DatabaseSchemaVersionChecker {
+  check(): Promise<DatabaseSchemaCheckReport>;
+}
+
+export interface DatabaseSchemaWriteRequest {
+  readonly project_id: string;
+  /** Version 0 is permitted only when the durable manifest is absent. */
+  readonly from_versions: readonly DatabaseSchemaVersion[];
+  readonly to_versions: readonly DatabaseSchemaVersion[];
+}
+
+export interface DatabaseSchemaWriteReport {
+  readonly project_id: string;
+  readonly from_versions: readonly DatabaseSchemaVersion[];
+  readonly to_versions: readonly DatabaseSchemaVersion[];
+  readonly upgrade: DatabaseSchemaUpgradeReport;
+}
+
+export interface DatabaseSchemaWriter<Context> {
+  write(
+    request: DatabaseSchemaWriteRequest,
+    context: Context,
+  ): Promise<DatabaseSchemaWriteReport>;
 }
