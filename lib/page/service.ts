@@ -2,20 +2,46 @@ import type { ContentTypeHandler } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
+import {
+  FourWordRandomNameGenerator,
+  type RandomNameGenerator,
+} from "../random-name.ts";
+import {
+  max_bulk_managed_pages,
+  max_managed_page_name_query_length,
+  max_public_exploration_query_length,
+} from "./interfaces.ts";
 import type {
+  BulkChangeManagedPageAccessItemResult,
+  BulkChangeManagedPageAccessRequest,
+  BulkChangeManagedPageAccessResult,
+  BulkDeleteManagedPageItemResult,
+  BulkDeleteManagedPagesRequest,
+  BulkDeleteManagedPagesResult,
   CreateManagedPageRequest,
   CreateManagedPageResult,
   DeleteManagedPageRequest,
   DeleteManagedPageResult,
+  DuplicateManagedPageRequest,
+  DuplicateManagedPageResult,
+  ExplorePublicPagesRequest,
+  ExplorePublicPagesResult,
   InspectManagedPageRequest,
   InspectManagedPageResult,
   ListManagedPagesRequest,
   ListManagedPagesResult,
+  ListPublicPagesRequest,
+  ListPublicPagesResult,
+  ManagedPageBulkAccessChanger,
+  ManagedPageBulkDeleter,
   ManagedPageCreator,
   ManagedPageDeleter,
+  ManagedPageDuplicator,
   ManagedPageInspection,
   ManagedPageInspector,
   ManagedPageLister,
+  ManagedPageRenamer,
+  ManagedPageRevisionSelection,
   ManagedPageUpdater,
   NamespaceAuthorityResolver,
   PageClock,
@@ -24,17 +50,26 @@ import type {
   PageIdGenerator,
   PageRepository,
   PageSummary,
+  PublicPageExplorer,
+  PublicPageLister,
+  PublicPageSummary,
+  PublicPageViewer,
   PublishTrialPageRequest,
   PublishTrialPageResult,
+  RenameManagedPageRequest,
+  RenameManagedPageResult,
   TrialPagePublisher,
   UpdateManagedPageRequest,
   UpdateManagedPageResult,
   UserPageActor,
+  ViewPublicPageResult,
 } from "./interfaces.ts";
 import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  normalize_page_tag,
+  normalize_page_tags,
   page_record_violation,
   type PageContent,
   type PageRecord,
@@ -50,6 +85,10 @@ export interface PageServiceOptions {
   clock?: PageClock;
   /** Bounded retries for generated-id collisions. Defaults to 3. */
   max_page_id_attempts?: number;
+  /** Server-owned generator for duplicate page names. */
+  page_name_generator?: RandomNameGenerator;
+  /** Bounded generated-name attempts for duplication. Defaults to 16. */
+  max_page_name_attempts?: number;
 }
 
 type ContentPreparationResult =
@@ -58,11 +97,11 @@ type ContentPreparationResult =
   | { ok: false; reason: "invalid_input"; detail: string };
 
 /**
- * HTTP/session-independent DS-PROTECT application layer. It is the only valid
- * producer of page content and always applies validate -> derive -> render ->
- * metadata before storage. Namespace authority is resolved through an
- * interface and every conditional managed mutation remains revision-bound in
- * the repository.
+ * HTTP/session-independent page application layer (DS-PROTECT, DS-MANAGE). It
+ * is the only valid producer of page content and always applies validate ->
+ * derive -> render -> metadata before storage. Namespace authority is resolved
+ * through an interface and every conditional managed mutation remains
+ * revision-bound in the repository.
  */
 export class PageService
   implements
@@ -72,6 +111,13 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    ManagedPageBulkAccessChanger,
+    ManagedPageBulkDeleter,
+    ManagedPageRenamer,
+    ManagedPageDuplicator,
+    PublicPageViewer,
+    PublicPageLister,
+    PublicPageExplorer,
     PageDeliverer {
   readonly #engine: LocatorEngine;
   readonly #repository: PageRepository;
@@ -83,6 +129,8 @@ export class PageService
   readonly #page_id_generator: PageIdGenerator;
   readonly #clock: PageClock;
   readonly #max_page_id_attempts: number;
+  readonly #page_name_generator: RandomNameGenerator;
+  readonly #max_page_name_attempts: number;
 
   constructor(options: PageServiceOptions) {
     for (const handler of options.handlers) {
@@ -106,7 +154,17 @@ export class PageService
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
     this.#clock = options.clock ?? new SystemPageClock();
+    const max_page_name_attempts = options.max_page_name_attempts ?? 16;
+    if (
+      !Number.isSafeInteger(max_page_name_attempts) ||
+      max_page_name_attempts < 1
+    ) {
+      throw new Error("max_page_name_attempts must be a positive safe integer");
+    }
     this.#max_page_id_attempts = max_page_id_attempts;
+    this.#page_name_generator = options.page_name_generator ??
+      new FourWordRandomNameGenerator();
+    this.#max_page_name_attempts = max_page_name_attempts;
   }
 
   async publish_trial(
@@ -163,6 +221,8 @@ export class PageService
     if (!is_valid_page_access(request.access)) {
       return { ok: false, reason: "invalid_access" };
     }
+    const tags = normalize_page_tags(request.tags ?? []);
+    if (tags === null) return { ok: false, reason: "invalid_tags" };
     const authority = await this.#namespace_authority.resolve(
       request.actor,
       request.locator.namespace,
@@ -183,6 +243,7 @@ export class PageService
         locator: request.locator,
         owner_user_id: request.actor.user_id,
         access: request.access,
+        tags,
         content: prepared.content,
         now,
       });
@@ -226,9 +287,23 @@ export class PageService
       }
       namespace = validation.locator.namespace;
     }
+    const page_name_query = normalize_optional_query(
+      request.page_name_query,
+      max_managed_page_name_query_length,
+    );
+    const tag = normalize_tag_filter(request.tag);
+    if (
+      page_name_query === null || tag === null ||
+      (request.access !== undefined && !is_valid_page_access(request.access))
+    ) {
+      return { ok: false, reason: "invalid_filter" };
+    }
     const listed = await this.#repository.list_managed({
       owner_user_id: request.actor.user_id,
-      namespace,
+      ...(namespace === undefined ? {} : { namespace }),
+      ...(page_name_query === undefined ? {} : { page_name_query }),
+      ...(request.access === undefined ? {} : { access: request.access }),
+      ...(tag === undefined ? {} : { tag }),
       limit: request.limit,
       cursor: request.cursor,
     });
@@ -260,13 +335,16 @@ export class PageService
       throw new Error("expected_revision must be a positive safe integer");
     }
     const has_access = request.patch.access !== undefined;
+    const has_tags = request.patch.tags !== undefined;
     const has_content = request.patch.content !== undefined;
-    if (!has_access && !has_content) {
+    if (!has_access && !has_tags && !has_content) {
       return { ok: false, reason: "empty_patch" };
     }
     if (has_access && !is_valid_page_access(request.patch.access)) {
       return { ok: false, reason: "invalid_access" };
     }
+    const tags = has_tags ? normalize_page_tags(request.patch.tags) : undefined;
+    if (tags === null) return { ok: false, reason: "invalid_tags" };
     const page = await this.#find_authorized_page(
       request.actor,
       request.page_id,
@@ -295,11 +373,212 @@ export class PageService
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
       access: request.patch.access ?? page.access,
+      tags,
       content,
       now: this.#operation_time(),
     });
     if (!replaced.ok) return replaced;
     return this.#inspection(replaced.page);
+  }
+
+  async bulk_change_managed_access(
+    request: BulkChangeManagedPageAccessRequest,
+  ): Promise<BulkChangeManagedPageAccessResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_access(request.access)) {
+      return { ok: false, reason: "invalid_access" };
+    }
+    if (!is_valid_bulk_selection(request.selection)) {
+      return { ok: false, reason: "invalid_selection" };
+    }
+
+    const results: BulkChangeManagedPageAccessItemResult[] = [];
+    let now: Date | undefined;
+    for (const selected of request.selection) {
+      const page = await this.#find_authorized_page(
+        request.actor,
+        selected.page_id,
+      );
+      if (page === null) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "not_found",
+        });
+        continue;
+      }
+      if (page.revision !== selected.expected_revision) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "revision_conflict",
+        });
+        continue;
+      }
+      if (page.revision === Number.MAX_SAFE_INTEGER) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "revision_exhausted",
+        });
+        continue;
+      }
+      now ??= this.#operation_time();
+      const replaced = await this.#repository.replace_managed({
+        page_id: page.page_id,
+        owner_user_id: request.actor.user_id,
+        expected_revision: selected.expected_revision,
+        access: request.access,
+        now,
+      });
+      if (!replaced.ok) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: replaced.reason,
+        });
+        continue;
+      }
+      results.push({
+        page_id: selected.page_id,
+        ok: true,
+        page: this.#summary(replaced.page),
+      });
+    }
+    return { ok: true, results };
+  }
+
+  async rename_managed(
+    request: RenameManagedPageRequest,
+  ): Promise<RenameManagedPageResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const existing = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (existing === null) return { ok: false, reason: "not_found" };
+    if (existing.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const current_inspection = this.#inspection(existing);
+    if (!current_inspection.ok) return current_inspection;
+    const locator: Locator = request.page_name === undefined
+      ? { namespace: existing.locator.namespace }
+      : { namespace: existing.locator.namespace, page_name: request.page_name };
+    if (!this.#engine.validate(locator).ok) {
+      return { ok: false, reason: "invalid_page_name" };
+    }
+    if (existing.locator.page_name === locator.page_name) {
+      return {
+        ok: true,
+        outcome: "unchanged",
+        page: current_inspection.page,
+      };
+    }
+    if (existing.revision === Number.MAX_SAFE_INTEGER) {
+      return { ok: false, reason: "revision_exhausted" };
+    }
+    const renamed = await this.#repository.rename_managed({
+      page_id: existing.page_id,
+      owner_user_id: request.actor.user_id,
+      expected_revision: request.expected_revision,
+      locator,
+      now: this.#operation_time(),
+    });
+    if (!renamed.ok) {
+      if (renamed.reason === "locator_conflict") {
+        return { ok: false, reason: "page_exists" };
+      }
+      return { ok: false, reason: renamed.reason };
+    }
+    const inspection = this.#inspection(renamed.page);
+    return inspection.ok
+      ? { ok: true, outcome: renamed.outcome, page: inspection.page }
+      : inspection;
+  }
+
+  async duplicate_managed(
+    request: DuplicateManagedPageRequest,
+  ): Promise<DuplicateManagedPageResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const source = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (source === null) return { ok: false, reason: "not_found" };
+    if (source.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const source_inspection = this.#inspection(source);
+    if (!source_inspection.ok) return source_inspection;
+
+    const now = this.#operation_time();
+    const used_names = new Set<string>();
+    if (source.locator.page_name !== undefined) {
+      used_names.add(source.locator.page_name.toLowerCase());
+    }
+    for (
+      let name_attempt = 0;
+      name_attempt < this.#max_page_name_attempts;
+      name_attempt += 1
+    ) {
+      const page_name = this.#page_name_generator.generate(used_names);
+      const normalized_name = page_name.toLowerCase();
+      if (used_names.has(normalized_name)) {
+        throw new Error("RandomNameGenerator repeated a used page name");
+      }
+      const locator = { namespace: source.locator.namespace, page_name };
+      if (!this.#engine.validate(locator).ok) {
+        throw new Error("RandomNameGenerator produced an invalid page name");
+      }
+      used_names.add(normalized_name);
+      let name_conflict = false;
+      for (
+        let id_attempt = 0;
+        id_attempt < this.#max_page_id_attempts;
+        id_attempt += 1
+      ) {
+        const page_id = this.#generate_page_id();
+        const duplicated = await this.#repository.duplicate_managed({
+          source_page_id: source.page_id,
+          owner_user_id: request.actor.user_id,
+          expected_revision: request.expected_revision,
+          page_id,
+          locator,
+          now,
+        });
+        if (duplicated.ok) {
+          const inspection = this.#inspection(duplicated.page);
+          return inspection.ok
+            ? {
+              ok: true,
+              outcome: duplicated.outcome,
+              page: inspection.page,
+            }
+            : inspection;
+        }
+        if (duplicated.reason === "not_found") {
+          return { ok: false, reason: "not_found" };
+        }
+        if (duplicated.reason === "revision_conflict") {
+          return { ok: false, reason: "revision_conflict" };
+        }
+        if (duplicated.reason === "locator_conflict") {
+          name_conflict = true;
+          break;
+        }
+      }
+      if (!name_conflict) {
+        return { ok: false, reason: "page_id_generation_exhausted" };
+      }
+    }
+    return { ok: false, reason: "page_name_generation_exhausted" };
   }
 
   async delete_managed(
@@ -319,6 +598,118 @@ export class PageService
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
     });
+  }
+
+  async bulk_delete_managed(
+    request: BulkDeleteManagedPagesRequest,
+  ): Promise<BulkDeleteManagedPagesResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_bulk_selection(request.selection)) {
+      return { ok: false, reason: "invalid_selection" };
+    }
+
+    const results: BulkDeleteManagedPageItemResult[] = [];
+    for (const selected of request.selection) {
+      const page = await this.#find_authorized_page(
+        request.actor,
+        selected.page_id,
+      );
+      if (page === null) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "not_found",
+        });
+        continue;
+      }
+      const deleted = await this.#repository.delete_managed({
+        page_id: page.page_id,
+        owner_user_id: request.actor.user_id,
+        expected_revision: selected.expected_revision,
+      });
+      results.push(
+        deleted.ok ? { page_id: selected.page_id, ok: true } : {
+          page_id: selected.page_id,
+          ok: false,
+          reason: deleted.reason,
+        },
+      );
+    }
+    return { ok: true, results };
+  }
+
+  async view_public(locator: Locator): Promise<ViewPublicPageResult> {
+    if (!this.#engine.validate(locator).ok) {
+      return { ok: false, reason: "not_found" };
+    }
+    const page = await this.#repository.find_by_locator(locator);
+    if (
+      page === null || page.access !== "public" ||
+      page_record_violation(page) !== null
+    ) {
+      // Missing, private, and incoherent pages are indistinguishable to
+      // visitors (OQ-ACCESS, OQ-MISSING).
+      return { ok: false, reason: "not_found" };
+    }
+    const handler = this.#handlers.get(page.content.content_type);
+    return {
+      ok: true,
+      page: this.#public_summary(page),
+      payload: handler === undefined ? null : handler.render(page.content.data),
+    };
+  }
+
+  async list_public(
+    request: ListPublicPagesRequest,
+  ): Promise<ListPublicPagesResult> {
+    const validation = this.#engine.validate({ namespace: request.namespace });
+    if (!validation.ok) {
+      return {
+        ok: false,
+        reason: validation.reason === "forbidden_namespace"
+          ? "forbidden_namespace"
+          : "invalid_namespace",
+      };
+    }
+    const listed = await this.#repository.list_public({
+      namespace: validation.locator.namespace,
+      limit: request.limit,
+      cursor: request.cursor,
+    });
+    if (!listed.ok) return listed;
+    return {
+      ok: true,
+      pages: listed.pages.map((page) => this.#public_summary(page)),
+      next_cursor: listed.next_cursor,
+    };
+  }
+
+  async explore_public(
+    request: ExplorePublicPagesRequest,
+  ): Promise<ExplorePublicPagesResult> {
+    const namespace_query = normalize_exploration_query(
+      request.namespace_query,
+    );
+    const page_name_query = normalize_exploration_query(
+      request.page_name_query,
+    );
+    const tag = normalize_tag_filter(request.tag);
+    if (namespace_query === null || page_name_query === null || tag === null) {
+      return { ok: false, reason: "invalid_query" };
+    }
+    const explored = await this.#repository.explore_public({
+      ...(namespace_query === undefined ? {} : { namespace_query }),
+      ...(page_name_query === undefined ? {} : { page_name_query }),
+      ...(tag === undefined ? {} : { tag }),
+      limit: request.limit,
+      cursor: request.cursor,
+    });
+    if (!explored.ok) return explored;
+    return {
+      ok: true,
+      pages: explored.pages.map((page) => this.#public_summary(page)),
+      next_cursor: explored.next_cursor,
+    };
   }
 
   async deliver(
@@ -406,6 +797,20 @@ export class PageService
     return { ok: true, page: inspection };
   }
 
+  #public_summary(page: PageRecord): PublicPageSummary {
+    return {
+      locator: structuredClone(page.locator),
+      path: this.#engine.format(page.locator),
+      stewardship: page.stewardship.kind,
+      content_type: page.content.content_type,
+      media_type: page.content.meta.media_type,
+      size_bytes: page.content.meta.size_bytes,
+      tags: [...page.tags],
+      created_at: new Date(page.created_at),
+      updated_at: new Date(page.updated_at),
+    };
+  }
+
   #summary(page: PageRecord): PageSummary {
     return {
       page_id: page.page_id,
@@ -414,6 +819,7 @@ export class PageService
       access: page.access,
       content_type: page.content.content_type,
       size_bytes: page.content.meta.size_bytes,
+      tags: [...page.tags],
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
       revision: page.revision,
@@ -458,6 +864,55 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function is_valid_bulk_selection(
+  value: unknown,
+): value is readonly ManagedPageRevisionSelection[] {
+  if (
+    !Array.isArray(value) || value.length < 1 ||
+    value.length > max_bulk_managed_pages
+  ) {
+    return false;
+  }
+  const page_ids = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== "object" || candidate === null) return false;
+    const selected = candidate as Record<string, unknown>;
+    if (
+      typeof selected.page_id !== "string" ||
+      !is_valid_page_id(selected.page_id) ||
+      !is_valid_page_revision(selected.expected_revision) ||
+      page_ids.has(selected.page_id)
+    ) {
+      return false;
+    }
+    page_ids.add(selected.page_id);
+  }
+  return true;
+}
+
+function normalize_optional_query(
+  value: string | undefined,
+  max_length: number,
+): string | undefined | null {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "") return undefined;
+  return normalized.length > max_length ? null : normalized;
+}
+
+function normalize_exploration_query(
+  value: string | undefined,
+): string | undefined | null {
+  return normalize_optional_query(value, max_public_exploration_query_length);
+}
+
+function normalize_tag_filter(
+  value: string | undefined,
+): string | undefined | null {
+  if (value === undefined || value.trim() === "") return undefined;
+  return normalize_page_tag(value);
 }
 
 /** Delivery metadata derived from the deterministic rendered representation. */

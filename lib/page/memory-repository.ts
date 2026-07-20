@@ -1,9 +1,15 @@
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_managed_page_list_cursor,
+  decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_managed_page_list_cursor,
+  encode_page_exploration_cursor,
   encode_page_list_cursor,
+  type ManagedPageListCursorScope,
   page_sort_key,
+  type PageExplorationCursorScope,
   type PageSortKey,
 } from "./cursor.ts";
 import type {
@@ -11,11 +17,19 @@ import type {
   CreateManagedResult,
   DeleteManagedRequest,
   DeleteManagedResult,
+  DuplicateManagedRequest,
+  DuplicateManagedResult,
+  ExplorePublicRequest,
+  ExplorePublicResult,
   ListManagedRequest,
   ListManagedResult,
+  ListPublicRequest,
+  ListPublicResult,
   PageRepository,
   PutTrialRequest,
   PutTrialResult,
+  RenameManagedRequest,
+  RenameManagedResult,
   ReplaceManagedRequest,
   ReplaceManagedResult,
 } from "./interfaces.ts";
@@ -23,6 +37,7 @@ import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  is_valid_page_tags,
   page_record_violation,
   type PageId,
   type PageRecord,
@@ -86,6 +101,7 @@ export class MemoryPageRepository implements PageRepository {
         locator: clone(request.locator),
         stewardship: { kind: "trial" },
         access: "public",
+        tags: [],
         revision: existing.revision + 1,
         content: clone(request.content),
         created_at: existing.created_at,
@@ -104,6 +120,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: clone(request.locator),
       stewardship: { kind: "trial" },
       access: "public",
+      tags: [],
       revision: 1,
       content: clone(request.content),
       created_at: request.now,
@@ -132,6 +149,10 @@ export class MemoryPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      is_valid_page_tags(request.tags ?? []),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const key = locator_key(request.locator);
     const existing_id = this.#by_locator.get(key);
@@ -151,6 +172,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: clone(request.locator),
       stewardship: { kind: "managed", owner_user_id: request.owner_user_id },
       access: request.access,
+      tags: [...(request.tags ?? [])],
       revision: 1,
       content: clone(request.content),
       created_at: request.now,
@@ -188,6 +210,10 @@ export class MemoryPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      request.tags === undefined || is_valid_page_tags(request.tags),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const existing = this.#by_id.get(request.page_id);
     if (
@@ -205,6 +231,7 @@ export class MemoryPageRepository implements PageRepository {
       locator: existing.locator,
       stewardship: existing.stewardship,
       access: request.access,
+      tags: request.tags === undefined ? existing.tags : clone(request.tags),
       revision: existing.revision + 1,
       content: request.content === undefined
         ? existing.content
@@ -215,6 +242,141 @@ export class MemoryPageRepository implements PageRepository {
     this.#assert_valid(page);
     this.#by_id.set(page.page_id, page);
     return { ok: true, page: clone(page) };
+  }
+
+  // deno-lint-ignore require-await
+  async rename_managed(
+    request: RenameManagedRequest,
+  ): Promise<RenameManagedResult> {
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" &&
+        request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+    const existing = this.#by_id.get(request.page_id);
+    if (
+      existing === undefined ||
+      existing.stewardship.kind !== "managed" ||
+      existing.stewardship.owner_user_id !== request.owner_user_id
+    ) {
+      return { ok: false, reason: "not_found" };
+    }
+    require(
+      request.locator.namespace.toLowerCase() ===
+        existing.locator.namespace.toLowerCase(),
+      "rename must stay within the current namespace",
+    );
+    if (existing.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const old_key = locator_key(existing.locator);
+    const next_key = locator_key(request.locator);
+    const target_id = this.#by_locator.get(next_key);
+    let replaced_trial_id: PageId | null = null;
+    if (target_id !== undefined && target_id !== existing.page_id) {
+      const target = this.#by_id.get(target_id)!;
+      if (target.stewardship.kind === "managed") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      replaced_trial_id = target.page_id;
+    }
+    const page: PageRecord = {
+      ...existing,
+      locator: clone(request.locator),
+      revision: existing.revision + 1,
+      updated_at: request.now,
+    };
+    this.#assert_valid(page);
+    if (replaced_trial_id !== null) this.#by_id.delete(replaced_trial_id);
+    if (old_key !== next_key) this.#by_locator.delete(old_key);
+    this.#by_id.set(page.page_id, page);
+    this.#by_locator.set(next_key, page.page_id);
+    return {
+      ok: true,
+      outcome: replaced_trial_id === null ? "renamed" : "replaced_trial",
+      page: clone(page),
+    };
+  }
+
+  // deno-lint-ignore require-await
+  async duplicate_managed(
+    request: DuplicateManagedRequest,
+  ): Promise<DuplicateManagedResult> {
+    require(
+      is_valid_page_id(request.source_page_id),
+      "source_page_id must be a route-safe opaque id",
+    );
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" &&
+        request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+    const source = this.#by_id.get(request.source_page_id);
+    if (
+      source === undefined || source.stewardship.kind !== "managed" ||
+      source.stewardship.owner_user_id !== request.owner_user_id
+    ) {
+      return { ok: false, reason: "not_found" };
+    }
+    require(
+      request.locator.namespace.toLowerCase() ===
+        source.locator.namespace.toLowerCase(),
+      "duplicate must stay within the source namespace",
+    );
+    if (source.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    const target_key = locator_key(request.locator);
+    const target_id = this.#by_locator.get(target_key);
+    let replaced_trial_id: PageId | null = null;
+    if (target_id !== undefined) {
+      const target = this.#by_id.get(target_id)!;
+      if (target.stewardship.kind === "managed") {
+        return { ok: false, reason: "locator_conflict" };
+      }
+      replaced_trial_id = target.page_id;
+    }
+    if (this.#by_id.has(request.page_id)) {
+      return { ok: false, reason: "page_id_conflict" };
+    }
+    const page: PageRecord = {
+      page_id: request.page_id,
+      locator: clone(request.locator),
+      stewardship: clone(source.stewardship),
+      access: source.access,
+      tags: clone(source.tags),
+      revision: 1,
+      content: clone(source.content),
+      created_at: request.now,
+      updated_at: request.now,
+    };
+    this.#assert_valid(page);
+    if (replaced_trial_id !== null) this.#by_id.delete(replaced_trial_id);
+    this.#by_id.set(page.page_id, page);
+    this.#by_locator.set(target_key, page.page_id);
+    return {
+      ok: true,
+      outcome: replaced_trial_id === null ? "created" : "replaced_trial",
+      page: clone(page),
+    };
   }
 
   // deno-lint-ignore require-await
@@ -266,9 +428,53 @@ export class MemoryPageRepository implements PageRepository {
         (typeof request.namespace === "string" && request.namespace !== ""),
       "namespace filter must be non-empty when present",
     );
-    const filter = request.namespace === undefined
-      ? null
-      : request.namespace.toLowerCase();
+    require_normalized_managed_list_request(request);
+    const scope: ManagedPageListCursorScope = {
+      namespace: request.namespace?.toLowerCase() ?? null,
+      page_name_query: request.page_name_query ?? null,
+      access: request.access ?? null,
+      tag: request.tag ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_managed_page_list_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
+    for (const record of this.#by_id.values()) {
+      if (record.stewardship.kind !== "managed") continue;
+      if (record.stewardship.owner_user_id !== request.owner_user_id) continue;
+      const key = page_sort_key(record);
+      if (!matches_managed_list(record, key, scope)) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, record });
+    }
+    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
+    const selected = candidates.slice(0, request.limit);
+    const next_cursor = candidates.length > request.limit
+      ? encode_managed_page_list_cursor(
+        selected[selected.length - 1].key,
+        scope,
+      )
+      : null;
+    return {
+      ok: true,
+      pages: selected.map((entry) => clone(entry.record)),
+      next_cursor,
+    };
+  }
+
+  // deno-lint-ignore require-await
+  async list_public(request: ListPublicRequest): Promise<ListPublicResult> {
+    require(
+      typeof request.namespace === "string" && request.namespace !== "",
+      "namespace must be non-empty",
+    );
+    require(
+      Number.isSafeInteger(request.limit) && request.limit >= 1,
+      "limit must be a positive safe integer",
+    );
+    const filter = request.namespace.toLowerCase();
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
       after = decode_page_list_cursor(request.cursor, filter);
@@ -277,9 +483,9 @@ export class MemoryPageRepository implements PageRepository {
     const candidates: { key: PageSortKey; record: PageRecord }[] = [];
     for (const record of this.#by_id.values()) {
       if (record.stewardship.kind !== "managed") continue;
-      if (record.stewardship.owner_user_id !== request.owner_user_id) continue;
+      if (record.access !== "public") continue;
       const key = page_sort_key(record);
-      if (filter !== null && key.namespace_key !== filter) continue;
+      if (key.namespace_key !== filter) continue;
       if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
       candidates.push({ key, record });
     }
@@ -295,8 +501,119 @@ export class MemoryPageRepository implements PageRepository {
     };
   }
 
+  // deno-lint-ignore require-await
+  async explore_public(
+    request: ExplorePublicRequest,
+  ): Promise<ExplorePublicResult> {
+    require_normalized_exploration_request(request);
+    const scope: PageExplorationCursorScope = {
+      namespace_query: request.namespace_query ?? null,
+      page_name_query: request.page_name_query ?? null,
+      tag: request.tag ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_exploration_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const candidates: { key: PageSortKey; record: PageRecord }[] = [];
+    for (const record of this.#by_id.values()) {
+      if (record.stewardship.kind !== "managed") continue;
+      if (record.access !== "public") continue;
+      const key = page_sort_key(record);
+      if (!matches_exploration(record, key, scope)) continue;
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) continue;
+      candidates.push({ key, record });
+    }
+    candidates.sort((a, b) => compare_page_sort_keys(a.key, b.key));
+    const selected = candidates.slice(0, request.limit);
+    return {
+      ok: true,
+      pages: selected.map((entry) => clone(entry.record)),
+      next_cursor: candidates.length > request.limit
+        ? encode_page_exploration_cursor(
+          selected[selected.length - 1].key,
+          scope,
+        )
+        : null,
+    };
+  }
+
   #assert_valid(page: PageRecord): void {
     const violation = page_record_violation(page);
     if (violation !== null) throw new Error(`page repository: ${violation}`);
   }
+}
+
+function require_normalized_managed_list_request(
+  request: ListManagedRequest,
+): void {
+  if (request.page_name_query !== undefined) {
+    require(
+      request.page_name_query !== "" &&
+        request.page_name_query === request.page_name_query.trim() &&
+        request.page_name_query === request.page_name_query.toLowerCase(),
+      "page_name_query must be a normalized lowercase substring when present",
+    );
+  }
+  require(
+    request.access === undefined || is_valid_page_access(request.access),
+    "access filter must be public or private when present",
+  );
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag filter must be canonical when present",
+  );
+}
+
+function matches_managed_list(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: ManagedPageListCursorScope,
+): boolean {
+  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.access === null || record.access === scope.access) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
+}
+
+function require_normalized_exploration_request(
+  request: ExplorePublicRequest,
+): void {
+  require(
+    Number.isSafeInteger(request.limit) && request.limit >= 1,
+    "limit must be a positive safe integer",
+  );
+  for (
+    const [name, query] of [
+      ["namespace_query", request.namespace_query],
+      ["page_name_query", request.page_name_query],
+    ] as const
+  ) {
+    require(
+      query === undefined ||
+        (query !== "" && query === query.trim() &&
+          query === query.toLowerCase()),
+      `${name} must be a normalized lowercase substring when present`,
+    );
+  }
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag must be canonical when present",
+  );
+}
+
+function matches_exploration(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: PageExplorationCursorScope,
+): boolean {
+  return (scope.namespace_query === null ||
+    key.namespace_key.includes(scope.namespace_query)) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
 }

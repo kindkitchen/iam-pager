@@ -30,6 +30,9 @@ import {
   type PageHttpHandler,
   type PageRepository,
   PageService,
+  type PublicPageExplorer,
+  type PublicPageLister,
+  type PublicPageViewer,
   RepositoryNamespaceAuthorityResolver,
 } from "./page/mod.ts";
 import {
@@ -44,6 +47,18 @@ import {
   CreatorNamespacePanelPresenter,
   type NamespacePanelPresenter,
 } from "./ui/namespace-panel.ts";
+import {
+  CreatorPageManagementPresenter,
+  type PageManagementPanelPresenter,
+} from "./ui/page-management.ts";
+import {
+  type PublicExplorationPresenter,
+  SitePublicExplorationPresenter,
+} from "./ui/public-exploration.ts";
+import {
+  CreatorPublicPageViewPresenter,
+  type PublicPageViewPresenter,
+} from "./ui/public-page-view.ts";
 import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
@@ -86,12 +101,20 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 export interface AppServices {
   engine: LocatorEngine;
   page_repository: PageRepository;
-  pages: PageHttpApplication & PageDeliverer;
+  pages:
+    & PageHttpApplication
+    & PageDeliverer
+    & PublicPageViewer
+    & PublicPageLister
+    & PublicPageExplorer;
   pages_http: PageHttpHandler;
+  public_page_view: PublicPageViewPresenter;
+  public_exploration: PublicExplorationPresenter;
   namespace_repository: NamespaceRepository;
   namespaces: NamespaceReservationManager;
   namespaces_http: NamespaceHttpHandler;
   namespace_panel: NamespacePanelPresenter;
+  page_management_panel: PageManagementPanelPresenter;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -176,6 +199,9 @@ export function create_app_services(
     clock,
   });
   const pages_http = new PageHttpAdapter({ pages });
+  const public_page_view = new CreatorPublicPageViewPresenter({ pages });
+  const public_exploration = new SitePublicExplorationPresenter({ pages });
+  const page_management_panel = new CreatorPageManagementPresenter({ pages });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -220,10 +246,13 @@ export function create_app_services(
     page_repository,
     pages,
     pages_http,
+    public_page_view,
+    public_exploration,
     namespace_repository,
     namespaces,
     namespaces_http,
     namespace_panel,
+    page_management_panel,
     session,
     session_transport,
     request_context,

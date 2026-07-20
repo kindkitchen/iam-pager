@@ -7,18 +7,27 @@ import type { Session } from "../session/model.ts";
 import { max_page_list_cursor_length } from "./cursor.ts";
 import { format_page_etag, parse_page_etag } from "./etag.ts";
 import type {
+  BulkChangeManagedPageAccessResult,
+  BulkDeleteManagedPagesResult,
   CreateManagedPageResult,
   DeleteManagedPageResult,
+  DuplicateManagedPageResult,
   InspectManagedPageResult,
   ListManagedPagesResult,
+  ManagedPageBulkAccessChanger,
+  ManagedPageBulkDeleter,
   ManagedPageCreator,
   ManagedPageDeleter,
+  ManagedPageDuplicator,
   ManagedPageInspection,
   ManagedPageInspector,
   ManagedPageLister,
+  ManagedPageRenamer,
+  ManagedPageRevisionSelection,
   ManagedPageUpdater,
   PageSummary,
   PublishTrialPageResult,
+  RenameManagedPageResult,
   TrialPagePublisher,
   UpdateManagedPageResult,
   UserPageActor,
@@ -41,15 +50,26 @@ export type PageHttpApplication =
   & ManagedPageLister
   & ManagedPageInspector
   & ManagedPageUpdater
-  & ManagedPageDeleter;
+  & ManagedPageDeleter
+  & ManagedPageRenamer
+  & ManagedPageDuplicator
+  & ManagedPageBulkAccessChanger
+  & ManagedPageBulkDeleter;
 
-/** Fresh-independent collection/item boundary for `/api/pages`. */
+/** Fresh-independent collection, item, action, and bulk page boundary. */
 export interface PageHttpHandler {
   collection(
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response>;
   item(request: Request, context: PageHttpRequestContext): Promise<Response>;
+  /** `POST /api/pages/:page_id/(rename|duplicate)` action boundary. */
+  item_action(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<Response>;
+  /** `POST /api/pages/bulk/(access|delete)` command boundary. */
+  bulk(request: Request, context: PageHttpRequestContext): Promise<Response>;
 }
 
 export interface PageHttpAdapterOptions {
@@ -59,12 +79,27 @@ export interface PageHttpAdapterOptions {
 interface CreateBody {
   locator: { namespace: string; page_name?: string };
   access: PageAccess;
+  tags?: string[];
   content: { content_type: string; input: unknown };
 }
 
 interface PatchBody {
   access?: PageAccess;
+  tags?: string[];
   content?: { content_type: string; input: unknown };
+}
+
+interface RenameBody {
+  page_name?: string;
+}
+
+interface BulkAccessBody {
+  access: PageAccess;
+  selection: ManagedPageRevisionSelection[];
+}
+
+interface BulkDeleteBody {
+  selection: ManagedPageRevisionSelection[];
 }
 
 type DecodeResult<Value> =
@@ -95,6 +130,26 @@ export class PageHttpAdapter implements PageHttpHandler {
     if (request.method === "PATCH") return this.#update(request, context);
     if (request.method === "DELETE") return this.#delete(request, context);
     return Promise.resolve(method_not_allowed_response("GET, PATCH, DELETE"));
+  }
+
+  item_action(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<Response> {
+    if (request.method !== "POST") {
+      return Promise.resolve(method_not_allowed_response("POST"));
+    }
+    return this.#item_action(request, context);
+  }
+
+  bulk(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<Response> {
+    if (request.method !== "POST") {
+      return Promise.resolve(method_not_allowed_response("POST"));
+    }
+    return this.#bulk(request, context);
   }
 
   async #create(
@@ -129,6 +184,13 @@ export class PageHttpAdapter implements PageHttpHandler {
       content: decoded.value.content,
     };
     if (session.kind === "guest") {
+      if (decoded.value.tags !== undefined) {
+        return error_response(
+          422,
+          "invalid_tags",
+          "trial pages do not accept tags",
+        );
+      }
       const result = await this.#pages.publish_trial({
         ...command,
         actor: { kind: "guest" },
@@ -137,6 +199,7 @@ export class PageHttpAdapter implements PageHttpHandler {
     }
     const result = await this.#pages.create_managed({
       ...command,
+      ...(decoded.value.tags === undefined ? {} : { tags: decoded.value.tags }),
       actor: actor_from_session(session),
     });
     return create_result_response(request.url, result, true);
@@ -250,6 +313,118 @@ export class PageHttpAdapter implements PageHttpHandler {
       headers: { "cache-control": "no-store" },
     });
   }
+
+  async #item_action(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<Response> {
+    const session = context.session;
+    if (session.kind !== "authenticated") {
+      return authentication_required_response();
+    }
+    const actor = actor_from_session(session);
+    if (
+      !csrf_tokens_match(
+        session.csrf_token,
+        request.headers.get("x-csrf-token") ?? "",
+      )
+    ) {
+      return invalid_csrf_response();
+    }
+    const target = decode_action_target(request.url);
+    if (!target.ok) return target.response;
+    const precondition = decode_precondition(request, target.page_id);
+    if (!precondition.ok) return precondition.response;
+    if (target.action === "duplicate") {
+      const body = await read_bounded_request_text(request, 0);
+      if (!body.ok || body.text !== "") {
+        return error_response(
+          400,
+          "invalid_request",
+          "duplicate requests must not include a body",
+        );
+      }
+      const result = await this.#pages.duplicate_managed({
+        actor,
+        page_id: target.page_id,
+        expected_revision: precondition.revision,
+      });
+      if (!result.ok) return duplicate_failure_response(result);
+      return action_success_response(201, result.outcome, result.page, {
+        location: `/api/pages/${result.page.page_id}`,
+      });
+    }
+    const decoded = await decode_json_body(request, decode_rename_body);
+    if (!decoded.ok) return decoded.response;
+    const result = await this.#pages.rename_managed({
+      actor,
+      page_id: target.page_id,
+      expected_revision: precondition.revision,
+      ...(decoded.value.page_name === undefined
+        ? {}
+        : { page_name: decoded.value.page_name }),
+    });
+    if (!result.ok) return rename_failure_response(result);
+    return action_success_response(200, result.outcome, result.page);
+  }
+
+  async #bulk(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<Response> {
+    const session = context.session;
+    if (session.kind !== "authenticated") {
+      return authentication_required_response();
+    }
+    const actor = actor_from_session(session);
+    if (
+      !csrf_tokens_match(
+        session.csrf_token,
+        request.headers.get("x-csrf-token") ?? "",
+      )
+    ) {
+      return invalid_csrf_response();
+    }
+    const target = decode_bulk_target(request.url);
+    if (!target.ok) return target.response;
+    if (target.operation === "access") {
+      const decoded = await decode_json_body(request, decode_bulk_access_body);
+      if (!decoded.ok) return decoded.response;
+      const result = await this.#pages.bulk_change_managed_access({
+        actor,
+        access: decoded.value.access,
+        selection: decoded.value.selection,
+      });
+      if (!result.ok) return bulk_failure_response(result);
+      return json_response(200, {
+        ok: true,
+        results: result.results.map((item) =>
+          item.ok
+            ? {
+              page_id: item.page_id,
+              ok: true,
+              page: present_summary(item.page, true),
+            }
+            : { page_id: item.page_id, ok: false, error: item.reason }
+        ),
+      });
+    }
+    const decoded = await decode_json_body(request, decode_bulk_delete_body);
+    if (!decoded.ok) return decoded.response;
+    const result = await this.#pages.bulk_delete_managed({
+      actor,
+      selection: decoded.value.selection,
+    });
+    if (!result.ok) return bulk_failure_response(result);
+    return json_response(200, {
+      ok: true,
+      results: result.results.map((item) =>
+        item.ok
+          ? { page_id: item.page_id, ok: true }
+          : { page_id: item.page_id, ok: false, error: item.reason }
+      ),
+    });
+  }
 }
 
 function authenticated_actor(session: Session): UserPageActor | null {
@@ -316,11 +491,13 @@ async function decode_json_body<Value>(
 }
 
 function decode_create_body(input: unknown): DecodeResult<CreateBody> {
-  const body = strict_object(input, ["locator", "access", "content"]);
+  const body = strict_object(input, ["locator", "access", "tags?", "content"]);
   if (!body.ok) return body;
   if (typeof body.value.access !== "string") {
     return { ok: false, detail: "access must be a string" };
   }
+  const tags = decode_tags_field(body.value.tags);
+  if (!tags.ok) return tags;
   const locator = strict_object(body.value.locator, [
     "namespace",
     "page_name?",
@@ -350,19 +527,22 @@ function decode_create_body(input: unknown): DecodeResult<CreateBody> {
           page_name: locator.value.page_name,
         },
       access: body.value.access as PageAccess,
+      ...(tags.value === undefined ? {} : { tags: tags.value }),
       content: content.value,
     },
   };
 }
 
 function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
-  const body = strict_object(input, ["access?", "content?"]);
+  const body = strict_object(input, ["access?", "tags?", "content?"]);
   if (!body.ok) return body;
   if (
     body.value.access !== undefined && typeof body.value.access !== "string"
   ) {
     return { ok: false, detail: "access must be a string when present" };
   }
+  const tags = decode_tags_field(body.value.tags);
+  if (!tags.ok) return tags;
   let content: PatchBody["content"];
   if (body.value.content !== undefined) {
     const decoded = decode_content_command(body.value.content);
@@ -375,9 +555,95 @@ function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
       ...(body.value.access === undefined
         ? {}
         : { access: body.value.access as PageAccess }),
+      ...(tags.value === undefined ? {} : { tags: tags.value }),
       ...(content === undefined ? {} : { content }),
     },
   };
+}
+
+function decode_tags_field(
+  input: unknown,
+): DecodeResult<string[] | undefined> {
+  if (input === undefined) return { ok: true, value: undefined };
+  if (
+    !Array.isArray(input) ||
+    input.some((candidate) => typeof candidate !== "string")
+  ) {
+    return {
+      ok: false,
+      detail: "tags must be an array of strings when present",
+    };
+  }
+  return { ok: true, value: input as string[] };
+}
+
+function decode_rename_body(input: unknown): DecodeResult<RenameBody> {
+  const body = strict_object(input, ["page_name?"]);
+  if (!body.ok) return body;
+  if (
+    body.value.page_name !== undefined &&
+    typeof body.value.page_name !== "string"
+  ) {
+    return { ok: false, detail: "page_name must be a string when present" };
+  }
+  return {
+    ok: true,
+    value: body.value.page_name === undefined
+      ? {}
+      : { page_name: body.value.page_name },
+  };
+}
+
+function decode_bulk_access_body(input: unknown): DecodeResult<BulkAccessBody> {
+  const body = strict_object(input, ["access", "selection"]);
+  if (!body.ok) return body;
+  if (typeof body.value.access !== "string") {
+    return { ok: false, detail: "access must be a string" };
+  }
+  const selection = decode_bulk_selection(body.value.selection);
+  if (!selection.ok) return selection;
+  return {
+    ok: true,
+    value: {
+      access: body.value.access as PageAccess,
+      selection: selection.value,
+    },
+  };
+}
+
+function decode_bulk_delete_body(input: unknown): DecodeResult<BulkDeleteBody> {
+  const body = strict_object(input, ["selection"]);
+  if (!body.ok) return body;
+  const selection = decode_bulk_selection(body.value.selection);
+  if (!selection.ok) return selection;
+  return { ok: true, value: { selection: selection.value } };
+}
+
+function decode_bulk_selection(
+  input: unknown,
+): DecodeResult<ManagedPageRevisionSelection[]> {
+  if (!Array.isArray(input)) {
+    return { ok: false, detail: "selection must be an array" };
+  }
+  const selection: ManagedPageRevisionSelection[] = [];
+  for (const candidate of input) {
+    const item = strict_object(candidate, ["page_id", "expected_revision"]);
+    if (!item.ok) return prefixed(item, "selection");
+    if (typeof item.value.page_id !== "string") {
+      return { ok: false, detail: "selection: page_id must be a string" };
+    }
+    if (typeof item.value.expected_revision !== "number") {
+      return {
+        ok: false,
+        detail: "selection: expected_revision must be a number",
+      };
+    }
+    selection.push({
+      page_id: item.value.page_id,
+      expected_revision: item.value.expected_revision,
+    });
+  }
+  return { ok: true, value: selection };
 }
 
 function decode_content_command(
@@ -428,6 +694,9 @@ function prefixed(
 
 function decode_list_query(request_url: string): DecodeResult<{
   namespace?: string;
+  page_name_query?: string;
+  access?: PageAccess;
+  tag?: string;
   limit: number;
   cursor?: string;
 }> {
@@ -435,7 +704,7 @@ function decode_list_query(request_url: string): DecodeResult<{
   if (url.search.length > page_list_query_max_length) {
     return { ok: false, detail: "query is too large" };
   }
-  const allowed = ["namespace", "limit", "cursor"];
+  const allowed = ["namespace", "name", "access", "tag", "limit", "cursor"];
   for (const key of url.searchParams.keys()) {
     if (!allowed.includes(key)) {
       return { ok: false, detail: `unknown query parameter: ${key}` };
@@ -466,10 +735,16 @@ function decode_list_query(request_url: string): DecodeResult<{
   ) {
     return { ok: false, detail: "cursor is invalid" };
   }
+  const name = url.searchParams.get("name");
+  const access = url.searchParams.get("access");
+  const tag = url.searchParams.get("tag");
   return {
     ok: true,
     value: {
       ...(namespace === null ? {} : { namespace }),
+      ...(name === null ? {} : { page_name_query: name }),
+      ...(access === null ? {} : { access: access as PageAccess }),
+      ...(tag === null ? {} : { tag }),
       limit,
       ...(cursor === null ? {} : { cursor }),
     },
@@ -502,6 +777,70 @@ function decode_item_target(request_url: string):
     };
   }
   return { ok: true, page_id: match[1] };
+}
+
+function decode_action_target(request_url: string):
+  | { ok: true; page_id: string; action: "rename" | "duplicate" }
+  | { ok: false; response: Response } {
+  const url = new URL(request_url);
+  if (url.search !== "") {
+    return {
+      ok: false,
+      response: error_response(
+        400,
+        "invalid_query",
+        "page action requests do not accept query parameters",
+      ),
+    };
+  }
+  const match = /^\/api\/pages\/([^/]+)\/(rename|duplicate)$/.exec(
+    url.pathname,
+  );
+  if (match === null) {
+    return {
+      ok: false,
+      response: error_response(404, "not_found", "page action was not found"),
+    };
+  }
+  if (!is_valid_page_id(match[1])) {
+    return {
+      ok: false,
+      response: error_response(
+        400,
+        "invalid_page_id",
+        "page_id must be one route-safe opaque value",
+      ),
+    };
+  }
+  return {
+    ok: true,
+    page_id: match[1],
+    action: match[2] as "rename" | "duplicate",
+  };
+}
+
+function decode_bulk_target(request_url: string):
+  | { ok: true; operation: "access" | "delete" }
+  | { ok: false; response: Response } {
+  const url = new URL(request_url);
+  if (url.search !== "") {
+    return {
+      ok: false,
+      response: error_response(
+        400,
+        "invalid_query",
+        "bulk requests do not accept query parameters",
+      ),
+    };
+  }
+  const match = /^\/api\/pages\/bulk\/(access|delete)$/.exec(url.pathname);
+  if (match === null) {
+    return {
+      ok: false,
+      response: error_response(404, "not_found", "bulk command was not found"),
+    };
+  }
+  return { ok: true, operation: match[1] as "access" | "delete" };
 }
 
 function decode_precondition(
@@ -616,6 +955,7 @@ function create_failure_response(
       );
     case "invalid_locator":
     case "invalid_access":
+    case "invalid_tags":
       return error_response(422, result.reason, "page input is invalid");
     case "unknown_content_type":
       return error_response(
@@ -647,6 +987,8 @@ function list_failure_response(
         result.reason,
         "namespace cannot be mapped to a direct URL",
       );
+    case "invalid_filter":
+      return error_response(400, result.reason, "page filter is invalid");
     case "invalid_cursor":
       return error_response(400, result.reason, "cursor is invalid");
   }
@@ -676,14 +1018,17 @@ function update_failure_response(
       return error_response(
         400,
         result.reason,
-        "PATCH must include access, content, or both",
+        "PATCH must include access, tags, content, or a combination",
       );
     case "invalid_access":
+    case "invalid_tags":
     case "invalid_input":
       return error_response(
         422,
         result.reason,
-        result.reason === "invalid_input" ? result.detail : "access is invalid",
+        result.reason === "invalid_input"
+          ? result.detail
+          : "page metadata is invalid",
       );
     case "unknown_content_type":
       return error_response(
@@ -712,6 +1057,87 @@ function delete_failure_response(
     );
 }
 
+function rename_failure_response(
+  result: Exclude<RenameManagedPageResult, { ok: true }>,
+): Response {
+  switch (result.reason) {
+    case "not_found":
+      return error_response(404, result.reason, "page was not found");
+    case "revision_conflict":
+      return error_response(
+        412,
+        "precondition_failed",
+        "page representation has changed",
+      );
+    case "revision_exhausted":
+      return error_response(
+        409,
+        result.reason,
+        "page cannot accept another revision",
+      );
+    case "invalid_page_name":
+      return error_response(
+        422,
+        result.reason,
+        "page_name cannot be mapped to a direct URL",
+      );
+    case "page_exists":
+      return error_response(
+        409,
+        result.reason,
+        "a managed page already exists at this locator",
+      );
+    case "unknown_content_type":
+      return error_response(
+        500,
+        "page_unavailable",
+        "page cannot be represented",
+      );
+  }
+}
+
+function duplicate_failure_response(
+  result: Exclude<DuplicateManagedPageResult, { ok: true }>,
+): Response {
+  switch (result.reason) {
+    case "not_found":
+      return error_response(404, result.reason, "page was not found");
+    case "revision_conflict":
+      return error_response(
+        412,
+        "precondition_failed",
+        "page representation has changed",
+      );
+    case "unknown_content_type":
+      return error_response(
+        500,
+        "page_unavailable",
+        "page cannot be represented",
+      );
+    case "page_name_generation_exhausted":
+    case "page_id_generation_exhausted":
+      return error_response(
+        503,
+        result.reason,
+        "page duplication is temporarily unavailable",
+      );
+  }
+}
+
+function bulk_failure_response(
+  result:
+    | Exclude<BulkChangeManagedPageAccessResult, { ok: true }>
+    | Exclude<BulkDeleteManagedPagesResult, { ok: true }>,
+): Response {
+  return result.reason === "invalid_access"
+    ? error_response(422, result.reason, "access is invalid")
+    : error_response(
+      422,
+      result.reason,
+      "selection must contain 1-100 distinct page/revision pairs",
+    );
+}
+
 function inspection_response(page: ManagedPageInspection): Response {
   return json_response(
     200,
@@ -726,6 +1152,28 @@ function inspection_response(page: ManagedPageInspection): Response {
   );
 }
 
+function action_success_response(
+  status: number,
+  outcome: string,
+  page: ManagedPageInspection,
+  extra_headers?: HeadersInit,
+): Response {
+  const headers = new Headers(extra_headers);
+  headers.set("etag", format_page_etag(page.page_id, page.revision));
+  return json_response(
+    status,
+    {
+      ok: true,
+      outcome,
+      page: {
+        ...present_summary(page, true),
+        content: structuredClone(page.content),
+      },
+    },
+    headers,
+  );
+}
+
 function present_summary(page: PageSummary, managed: boolean) {
   return {
     page_id: page.page_id,
@@ -734,6 +1182,7 @@ function present_summary(page: PageSummary, managed: boolean) {
     access: page.access,
     content_type: page.content_type,
     size_bytes: page.size_bytes,
+    tags: [...page.tags],
     created_at: page.created_at.toISOString(),
     updated_at: page.updated_at.toISOString(),
     revision: page.revision,

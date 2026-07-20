@@ -38,7 +38,10 @@ locator, ID, and revision conditions. Owner-safe summaries and inspection input
 exclude stewardship IDs and stored derivations. This service runs against either
 conforming page repository. The composition root selects the memory or Deno KV
 adapter, exposes the service and strict HTTP boundary once, and Fresh
-collection/item/direct routes remain thin adapters over those interfaces.
+collection/item/direct routes remain thin adapters over those interfaces. Public
+exploration extends that boundary through `PublicPageExplorer`: callers supply
+optional name queries and an opaque continuation, while the selected repository
+decides whether the MVP scan or a future index satisfies it.
 
 ## QT-STORAGE — Repository persistence
 
@@ -73,11 +76,14 @@ for deployment continuity.
 authoritative envelope by stable page ID, case-normalized locator and ordered
 owner indexes, and immutable content generations split into bounded chunks.
 Content writes finish their chunks before an atomic visibility commit updates
-all envelopes and indexes; access-only updates retain the exact generation,
-while content updates, trial replacement, managed takeover, and deletion remove
-the replaced visible generation in the same commit. The tagged JSON codec
-round-trips plain structured data and `Uint8Array`. Reads validate key/value
-identity, stewardship/access/revision/date/meta fields, index coherence, chunk
+all envelopes and indexes; access-only updates and rename retain the exact
+generation, while rename moves both indexes with the envelope revision in one
+commit. Duplication writes a fresh generation and conditionally checks the exact
+source revision and generated destination; content updates, trial replacement,
+managed takeover, and deletion remove the replaced visible generation in the
+same commit. The tagged JSON codec round-trips plain structured data and
+`Uint8Array`. Reads validate key/value identity,
+stewardship/access/revision/date/meta fields, index coherence, chunk
 order/count/length, codec shape, and schema version; impossible or unknown
 states are corruption. Conditional retries are bounded, and failed visibility
 conditions clean unreferenced new chunks best-effort. Neither ownership nor
@@ -295,11 +301,13 @@ oversized bodies return `400`/`413`; unsupported media types return `415`; taken
 names return `409`; invalid locator names return `422`. Responses use
 `no-store`.
 
-The composed page-management HTTP adapter serves `POST`/`GET /api/pages` and
-`GET`/`PATCH`/`DELETE /api/pages/:page_id`. Creation uses nested
-locator/access/content input and session-derived trial-versus-managed semantics;
-authenticated mutation requires the shared constant-time CSRF header check, and
-a stale creator header on a guest session cannot downgrade into trial
+The composed page-management HTTP adapter serves `POST`/`GET /api/pages`,
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`, revision-bound
+`POST /api/pages/:page_id/(rename|duplicate)` actions, and
+`POST /api/pages/bulk/(access|delete)` commands. Creation uses nested
+locator/access/tags/content input and session-derived trial-versus-managed
+semantics; authenticated mutation requires the shared constant-time CSRF header
+check, and a stale creator header on a guest session cannot downgrade into trial
 publication. Authenticated list/inspect output excludes owner IDs, source from
 lists, and stored derivations. PATCH and DELETE require one canonical strong
 page/revision ETag, mapping missing, malformed, and stale preconditions to
@@ -307,7 +315,18 @@ page/revision ETag, mapping missing, malformed, and stale preconditions to
 limits, and cursors are bounded and strict. All management/error responses are
 no-store. The exact public contract is documented in
 [`docs/api/pages.md`](../api/pages.md); the superseded flat endpoint and its
-locator-only application/storage path have been removed.
+locator-only application/storage path have been removed. Managed list queries
+accept AND-combined name/access/tag filters, PATCH can replace or clear tags,
+and the public site GET form projects exact-tag exploration.
+
+Bulk access and deletion retain their HTTP-independent service boundary behind
+strict routes. They accept only 1-100 distinct, syntactically valid page
+ID/positive-revision pairs and validate the complete selection before mutation.
+Accepted items execute in selection order with current owner/namespace authority
+and repository revision conditions; one item failure does not roll back another.
+Access successes retain content and tags, increment once, and use one shared
+bulk-operation timestamp. Results preserve input order and collapse missing,
+foreign, and unauthorized pages to the same item-level `not_found` outcome.
 
 ## QT-SEARCH — Search and privacy
 
@@ -317,6 +336,27 @@ locator-only application/storage path have been removed.
 - A change from public to private must remove the page from exploration within a
   stated practical delay.
 - Content indexing applies only to supported textual representations.
+
+The first implementation searches current page state rather than a secondary
+index, so public-to-private changes are reflected in the next query with no
+indexing delay. Namespace and page-name matching uses normalized lowercase
+substrings; tag matching is exact against the canonical stored set; supplied
+fields use AND semantics. Results follow the existing locale-independent locator
+order and are bounded by opaque cursors tied to the complete query scope. Both
+repositories run the same eligibility, filtering, pagination, and
+cursor-isolation conformance cases. The memory adapter filters its current
+records; Deno KV scans its ordered locator index and re-resolves each
+candidate's current envelope before eligibility. The contract deliberately does
+not expose that implementation choice, allowing a secondary tag or text index
+later.
+
+Managed tag input is bounded before deduplication to ten values. The service
+trims and lowercases 1–32 character ASCII tags, rejects characters outside
+alphanumerics/`-`/`_`, and stores a sorted unique set. Replacing or clearing
+tags uses the same exact-revision mutation as content/access; managed filter
+cursors bind namespace, page-name substring, access, and tag together. Deno KV
+persists tags in schema-v1 envelopes while reading older envelopes without the
+optional field as untagged.
 
 ## QT-VERIFY — Verification
 
@@ -331,15 +371,18 @@ Tests should cover the behavior that defines the product:
 - route conflicts and missing-page responses;
 - page updates without mixed content and metadata;
 - revision conflicts for concurrent update/delete intent;
+- bounded bulk selection prevalidation, ordered partial results, and concurrent
+  per-item revision conflicts;
 - strict HTTP schemas, CSRF, pagination, and ETag preconditions;
 - owner-only private delivery with an ordinary missing response for everyone
   else;
 - the same identity, index, concurrency, and binary/large-content repository
   contract against memory and Deno KV;
-- exclusion of private and guest pages from exploration.
+- canonical bounded tag mutation and tag/name/access filter cursor isolation;
+- exclusion of private and guest pages from exploration, including tag queries.
 
-The page-management suites cover these domain, repository, HTTP, composition,
-and direct-delivery boundaries. Final acceptance also exercises the composed
-local server through guest trial publication, local authentication and namespace
-reservation, managed takeover, private delivery, access PATCH, stale ETag,
-deletion, and logout.
+The page-management and exploration suites cover these domain, repository,
+service, presenter, component, composition, HTTP, and direct-delivery
+boundaries. Final acceptance also exercises the composed local server through
+guest trial publication, local authentication and namespace reservation, managed
+takeover, private delivery, access PATCH, stale ETag, deletion, and logout.

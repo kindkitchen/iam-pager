@@ -41,16 +41,35 @@ creator changes access through the same atomic revision-bound PATCH used for
 content updates. Direct delivery observes the committed representation
 immediately. A private page is available only to its stored creator's current
 session and is ordinary missing to guests, logged-out creators, and other users.
-Exploration remains later scope and must exclude private pages.
+The site-mediated view applies the same non-disclosure: private pages are
+ordinary missing. Namespace public listings and cross-namespace exploration are
+cursor-bounded and exclude both private and trial pages from current storage
+state; trial pages remain reachable only by a known direct or site-view locator.
+
+### OQ-EXPLORE — Public exploration
+
+The first exploration version is settled as deterministic browse plus
+case-insensitive substring search over author namespaces and page names and one
+optional exact canonical tag. Supplied fields use AND semantics. Default pages
+have no page-name value and therefore match only when that query is absent.
+Private and guest pages are excluded from current storage state before results
+cross the public contract.
+
+Tag filtering is implemented in the HTTP-independent explorer, bound into its
+cursor scope, and exposed by the site GET form. Text-content extraction and
+indexing, relevance ranking, and view-count sorting are not part of this MVP
+slice. The `PublicPageExplorer` boundary permits a later index without changing
+locators, site-view links, or visitor-safe result summaries.
 
 ### OQ-API — API surface
 
-The first concrete page API is settled as `POST`/`GET /api/pages` and
-`GET`/`PATCH`/`DELETE /api/pages/:page_id`, with strict nested JSON, browser
-session authentication, synchronizer-token CSRF for authenticated mutations,
-opaque pagination, and strong revision ETags. Direct retrieval remains the
-locator URL. External bearer credentials and expanded management operations are
-later scope; see [`docs/api/pages.md`](../api/pages.md).
+The concrete page API includes `POST`/`GET /api/pages`,
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`, revision-bound rename/duplicate
+actions, and bounded bulk access/delete commands, with strict nested JSON,
+browser session authentication, synchronizer-token CSRF for authenticated
+mutations, opaque pagination, and exact source revisions. Direct retrieval
+remains the locator URL. External bearer credentials are later; see
+[`docs/api/pages.md`](../api/pages.md).
 
 ## OQ-OPEN — MVP decisions still needed
 
@@ -69,12 +88,6 @@ Choose initial limits for content size, total stored size, page count, and
 frequency. Guest publishing uses stricter limits and no namespace guarantee. The
 original guest-capacity phrase "removes the latest" still needs one concrete
 meaning: remove an existing item, expire items, or reject the new item.
-
-### OQ-EXPLORE — Public exploration
-
-Decide whether the first exploration version includes only page names,
-namespaces, and tags, or also text-content matches. View-count sorting is not
-required unless reliable counts become useful to the MVP.
 
 ### OQ-RETENTION — Retention
 
@@ -99,8 +112,11 @@ expiry, account deletion, migration, and broader backup policy remain open.
 ### OQ-ISOLATION — Direct-content isolation
 
 Raw HTML or another active format can conflict with authenticated site sessions
-if it shares the same browser trust boundary. The chosen routing and response
-model must keep creator content from acting as the management site.
+if it shares the same browser trust boundary. Direct HTML responses use active-
+content isolation headers. The site-mediated view places supported creator HTML
+in a sandboxed iframe without same-origin, script, or referrer permissions;
+creator markup never enters the platform DOM. Future active formats must satisfy
+those same boundaries before gaining an inline preview.
 
 ### OQ-ROUTES — Route collisions
 
@@ -110,9 +126,10 @@ as stable.
 
 ### OQ-MISSING — Missing-page fallback
 
-Silently returning the home page for a missing direct URL makes clients believe
-the content request succeeded. Use a real missing-page response, optionally with
-a link to the site.
+Silently returning the home page for a missing URL makes clients believe the
+content request succeeded. Direct and site-mediated locator routes now return
+real missing responses; the wrapper deliberately uses the same 404 for missing,
+private, forbidden, and malformed visitor lookups.
 
 ### OQ-FORMATS — Broad content support
 

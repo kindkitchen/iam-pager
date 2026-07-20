@@ -24,22 +24,30 @@ visitor can:
 - open the creator's default public page;
 - browse the creator's other public pages.
 
-Creator content must remain visually and technically distinguishable from the
-platform's own controls.
+Creator content remains visually and technically distinguishable from the
+platform's own controls: `/site/<locator>` labels and confines supported HTML in
+a sandboxed, no-referrer frame, while the wrapper alone owns navigation and
+related-page links. Unsupported content receives a metadata fallback and its
+direct-content link. Trial pages remain viewable by known locator but expose no
+creator listing; private and missing pages receive the same real 404.
 
 ## EX-EXPLORE — Explorer finds public pages
 
-The site can expose public pages through search and browsing. Search is intended
-to cover:
+The site exposes a bounded browse list of public creator-backed pages. Its form
+narrows by a case-insensitive namespace substring, a page-name substring, one
+exact canonical tag, or an AND-combination. Results preserve the creator's
+locator casing and open the thin site view, from which direct content, the
+creator's default page when present, and other public pages remain available.
+Opaque continuation keeps the active search fields attached to the next result
+page.
 
-- page names and author namespaces, together or separately;
-- tags;
-- content matches when supported content can be represented and indexed as text.
+Private pages and guest trials are excluded by the page capability and both
+storage implementations, not by the web component. A current public-to-private
+change removes a page from subsequent browse and search results immediately.
+Guest pages remain reachable only by known direct or site-view locators.
 
-Search must not expose private pages.
-
-Guest pages are not searchable or browsable from the site. They can be reached
-only by their direct URL for raw preview.
+The site form exposes tag filtering and matching rows show canonical tags.
+Text-content extraction and indexing remain later scope.
 
 ## EX-PUBLISH — Publisher creates a page
 
@@ -72,9 +80,23 @@ Within a reserved namespace, the creator can:
 - select pages for bulk deletion or access changes;
 
 A name conflict within the reserved namespace is reported instead of replacing
-an authenticated page. The API-first core currently provides individual create,
-list, inspect, content/access update, and delete operations; the site management
-UI and rename, duplicate, filters, tags, and bulk actions remain later scope.
+an authenticated page. The HTTP-independent core provides individual create,
+list, inspect, content/access/tag update, delete, revision-bound same-namespace
+rename, and generated-name duplicate operations. Tags are normalized into a
+bounded canonical set; managed lists can AND-combine page-name substring,
+access, and tag filters, and duplicate copies the selected source revision
+including tags to a fresh ID. Bounded raw bulk commands accept 1-100 distinct,
+explicit page/revision selections for one access target or deletion, then return
+an ordered success, stale, or non-disclosing missing result for each item;
+accepted items are independent rather than transactionally all-or-nothing.
+Memory and Deno KV enforce each mutation atomically. The API exposes
+create/update tags, managed filters, rename, duplicate, and both bulk commands
+through the same strict session/CSRF/revision boundary as earlier management.
+The site management panel projects those contracts with filter-bound
+continuation, content/tag editing, same-namespace rename, generated duplication,
+and an explicit selection of at most 100 visible current revisions for bulk
+access or deletion. It shows one outcome per selected page and refreshes
+revision conflicts without silently overwriting concurrent work.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

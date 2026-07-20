@@ -1,9 +1,15 @@
 import { type Locator } from "../locator/model.ts";
 import {
   compare_page_sort_keys,
+  decode_managed_page_list_cursor,
+  decode_page_exploration_cursor,
   decode_page_list_cursor,
+  encode_managed_page_list_cursor,
+  encode_page_exploration_cursor,
   encode_page_list_cursor,
+  type ManagedPageListCursorScope,
   page_sort_key,
+  type PageExplorationCursorScope,
   type PageSortKey,
 } from "./cursor.ts";
 import type {
@@ -11,11 +17,19 @@ import type {
   CreateManagedResult,
   DeleteManagedRequest,
   DeleteManagedResult,
+  DuplicateManagedRequest,
+  DuplicateManagedResult,
+  ExplorePublicRequest,
+  ExplorePublicResult,
   ListManagedRequest,
   ListManagedResult,
+  ListPublicRequest,
+  ListPublicResult,
   PageRepository,
   PutTrialRequest,
   PutTrialResult,
+  RenameManagedRequest,
+  RenameManagedResult,
   ReplaceManagedRequest,
   ReplaceManagedResult,
 } from "./interfaces.ts";
@@ -23,6 +37,7 @@ import {
   is_valid_page_access,
   is_valid_page_id,
   is_valid_page_revision,
+  is_valid_page_tags,
   page_record_violation,
   type PageContent,
   type PageRecord,
@@ -62,6 +77,8 @@ interface StoredPageEnvelope {
   readonly stewardship: "trial" | "managed";
   readonly owner_user_id?: string;
   readonly access: "public" | "private";
+  /** Optional for backwards-compatible reads of pre-tag schema-v1 records. */
+  readonly tags?: readonly string[];
   readonly revision: number;
   readonly content_type: string;
   readonly media_type: string;
@@ -94,6 +111,79 @@ function invariant_violation(): never {
 
 function is_valid_time(value: Date): boolean {
   return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function require_normalized_managed_list_request(
+  request: ListManagedRequest,
+): void {
+  if (request.page_name_query !== undefined) {
+    require(
+      request.page_name_query !== "" &&
+        request.page_name_query === request.page_name_query.trim() &&
+        request.page_name_query === request.page_name_query.toLowerCase(),
+      "page_name_query must be a normalized lowercase substring when present",
+    );
+  }
+  require(
+    request.access === undefined || is_valid_page_access(request.access),
+    "access filter must be public or private when present",
+  );
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag filter must be canonical when present",
+  );
+}
+
+function matches_managed_list(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: ManagedPageListCursorScope,
+): boolean {
+  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.access === null || record.access === scope.access) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
+}
+
+function require_normalized_exploration_request(
+  request: ExplorePublicRequest,
+): void {
+  require(
+    Number.isSafeInteger(request.limit) && request.limit >= 1,
+    "limit must be a positive safe integer",
+  );
+  for (
+    const [name, query] of [
+      ["namespace_query", request.namespace_query],
+      ["page_name_query", request.page_name_query],
+    ] as const
+  ) {
+    require(
+      query === undefined ||
+        (query !== "" && query === query.trim() &&
+          query === query.toLowerCase()),
+      `${name} must be a normalized lowercase substring when present`,
+    );
+  }
+  require(
+    request.tag === undefined || is_valid_page_tags([request.tag]),
+    "tag must be canonical when present",
+  );
+}
+
+function matches_exploration(
+  record: PageRecord,
+  key: PageSortKey,
+  scope: PageExplorationCursorScope,
+): boolean {
+  return (scope.namespace_query === null ||
+    key.namespace_key.includes(scope.namespace_query)) &&
+    (scope.page_name_query === null ||
+      (key.default_rank === 1 &&
+        key.page_name_key.includes(scope.page_name_query))) &&
+    (scope.tag === null || record.tags.includes(scope.tag));
 }
 
 function normalized_locator(locator: Locator): {
@@ -243,6 +333,7 @@ function deserialize_envelope(value: unknown): StoredPageEnvelope {
       "page_name",
       "owner_user_id",
       "download_filename",
+      "tags",
     ]) ||
     stored.schema_version !== storage_schema_version ||
     typeof stored.page_id !== "string" ||
@@ -258,6 +349,9 @@ function deserialize_envelope(value: unknown): StoredPageEnvelope {
         stored.owner_user_id === "")) ||
     !is_valid_page_access(stored.access) ||
     (stored.stewardship === "trial" && stored.access !== "public") ||
+    !is_valid_page_tags(stored.tags ?? []) ||
+    (stored.stewardship === "trial" && Array.isArray(stored.tags) &&
+      stored.tags.length !== 0) ||
     !is_valid_page_revision(stored.revision) ||
     typeof stored.content_type !== "string" ||
     stored.content_type === "" ||
@@ -314,6 +408,7 @@ function serialize_envelope(
       ? { owner_user_id: page.stewardship.owner_user_id }
       : {}),
     access: page.access,
+    tags: [...page.tags],
     revision: page.revision,
     content_type: page.content.content_type,
     media_type: page.content.meta.media_type,
@@ -341,6 +436,7 @@ function envelope_page(
       ? { kind: "trial" }
       : { kind: "managed", owner_user_id: envelope.owner_user_id! },
     access: envelope.access,
+    tags: [...(envelope.tags ?? [])],
     revision: envelope.revision,
     content: {
       content_type: envelope.content_type,
@@ -680,12 +776,16 @@ export class DenoKvPageRepository implements PageRepository {
         (typeof request.namespace === "string" && request.namespace !== ""),
       "namespace filter must be non-empty when present",
     );
-    const filter = request.namespace === undefined
-      ? null
-      : request.namespace.toLowerCase();
+    require_normalized_managed_list_request(request);
+    const scope: ManagedPageListCursorScope = {
+      namespace: request.namespace?.toLowerCase() ?? null,
+      page_name_query: request.page_name_query ?? null,
+      access: request.access ?? null,
+      tag: request.tag ?? null,
+    };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {
-      after = decode_page_list_cursor(request.cursor, filter);
+      after = decode_managed_page_list_cursor(request.cursor, scope);
       if (after === null) return { ok: false, reason: "invalid_cursor" };
     }
     const prefix = owner_prefix(request.owner_user_id, request.namespace);
@@ -697,7 +797,6 @@ export class DenoKvPageRepository implements PageRepository {
     for await (
       const entry of this.#kv.list<unknown>(
         start === undefined ? { prefix } : { prefix, start },
-        { limit: request.limit + 2 },
       )
     ) {
       if (start !== undefined && key_equals(entry.key, start)) continue;
@@ -713,17 +812,81 @@ export class DenoKvPageRepository implements PageRepository {
         page.stewardship.owner_user_id !== request.owner_user_id ||
         page.revision !== index.revision ||
         !key_equals(entry.key, owner_key(page)) ||
-        (filter !== null && page_sort_key(page).namespace_key !== filter)
+        (scope.namespace !== null &&
+          page_sort_key(page).namespace_key !== scope.namespace)
       ) {
         const current = await this.#kv.get<unknown>(entry.key);
         if (current.versionstamp !== entry.versionstamp) continue;
         invariant_violation();
       }
-      if (
-        after !== null &&
-        compare_page_sort_keys(page_sort_key(page), after) <= 0
-      ) {
+      const key = page_sort_key(page);
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) {
         invariant_violation();
+      }
+      if (!matches_managed_list(page, key, scope)) continue;
+      if (pages.length === request.limit) {
+        has_more = true;
+        break;
+      }
+      pages.push(page);
+    }
+    return {
+      ok: true,
+      pages,
+      next_cursor: has_more
+        ? encode_managed_page_list_cursor(
+          page_sort_key(pages[pages.length - 1]),
+          scope,
+        )
+        : null,
+    };
+  }
+
+  async list_public(request: ListPublicRequest): Promise<ListPublicResult> {
+    require(
+      typeof request.namespace === "string" && request.namespace !== "",
+      "namespace must be non-empty",
+    );
+    require(
+      Number.isSafeInteger(request.limit) && request.limit >= 1,
+      "limit must be a positive safe integer",
+    );
+    const filter = request.namespace.toLowerCase();
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_list_cursor(request.cursor, filter);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const prefix: Deno.KvKey = [...by_locator_prefix, filter];
+    const start: Deno.KvKey | undefined = after === null ? undefined : [
+      ...by_locator_prefix,
+      filter,
+      after.default_rank,
+      after.page_name_key,
+    ];
+    const pages: PageRecord[] = [];
+    let has_more = false;
+    for await (
+      const entry of this.#kv.list<unknown>(
+        start === undefined ? { prefix } : { prefix, start },
+      )
+    ) {
+      // The continuation cursor names the last delivered locator; resume
+      // strictly after it.
+      if (start !== undefined && key_equals(entry.key, start)) continue;
+      const index = deserialize_locator_index(entry.value);
+      const page = await this.find_by_id(index.page_id);
+      if (
+        page === null || !key_equals(locator_key(page.locator), entry.key)
+      ) {
+        const current = await this.#kv.get<unknown>(entry.key);
+        if (current.versionstamp !== entry.versionstamp) continue;
+        invariant_violation();
+      }
+      // Eligibility, not an invariant: trial and private pages share the
+      // locator index but never enter public listings (OQ-ACCESS).
+      if (page.stewardship.kind !== "managed" || page.access !== "public") {
+        continue;
       }
       if (pages.length === request.limit) {
         has_more = true;
@@ -738,6 +901,72 @@ export class DenoKvPageRepository implements PageRepository {
         ? encode_page_list_cursor(
           page_sort_key(pages[pages.length - 1]),
           filter,
+        )
+        : null,
+    };
+  }
+
+  async explore_public(
+    request: ExplorePublicRequest,
+  ): Promise<ExplorePublicResult> {
+    require_normalized_exploration_request(request);
+    const scope: PageExplorationCursorScope = {
+      namespace_query: request.namespace_query ?? null,
+      page_name_query: request.page_name_query ?? null,
+      tag: request.tag ?? null,
+    };
+    let after: PageSortKey | null = null;
+    if (request.cursor !== undefined) {
+      after = decode_page_exploration_cursor(request.cursor, scope);
+      if (after === null) return { ok: false, reason: "invalid_cursor" };
+    }
+    const prefix = by_locator_prefix;
+    const start: Deno.KvKey | undefined = after === null ? undefined : [
+      ...prefix,
+      after.namespace_key,
+      after.default_rank,
+      after.page_name_key,
+    ];
+    const pages: PageRecord[] = [];
+    let has_more = false;
+    for await (
+      const entry of this.#kv.list<unknown>(
+        start === undefined ? { prefix } : { prefix, start },
+      )
+    ) {
+      if (start !== undefined && key_equals(entry.key, start)) continue;
+      const index = deserialize_locator_index(entry.value);
+      const page = await this.find_by_id(index.page_id);
+      if (
+        page === null || !key_equals(locator_key(page.locator), entry.key)
+      ) {
+        const current = await this.#kv.get<unknown>(entry.key);
+        if (current.versionstamp !== entry.versionstamp) continue;
+        invariant_violation();
+      }
+      const key = page_sort_key(page);
+      if (after !== null && compare_page_sort_keys(key, after) <= 0) {
+        invariant_violation();
+      }
+      if (
+        page.stewardship.kind !== "managed" || page.access !== "public" ||
+        !matches_exploration(page, key, scope)
+      ) {
+        continue;
+      }
+      if (pages.length === request.limit) {
+        has_more = true;
+        break;
+      }
+      pages.push(page);
+    }
+    return {
+      ok: true,
+      pages,
+      next_cursor: has_more
+        ? encode_page_exploration_cursor(
+          page_sort_key(pages[pages.length - 1]),
+          scope,
         )
         : null,
     };
@@ -792,6 +1021,7 @@ export class DenoKvPageRepository implements PageRepository {
           locator: structuredClone(request.locator),
           stewardship: { kind: "trial" },
           access: "public",
+          tags: [],
           revision: 1,
           content: structuredClone(request.content),
           created_at: request.now,
@@ -802,6 +1032,7 @@ export class DenoKvPageRepository implements PageRepository {
           locator: structuredClone(request.locator),
           stewardship: { kind: "trial" },
           access: "public",
+          tags: [],
           revision: existing.envelope.revision + 1,
           content: structuredClone(request.content),
           created_at: stored_date(existing.envelope.created_at),
@@ -853,6 +1084,10 @@ export class DenoKvPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      is_valid_page_tags(request.tags ?? []),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const bytes = serialize_data(request.content);
     const chunks = split_chunks(bytes);
@@ -898,6 +1133,7 @@ export class DenoKvPageRepository implements PageRepository {
           owner_user_id: request.owner_user_id,
         },
         access: request.access,
+        tags: [...(request.tags ?? [])],
         revision: 1,
         content: structuredClone(request.content),
         created_at: request.now,
@@ -953,6 +1189,10 @@ export class DenoKvPageRepository implements PageRepository {
       is_valid_page_access(request.access),
       "access must be public or private",
     );
+    require(
+      request.tags === undefined || is_valid_page_tags(request.tags),
+      "tags must be a bounded canonical sorted unique set",
+    );
     require(is_valid_time(request.now), "now must be a valid date");
     const serialized = request.content === undefined
       ? null
@@ -1002,6 +1242,9 @@ export class DenoKvPageRepository implements PageRepository {
       const page: PageRecord = {
         ...existing_page,
         access: request.access,
+        tags: request.tags === undefined
+          ? existing_page.tags
+          : structuredClone(request.tags),
         revision: envelope.revision + 1,
         content: request.content === undefined
           ? existing_page.content
@@ -1033,6 +1276,302 @@ export class DenoKvPageRepository implements PageRepository {
       }
     }
     throw new Error("page repository write contention exhausted retries");
+  }
+
+  async rename_managed(
+    request: RenameManagedRequest,
+  ): Promise<RenameManagedResult> {
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" && request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+
+    for (let attempt = 0; attempt < max_attempts; attempt += 1) {
+      const envelope_entry = await this.#kv.get<unknown>(
+        id_key(request.page_id),
+      );
+      if (envelope_entry.versionstamp === null) {
+        return { ok: false, reason: "not_found" };
+      }
+      const envelope = deserialize_envelope(envelope_entry.value);
+      this.#assert_envelope_identity(envelope_entry.key, envelope);
+      if (
+        envelope.stewardship !== "managed" ||
+        envelope.owner_user_id !== request.owner_user_id
+      ) {
+        return { ok: false, reason: "not_found" };
+      }
+      require(
+        request.locator.namespace.toLowerCase() ===
+          envelope.namespace.toLowerCase(),
+        "rename must stay within the current namespace",
+      );
+      if (envelope.revision !== request.expected_revision) {
+        return { ok: false, reason: "revision_conflict" };
+      }
+      const existing_page = await this.#read_snapshot({
+        entry: envelope_entry,
+        envelope,
+      });
+      if (existing_page === null) continue;
+
+      const old_locator_key = locator_key(existing_page.locator);
+      const old_owner_key = owner_key(existing_page);
+      const target_locator_key = locator_key(request.locator);
+      const same_locator_key = key_equals(old_locator_key, target_locator_key);
+      const base_entries = await this.#kv.getMany<unknown[]>([
+        envelope_entry.key,
+        old_locator_key,
+        old_owner_key,
+        ...(same_locator_key ? [] : [target_locator_key]),
+      ]);
+      const [current_envelope, old_locator_entry, old_owner_entry] =
+        base_entries;
+      if (current_envelope.versionstamp !== envelope_entry.versionstamp) {
+        continue;
+      }
+      this.#assert_mutation_indexes(
+        old_locator_entry,
+        old_owner_entry,
+        envelope,
+      );
+
+      let target_entry: Deno.KvEntryMaybe<unknown> | null = same_locator_key
+        ? null
+        : base_entries[3];
+      let replaced_trial: StoredPageSnapshot | null = null;
+      if (target_entry !== null && target_entry.versionstamp !== null) {
+        const target_index = deserialize_locator_index(target_entry.value);
+        const [current_target, target_envelope_entry] = await this.#kv.getMany<
+          unknown[]
+        >([target_locator_key, id_key(target_index.page_id)]);
+        if (current_target.versionstamp !== target_entry.versionstamp) continue;
+        if (target_envelope_entry.versionstamp === null) invariant_violation();
+        const target_envelope = deserialize_envelope(
+          target_envelope_entry.value,
+        );
+        this.#assert_snapshot_indexes(
+          current_target,
+          target_envelope_entry,
+          target_envelope,
+        );
+        if (target_envelope.stewardship === "managed") {
+          return { ok: false, reason: "locator_conflict" };
+        }
+        target_entry = current_target;
+        replaced_trial = {
+          entry: target_envelope_entry,
+          envelope: target_envelope,
+        };
+      }
+
+      const page: PageRecord = {
+        ...existing_page,
+        locator: structuredClone(request.locator),
+        revision: envelope.revision + 1,
+        updated_at: request.now,
+      };
+      const next_envelope = serialize_envelope(
+        page,
+        envelope.generation,
+        envelope.chunk_count,
+        envelope.data_byte_length,
+      );
+      const next_owner_key = owner_key(page);
+      let atomic = this.#kv.atomic()
+        .check(envelope_entry)
+        .check(old_locator_entry)
+        .check(old_owner_entry)
+        .set(envelope_entry.key, next_envelope);
+      if (same_locator_key) {
+        atomic = atomic
+          .set(old_locator_key, locator_index(page.page_id))
+          .set(old_owner_key, owner_index(page));
+      } else {
+        atomic = atomic
+          .check(target_entry!)
+          .delete(old_locator_key)
+          .delete(old_owner_key)
+          .set(target_locator_key, locator_index(page.page_id))
+          .set(next_owner_key, owner_index(page));
+        if (replaced_trial !== null) {
+          atomic = atomic
+            .check(replaced_trial.entry)
+            .delete(replaced_trial.entry.key);
+          this.#delete_generation(atomic, replaced_trial.envelope);
+        }
+      }
+      const commit = await atomic.commit();
+      if (commit.ok) {
+        return {
+          ok: true,
+          outcome: replaced_trial === null ? "renamed" : "replaced_trial",
+          page,
+        };
+      }
+    }
+    throw new Error("page repository rename contention exhausted retries");
+  }
+
+  async duplicate_managed(
+    request: DuplicateManagedRequest,
+  ): Promise<DuplicateManagedResult> {
+    require(
+      is_valid_page_id(request.source_page_id),
+      "source_page_id must be a route-safe opaque id",
+    );
+    require(
+      is_valid_page_id(request.page_id),
+      "page_id must be a route-safe opaque id",
+    );
+    require(
+      typeof request.owner_user_id === "string" && request.owner_user_id !== "",
+      "owner_user_id must be non-empty",
+    );
+    require(
+      is_valid_page_revision(request.expected_revision),
+      "expected_revision must be a positive safe integer",
+    );
+    require(is_valid_time(request.now), "now must be a valid date");
+
+    for (let attempt = 0; attempt < max_attempts; attempt += 1) {
+      const source_entry = await this.#kv.get<unknown>(
+        id_key(request.source_page_id),
+      );
+      if (source_entry.versionstamp === null) {
+        return { ok: false, reason: "not_found" };
+      }
+      const source_envelope = deserialize_envelope(source_entry.value);
+      this.#assert_envelope_identity(source_entry.key, source_envelope);
+      if (
+        source_envelope.stewardship !== "managed" ||
+        source_envelope.owner_user_id !== request.owner_user_id
+      ) {
+        return { ok: false, reason: "not_found" };
+      }
+      require(
+        request.locator.namespace.toLowerCase() ===
+          source_envelope.namespace.toLowerCase(),
+        "duplicate must stay within the source namespace",
+      );
+      if (source_envelope.revision !== request.expected_revision) {
+        return { ok: false, reason: "revision_conflict" };
+      }
+      const source_page = await this.#read_snapshot({
+        entry: source_entry,
+        envelope: source_envelope,
+      });
+      if (source_page === null) continue;
+
+      const target_locator_key = locator_key(request.locator);
+      const source_locator_key = locator_key(source_page.locator);
+      const source_owner_key = owner_key(source_page);
+      const [
+        current_source,
+        source_locator_entry,
+        source_owner_entry,
+        target_entry,
+        new_id_entry,
+      ] = await this.#kv.getMany<unknown[]>([
+        source_entry.key,
+        source_locator_key,
+        source_owner_key,
+        target_locator_key,
+        id_key(request.page_id),
+      ]);
+      if (current_source.versionstamp !== source_entry.versionstamp) continue;
+      this.#assert_mutation_indexes(
+        source_locator_entry,
+        source_owner_entry,
+        source_envelope,
+      );
+
+      let current_target = target_entry;
+      let replaced_trial: StoredPageSnapshot | null = null;
+      if (target_entry.versionstamp !== null) {
+        const target_index = deserialize_locator_index(target_entry.value);
+        const [checked_target, target_envelope_entry] = await this.#kv.getMany<
+          unknown[]
+        >([target_locator_key, id_key(target_index.page_id)]);
+        if (checked_target.versionstamp !== target_entry.versionstamp) continue;
+        if (target_envelope_entry.versionstamp === null) invariant_violation();
+        const target_envelope = deserialize_envelope(
+          target_envelope_entry.value,
+        );
+        this.#assert_snapshot_indexes(
+          checked_target,
+          target_envelope_entry,
+          target_envelope,
+        );
+        if (target_envelope.stewardship === "managed") {
+          return { ok: false, reason: "locator_conflict" };
+        }
+        current_target = checked_target;
+        replaced_trial = {
+          entry: target_envelope_entry,
+          envelope: target_envelope,
+        };
+      }
+      if (new_id_entry.versionstamp !== null) {
+        return { ok: false, reason: "page_id_conflict" };
+      }
+
+      const page: PageRecord = {
+        page_id: request.page_id,
+        locator: structuredClone(request.locator),
+        stewardship: structuredClone(source_page.stewardship),
+        access: source_page.access,
+        tags: structuredClone(source_page.tags),
+        revision: 1,
+        content: structuredClone(source_page.content),
+        created_at: request.now,
+        updated_at: request.now,
+      };
+      const serialized = serialize_data(page.content);
+      const chunks = split_chunks(serialized);
+      const generation = crypto.randomUUID();
+      const envelope = serialize_envelope(
+        page,
+        generation,
+        chunks.length,
+        serialized.length,
+      );
+      await this.#write_chunks(page.page_id, generation, chunks);
+      let atomic = this.#kv.atomic()
+        .check(source_entry)
+        .check(source_locator_entry)
+        .check(source_owner_entry)
+        .check(current_target)
+        .check(new_id_entry)
+        .set(id_key(page.page_id), envelope)
+        .set(target_locator_key, locator_index(page.page_id))
+        .set(owner_key(page), owner_index(page));
+      if (replaced_trial !== null) {
+        atomic = atomic
+          .check(replaced_trial.entry)
+          .delete(replaced_trial.entry.key);
+        this.#delete_generation(atomic, replaced_trial.envelope);
+      }
+      const commit = await atomic.commit();
+      if (commit.ok) {
+        return {
+          ok: true,
+          outcome: replaced_trial === null ? "created" : "replaced_trial",
+          page,
+        };
+      }
+      await this.#cleanup_generation(page.page_id, generation, chunks.length);
+    }
+    throw new Error("page repository duplicate contention exhausted retries");
   }
 
   async delete_managed(

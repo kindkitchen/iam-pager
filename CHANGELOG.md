@@ -1,6 +1,92 @@
 # Changelog
 
+## 2026-07-20
+
+- Completed the DS-MANAGE creator surface. The web-independent management
+  projection now carries and validates locators/tags, builds filter-bound list,
+  revision action, and bounded bulk requests, and validates ordered per-page
+  outcomes. The creator island adds name/access/exact-tag filters, tag editing,
+  default/named rename, generated duplication, explicit selection of up to 100
+  current visible revisions, and bulk access/deletion with one result per page;
+  stale outcomes refresh affected rows. Added projection and server-rendered
+  component coverage, responsive controls, and synchronized README/spec/API/task
+  documentation. All 430 tests, check, and the production build pass.
+
 ## 2026-07-19
+
+- Exposed the expanded page-management contracts through strict HTTP routes:
+  managed create/update/list now carry bounded canonical tags and
+  name/access/tag filters; revision-bound rename and bodyless duplicate actions
+  return current representations and ETags; bulk access/delete accept bounded
+  page/revision selections and return ordered per-page outcomes. Public site
+  exploration now accepts one exact tag, preserves it through continuation, and
+  shows result tags. Added route-independent adapter/presenter/component
+  coverage and documented all request, response, CSRF, revision, and error
+  shapes.
+
+- Added bounded HTTP-independent bulk management contracts. A creator can submit
+  1-100 distinct page ID/revision pairs for one access target or deletion; the
+  service validates the complete selection before mutation, preserves result
+  order, applies each item independently under current ownership and exact
+  revision, and returns one non-disclosing outcome per page. Successful access
+  changes retain content/tags and share one operation timestamp; concurrent
+  commands still have one winner per revision. API and creator-panel exposure
+  remain next.
+
+- Completed the second HTTP-independent DS-MANAGE milestone: managed pages now
+  carry at most ten normalized canonical tags, exact-revision updates can
+  replace or clear them, rename preserves them, and duplicate copies them.
+  Managed lists AND-combine page-name substring, access, tag, and existing
+  namespace filters; public exploration adds an exact tag filter; opaque cursors
+  bind every active field. Memory and Deno KV pass shared
+  mutation/filter/pagination conformance, and old schema-v1 durable envelopes
+  remain readable as untagged. API/site exposure and per-page-result bulk
+  access/delete remain next.
+
+- Activated DS-MANAGE and completed its first HTTP-independent
+  locator-management foundation. Explicit revision-bound rename and duplicate
+  contracts now run through `PageService`, memory, and Deno KV: rename preserves
+  stable identity while atomically moving locator/owner indexes, generated-name
+  duplication copies one exact source revision into a fresh ID, managed
+  destination conflicts never overwrite, pre-reservation trials may be retired,
+  retries are bounded, and concurrent claims settle on one winner. The shared
+  four-word generator moved out of UI code so server behavior does not depend on
+  the web projection. API and creator controls remain the next layer; check,
+  build, and all 404 tests pass.
+
+- Completed the first DS-EXPLORE slice and settled OQ-EXPLORE as deterministic
+  browse plus case-insensitive namespace/page-name substring search (separate or
+  AND-combined), with tags and text indexing deferred. The HTTP-independent
+  `PublicPageExplorer` returns visitor-safe, query-bound cursor pages; memory
+  and Deno KV pass the same browse/filter/exclusion/pagination conformance,
+  keeping private and guest pages out from current storage state. `/` and
+  `/site` now render a GET search surface whose results open the DS-VIEW wrapper
+  or direct content. The suite grew to 384 tests.
+
+- Completed DS-VIEW with HTTP-independent public page viewing and bounded,
+  cursor-paginated namespace listings over both memory and Deno KV. Public
+  summaries omit management identity; creator listings exclude private and guest
+  pages. `/site/<locator>` now returns a real wrapped view with sandboxed,
+  no-referrer HTML preview or a direct-content fallback, links to direct
+  content, the creator default, and other public pages; private, malformed, and
+  missing views share a non-disclosing 404. The suite grew to 371 tests.
+
+- Completed the DS-PROTECT site surface with a creator management panel: a
+  web-independent presenter serves the first page of managed rows in the same
+  shape as `/api/pages` summaries, and a new island projects pagination,
+  inspection, PageEditor-based content updates, public/private toggling, and
+  confirmed deletion onto the existing revision-bound management contracts (CSRF
+  plus strong `If-Match` validators, 412 conflicts refresh the affected row). No
+  management rule was added to the web layer; specs were updated and the suite
+  grew to 356 tests.
+
+- Planned the next development chain as tasks: `creator-management-ui` (active)
+  completes the DS-PROTECT site management UI over the existing page-management
+  contracts, followed by chained todos `public-view-capability` (DS-VIEW),
+  `public-exploration` (DS-EXPLORE first version, names + namespaces), and
+  `management-expansion` (DS-MANAGE). Each task records the project invariants
+  (interface-first contracts, web as secondary projection, specs updated with
+  the change).
 
 - Clarified production and preview storage profiles after diagnosing
   intermittent deployed sign-in loss as process-local configuration: attaching

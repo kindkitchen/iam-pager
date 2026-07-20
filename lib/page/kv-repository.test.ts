@@ -65,6 +65,22 @@ Deno.test("DenoKvPageRepository: state is shared across repository instances", a
   }
 });
 
+Deno.test("DenoKvPageRepository: schema-v1 envelopes without tags remain readable", async () => {
+  const kv = await Deno.openKv(":memory:");
+  try {
+    const repository = new DenoKvPageRepository(kv);
+    const page = await create_managed(repository);
+    const envelope_key = ["iam-pager", "pages", "by-id", page.page_id];
+    const envelope = (await kv.get<Record<string, unknown>>(envelope_key))
+      .value!;
+    const { tags: _tags, ...legacy_envelope } = envelope;
+    await kv.set(envelope_key, legacy_envelope);
+    assertEquals(await repository.find_by_id(page.page_id), page);
+  } finally {
+    kv.close();
+  }
+});
+
 Deno.test("DenoKvPageRepository: fresh keyspace separates envelope, indexes, and chunks", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
@@ -86,6 +102,7 @@ Deno.test("DenoKvPageRepository: fresh keyspace separates envelope, indexes, and
       stewardship: "managed",
       owner_user_id: "owner-1",
       access: "public",
+      tags: [],
       revision: 1,
       content_type: "md-page",
       media_type: "text/html; charset=utf-8",

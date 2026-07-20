@@ -1,6 +1,10 @@
 import PagePublishForm from "../islands/PagePublishForm.tsx";
 import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
+import { PublicExplorationPanel } from "./PublicExploration.tsx";
+import PageManagementPanel from "../islands/PageManagementPanel.tsx";
 import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
+import type { PageManagementPanel as PageManagementPanelModel } from "../lib/ui/page-management.ts";
+import type { PublicExploration } from "../lib/ui/public-exploration.ts";
 import { page_publish_authorization } from "../lib/ui/page-publish.ts";
 import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
 import type {
@@ -11,10 +15,19 @@ import type {
 export interface SiteAppProps {
   readonly navigation: SiteNavigation;
   readonly namespace_panel: NamespacePanel;
+  readonly page_management: PageManagementPanelModel;
+  readonly public_exploration: PublicExploration;
 }
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
-export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
+export function SiteApp(
+  {
+    navigation,
+    namespace_panel,
+    page_management,
+    public_exploration,
+  }: SiteAppProps,
+) {
   const initial_namespace = new FourWordRandomNameGenerator().generate();
   return (
     <main class="site-app">
@@ -28,10 +41,20 @@ export function SiteApp({ navigation, namespace_panel }: SiteAppProps) {
         </p>
       </header>
 
+      <PublicExplorationPanel exploration={public_exploration} />
+
       {namespace_panel.kind === "creator" && (
         <NamespaceReservationPanel
           csrf_token={namespace_panel.csrf_token}
           initial_reservations={namespace_panel.reservations}
+        />
+      )}
+
+      {page_management.kind === "creator" && (
+        <PageManagementPanel
+          csrf_token={page_management.csrf_token}
+          initial_pages={page_management.pages}
+          initial_next_cursor={page_management.next_cursor}
         />
       )}
 

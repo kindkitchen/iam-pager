@@ -51,12 +51,14 @@ async function seed_managed(
   page_name: string | undefined,
   marker: string,
   access: PageAccess = "public",
+  tags: readonly string[] = [],
 ): Promise<PageRecord> {
   const result = await repository.create_managed({
     page_id,
     locator: page_name === undefined ? { namespace } : { namespace, page_name },
     owner_user_id,
     access,
+    tags,
     content: make_page_content(marker),
     now: t1,
   });
@@ -113,6 +115,7 @@ export function test_page_repository_conformance(
         locator: { namespace: "Alice", page_name: "Notes/Today" },
         stewardship: { kind: "trial" },
         access: "public",
+        tags: [],
         revision: 1,
         content: make_page_content("v1"),
         created_at: t1,
@@ -261,6 +264,7 @@ export function test_page_repository_conformance(
         locator: { namespace: "Alice", page_name: "Secret" },
         stewardship: { kind: "managed", owner_user_id: "owner-1" },
         access: "private",
+        tags: [],
         revision: 1,
         content: make_page_content("v1"),
         created_at: t1,
@@ -442,6 +446,43 @@ export function test_page_repository_conformance(
   );
 
   conformance_test(
+    "replace_managed updates and clears canonical tags without replacing content",
+    async (repository) => {
+      const created = await seed_managed(
+        repository,
+        "managed-tags",
+        "owner-1",
+        "alice",
+        "notes",
+        "kept",
+        "public",
+        ["deno", "news"],
+      );
+      const updated = await repository.replace_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        access: "public",
+        tags: ["archive"],
+        now: t2,
+      });
+      assert(updated.ok);
+      assertEquals(updated.page.tags, ["archive"]);
+      assertEquals(updated.page.content, created.content);
+      const cleared = await repository.replace_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 2,
+        access: "public",
+        tags: [],
+        now: t3,
+      });
+      assert(cleared.ok);
+      assertEquals(cleared.page.tags, []);
+    },
+  );
+
+  conformance_test(
     "replace_managed rejects a stale revision without mutating",
     async (repository) => {
       await seed_managed(
@@ -508,6 +549,323 @@ export function test_page_repository_conformance(
         });
         assertEquals(attempt, { ok: false, reason: "not_found" });
       }
+    },
+  );
+
+  conformance_test(
+    "rename_managed atomically moves locator and owner ordering",
+    async (repository) => {
+      const created = await seed_managed(
+        repository,
+        "managed-1",
+        "owner-1",
+        "Alice",
+        "notes",
+        "v1",
+        "private",
+      );
+      const renamed = await repository.rename_managed({
+        page_id: created.page_id,
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "Alice", page_name: "Reports" },
+        now: t2,
+      });
+      assert(renamed.ok);
+      assertEquals(renamed.outcome, "renamed");
+      assertEquals(renamed.page, {
+        ...created,
+        locator: { namespace: "Alice", page_name: "Reports" },
+        revision: 2,
+        updated_at: t2,
+      });
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "notes",
+        }),
+        null,
+      );
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "ALICE",
+          page_name: "reports",
+        }),
+        renamed.page,
+      );
+      assertEquals(await repository.find_by_id(created.page_id), renamed.page);
+      const listed = await repository.list_managed({
+        owner_user_id: "owner-1",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(listed.pages, [renamed.page]);
+    },
+  );
+
+  conformance_test(
+    "rename_managed replaces a trial but never another managed page",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      const protected_target = await seed_managed(
+        repository,
+        "protected",
+        "owner-1",
+        "alice",
+        "protected",
+        "protected",
+      );
+      const conflict = await repository.rename_managed({
+        page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "alice", page_name: "PROTECTED" },
+        now: t2,
+      });
+      assertEquals(conflict, { ok: false, reason: "locator_conflict" });
+      assertEquals(await repository.find_by_id("protected"), protected_target);
+      assertEquals((await repository.find_by_id("source"))?.revision, 1);
+
+      await repository.put_trial({
+        page_id: "trial-target",
+        locator: { namespace: "alice", page_name: "available" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+      const replaced = await repository.rename_managed({
+        page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        locator: { namespace: "Alice", page_name: "Available" },
+        now: t2,
+      });
+      assert(replaced.ok);
+      assertEquals(replaced.outcome, "replaced_trial");
+      assertEquals(replaced.page.page_id, "source");
+      assertEquals(replaced.page.revision, 2);
+      assertEquals(await repository.find_by_id("trial-target"), null);
+      assertEquals(
+        (await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "available",
+        }))?.page_id,
+        "source",
+      );
+    },
+  );
+
+  conformance_test(
+    "rename_managed is revision-bound and owner-nondisclosing",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "managed-1",
+        "owner-1",
+        "alice",
+        "notes",
+        "v1",
+      );
+      for (
+        const request of [
+          {
+            page_id: "managed-1",
+            owner_user_id: "owner-1",
+            expected_revision: 2,
+          },
+          {
+            page_id: "managed-1",
+            owner_user_id: "owner-2",
+            expected_revision: 1,
+          },
+          {
+            page_id: "absent",
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+          },
+        ]
+      ) {
+        const result = await repository.rename_managed({
+          ...request,
+          locator: { namespace: "alice", page_name: "moved" },
+          now: t2,
+        });
+        assertEquals(
+          result,
+          request.expected_revision === 2
+            ? { ok: false, reason: "revision_conflict" }
+            : { ok: false, reason: "not_found" },
+        );
+      }
+      assertEquals(
+        (await repository.find_by_id("managed-1"))?.locator.page_name,
+        "notes",
+      );
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed copies a revision-bound snapshot under fresh identity",
+    async (repository) => {
+      const source = await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "Alice",
+        "notes",
+        "source",
+        "private",
+        ["draft", "reference"],
+      );
+      const duplicated = await repository.duplicate_managed({
+        source_page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        page_id: "duplicate",
+        locator: { namespace: "Alice", page_name: "generated-name" },
+        now: t2,
+      });
+      assert(duplicated.ok);
+      assertEquals(duplicated.outcome, "created");
+      assertEquals(duplicated.page, {
+        ...source,
+        page_id: "duplicate",
+        locator: { namespace: "Alice", page_name: "generated-name" },
+        revision: 1,
+        created_at: t2,
+        updated_at: t2,
+      });
+      assertEquals(await repository.find_by_id("source"), source);
+      assertEquals(await repository.find_by_id("duplicate"), duplicated.page);
+      const listed = await repository.list_managed({
+        owner_user_id: "owner-1",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(
+        listed.pages.map((page) => page.page_id),
+        ["duplicate", "source"],
+      );
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed replaces trials and reports protected locator or id conflicts",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      await seed_managed(
+        repository,
+        "protected",
+        "owner-1",
+        "alice",
+        "protected",
+        "protected",
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "copy-1",
+          locator: { namespace: "alice", page_name: "protected" },
+          now: t2,
+        }),
+        { ok: false, reason: "locator_conflict" },
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "protected",
+          locator: { namespace: "alice", page_name: "new-name" },
+          now: t2,
+        }),
+        { ok: false, reason: "page_id_conflict" },
+      );
+
+      await repository.put_trial({
+        page_id: "trial-target",
+        locator: { namespace: "alice", page_name: "available" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+      const replaced = await repository.duplicate_managed({
+        source_page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        page_id: "copy-2",
+        locator: { namespace: "Alice", page_name: "Available" },
+        now: t2,
+      });
+      assert(replaced.ok);
+      assertEquals(replaced.outcome, "replaced_trial");
+      assertEquals(await repository.find_by_id("trial-target"), null);
+      assertEquals((await repository.find_by_id("copy-2"))?.revision, 1);
+      assertEquals((await repository.find_by_id("source"))?.revision, 1);
+    },
+  );
+
+  conformance_test(
+    "duplicate_managed is revision-bound and owner-nondisclosing",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "alice",
+        "source",
+        "source",
+      );
+      assertEquals(
+        await repository.duplicate_managed({
+          source_page_id: "source",
+          owner_user_id: "owner-1",
+          expected_revision: 2,
+          page_id: "copy-stale",
+          locator: { namespace: "alice", page_name: "stale" },
+          now: t2,
+        }),
+        { ok: false, reason: "revision_conflict" },
+      );
+      for (
+        const [source_page_id, owner_user_id] of [
+          ["source", "owner-2"],
+          ["absent", "owner-1"],
+        ] as const
+      ) {
+        assertEquals(
+          await repository.duplicate_managed({
+            source_page_id,
+            owner_user_id,
+            expected_revision: 1,
+            page_id: `copy-${owner_user_id}`,
+            locator: { namespace: "alice", page_name: "hidden" },
+            now: t2,
+          }),
+          { ok: false, reason: "not_found" },
+        );
+      }
+      assertEquals(
+        await repository.find_by_locator({
+          namespace: "alice",
+          page_name: "stale",
+        }),
+        null,
+      );
     },
   );
 
@@ -670,6 +1028,88 @@ export function test_page_repository_conformance(
     },
   );
 
+  conformance_test(
+    "list_managed AND-filters page name, access, and tag across pagination gaps",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "alpha-default",
+        "owner-1",
+        "alpha",
+        undefined,
+        "m1",
+        "public",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "alpha-notes",
+        "owner-1",
+        "alpha",
+        "Release notes",
+        "m2",
+        "public",
+        ["deno", "news"],
+      );
+      await seed_managed(
+        repository,
+        "alpha-private",
+        "owner-1",
+        "alpha",
+        "Release private",
+        "m3",
+        "private",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "beta-release",
+        "owner-1",
+        "beta",
+        "Release plan",
+        "m4",
+        "public",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "beta-other-tag",
+        "owner-1",
+        "beta",
+        "Release report",
+        "m5",
+        "public",
+        ["other"],
+      );
+      const scope = {
+        owner_user_id: "owner-1",
+        page_name_query: "release",
+        access: "public" as const,
+        tag: "deno",
+      };
+      const first = await repository.list_managed({ ...scope, limit: 1 });
+      assert(first.ok && first.next_cursor !== null);
+      assertEquals(first.pages.map((page) => page.page_id), ["alpha-notes"]);
+      const second = await repository.list_managed({
+        ...scope,
+        limit: 1,
+        cursor: first.next_cursor,
+      });
+      assert(second.ok);
+      assertEquals(second.pages.map((page) => page.page_id), ["beta-release"]);
+      assertEquals(second.next_cursor, null);
+      assertEquals(
+        await repository.list_managed({
+          ...scope,
+          tag: "news",
+          limit: 1,
+          cursor: first.next_cursor,
+        }),
+        { ok: false, reason: "invalid_cursor" },
+      );
+    },
+  );
+
   conformance_test("list_managed paginates with a continuation cursor", async (
     repository,
   ) => {
@@ -763,6 +1203,525 @@ export function test_page_repository_conformance(
           `cursor must be rejected: ${cursor.slice(0, 40)}`,
         );
       }
+    },
+  );
+
+  conformance_test(
+    "list_public returns only the namespace's public managed pages in order",
+    async (repository) => {
+      await seed_managed(repository, "pub-z", "owner-1", "Alice", "z", "m1");
+      await seed_managed(
+        repository,
+        "pub-d",
+        "owner-1",
+        "alice",
+        undefined,
+        "m2",
+      );
+      await seed_managed(repository, "pub-a", "owner-1", "ALICE", "A", "m3");
+      await seed_managed(
+        repository,
+        "hidden-private",
+        "owner-1",
+        "alice",
+        "secret",
+        "m4",
+        "private",
+      );
+      await seed_managed(repository, "other-ns", "owner-1", "beta", "b", "m5");
+      await repository.put_trial({
+        page_id: "trial-in-ns",
+        locator: { namespace: "alice", page_name: "guest" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+      const listed = await repository.list_public({
+        namespace: "Alice",
+        limit: 10,
+      });
+      assert(listed.ok);
+      assertEquals(
+        listed.pages.map((page) => page.page_id),
+        ["pub-d", "pub-a", "pub-z"],
+      );
+      assert(
+        listed.pages.every((page) =>
+          page.access === "public" && page.stewardship.kind === "managed"
+        ),
+      );
+      assertEquals(listed.next_cursor, null);
+      const unreserved = await repository.list_public({
+        namespace: "delta",
+        limit: 10,
+      });
+      assert(unreserved.ok);
+      assertEquals(unreserved.pages, []);
+      assertEquals(unreserved.next_cursor, null);
+    },
+  );
+
+  conformance_test(
+    "list_public paginates across ineligible pages with a continuation cursor",
+    async (repository) => {
+      const expected_ids = ["pub-1", "pub-2", "pub-3", "pub-4", "pub-5"];
+      for (const [index, page_id] of expected_ids.entries()) {
+        await seed_managed(
+          repository,
+          page_id,
+          "owner-1",
+          "alice",
+          `page-${index + 1}`,
+          `m${index}`,
+        );
+        await seed_managed(
+          repository,
+          `priv-${index}`,
+          "owner-1",
+          "alice",
+          `page-${index + 1}-private`,
+          `p${index}`,
+          "private",
+        );
+      }
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      let rounds = 0;
+      while (true) {
+        const listed = await repository.list_public({
+          namespace: "alice",
+          limit: 2,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        assert(listed.ok);
+        assert(listed.pages.length <= 2);
+        seen.push(...listed.pages.map((page) => page.page_id));
+        rounds += 1;
+        if (listed.next_cursor === null) break;
+        cursor = listed.next_cursor;
+        assert(rounds < 10, "pagination must terminate");
+      }
+      assertEquals(seen, expected_ids);
+      assertEquals(rounds, 3);
+    },
+  );
+
+  conformance_test(
+    "list_public rejects malformed and cross-namespace cursors",
+    async (repository) => {
+      for (const page_name of ["a", "b", "c"]) {
+        await seed_managed(
+          repository,
+          `id-${page_name}`,
+          "owner-1",
+          "alice",
+          page_name,
+          page_name,
+        );
+        await seed_managed(
+          repository,
+          `beta-${page_name}`,
+          "owner-1",
+          "beta",
+          page_name,
+          page_name,
+        );
+      }
+      const first = await repository.list_public({
+        namespace: "alice",
+        limit: 1,
+      });
+      assert(first.ok && first.next_cursor !== null);
+      const continued = await repository.list_public({
+        namespace: "ALICE",
+        limit: 10,
+        cursor: first.next_cursor,
+      });
+      assert(continued.ok, "cursor must survive namespace case changes");
+      assertEquals(
+        continued.pages.map((page) => page.page_id),
+        ["id-b", "id-c"],
+      );
+      const bad_cursors = [
+        "not base64url!",
+        "A".repeat(3000),
+        `${first.next_cursor}=`,
+        base64url("[1,2]"),
+      ];
+      for (const cursor of bad_cursors) {
+        const listed = await repository.list_public({
+          namespace: "alice",
+          limit: 2,
+          cursor,
+        });
+        assertEquals(
+          listed,
+          { ok: false, reason: "invalid_cursor" },
+          `cursor must be rejected: ${cursor.slice(0, 40)}`,
+        );
+      }
+      const mismatched = await repository.list_public({
+        namespace: "beta",
+        limit: 2,
+        cursor: first.next_cursor,
+      });
+      assertEquals(mismatched, { ok: false, reason: "invalid_cursor" });
+    },
+  );
+
+  conformance_test(
+    "explore_public browses and searches only public managed pages",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "alice-default",
+        "owner-1",
+        "Alice",
+        undefined,
+        "m1",
+        "public",
+        ["featured"],
+      );
+      await seed_managed(
+        repository,
+        "alice-notes",
+        "owner-1",
+        "alice",
+        "Notes",
+        "m2",
+        "public",
+        ["deno", "featured"],
+      );
+      await seed_managed(
+        repository,
+        "alicia-notebook",
+        "owner-2",
+        "Alicia",
+        "Notebook",
+        "m3",
+        "public",
+        ["deno"],
+      );
+      await seed_managed(
+        repository,
+        "beta-release",
+        "owner-2",
+        "Beta",
+        "Release",
+        "m4",
+        "public",
+        ["release"],
+      );
+      await seed_managed(
+        repository,
+        "hidden-private",
+        "owner-1",
+        "Alice",
+        "Private notes",
+        "m5",
+        "private",
+        ["deno"],
+      );
+      await repository.put_trial({
+        page_id: "hidden-trial",
+        locator: { namespace: "Alice", page_name: "Guest notes" },
+        content: make_page_content("trial"),
+        now: t1,
+      });
+
+      const browsed = await repository.explore_public({ limit: 20 });
+      assert(browsed.ok);
+      assertEquals(
+        browsed.pages.map((page) => page.page_id),
+        ["alice-default", "alice-notes", "alicia-notebook", "beta-release"],
+      );
+      assert(
+        browsed.pages.every((page) =>
+          page.access === "public" && page.stewardship.kind === "managed"
+        ),
+      );
+
+      const by_namespace = await repository.explore_public({
+        namespace_query: "ali",
+        limit: 20,
+      });
+      assert(by_namespace.ok);
+      assertEquals(
+        by_namespace.pages.map((page) => page.page_id),
+        ["alice-default", "alice-notes", "alicia-notebook"],
+      );
+
+      const by_page_name = await repository.explore_public({
+        page_name_query: "note",
+        limit: 20,
+      });
+      assert(by_page_name.ok);
+      assertEquals(
+        by_page_name.pages.map((page) => page.page_id),
+        ["alice-notes", "alicia-notebook"],
+      );
+
+      const by_both = await repository.explore_public({
+        namespace_query: "alice",
+        page_name_query: "note",
+        limit: 20,
+      });
+      assert(by_both.ok);
+      assertEquals(
+        by_both.pages.map((page) => page.page_id),
+        ["alice-notes"],
+      );
+
+      const by_tag = await repository.explore_public({
+        tag: "deno",
+        limit: 20,
+      });
+      assert(by_tag.ok);
+      assertEquals(
+        by_tag.pages.map((page) => page.page_id),
+        ["alice-notes", "alicia-notebook"],
+      );
+      const by_names_and_tag = await repository.explore_public({
+        namespace_query: "alice",
+        page_name_query: "note",
+        tag: "featured",
+        limit: 20,
+      });
+      assert(by_names_and_tag.ok);
+      assertEquals(
+        by_names_and_tag.pages.map((page) => page.page_id),
+        ["alice-notes"],
+      );
+
+      const made_private = await repository.replace_managed({
+        page_id: "alice-notes",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        access: "private",
+        now: t2,
+      });
+      assert(made_private.ok);
+      const after_access_change = await repository.explore_public({
+        namespace_query: "alice",
+        page_name_query: "note",
+        limit: 20,
+      });
+      assert(after_access_change.ok);
+      assertEquals(after_access_change.pages, []);
+    },
+  );
+
+  conformance_test(
+    "explore_public paginates across query and visibility gaps",
+    async (repository) => {
+      const expected_ids: string[] = [];
+      for (let index = 1; index <= 5; index += 1) {
+        const page_id = `public-${index}`;
+        expected_ids.push(page_id);
+        await seed_managed(
+          repository,
+          page_id,
+          "owner-1",
+          `Team-${index}`,
+          `Release-${index}`,
+          `m${index}`,
+          "public",
+          ["release"],
+        );
+        await seed_managed(
+          repository,
+          `private-${index}`,
+          "owner-1",
+          `Team-${index}`,
+          `Release-${index}-private`,
+          `p${index}`,
+          "private",
+        );
+        await repository.put_trial({
+          page_id: `trial-${index}`,
+          locator: {
+            namespace: `Team-${index}`,
+            page_name: `Release-${index}-trial`,
+          },
+          content: make_page_content(`t${index}`),
+          now: t1,
+        });
+      }
+
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      let rounds = 0;
+      while (true) {
+        const explored = await repository.explore_public({
+          namespace_query: "team-",
+          page_name_query: "release-",
+          tag: "release",
+          limit: 2,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+        assert(explored.ok);
+        seen.push(...explored.pages.map((page) => page.page_id));
+        rounds += 1;
+        if (explored.next_cursor === null) break;
+        cursor = explored.next_cursor;
+        assert(rounds < 10, "pagination must terminate");
+      }
+      assertEquals(seen, expected_ids);
+      assertEquals(rounds, 3);
+    },
+  );
+
+  conformance_test(
+    "explore_public rejects malformed and query-mismatched cursors",
+    async (repository) => {
+      for (const page_name of ["a", "b", "c"]) {
+        await seed_managed(
+          repository,
+          `id-${page_name}`,
+          "owner-1",
+          "alice",
+          page_name,
+          page_name,
+        );
+      }
+      const first = await repository.explore_public({
+        namespace_query: "ali",
+        limit: 1,
+      });
+      assert(first.ok && first.next_cursor !== null);
+      const continued = await repository.explore_public({
+        namespace_query: "ali",
+        limit: 10,
+        cursor: first.next_cursor,
+      });
+      assert(continued.ok);
+      assertEquals(
+        continued.pages.map((page) => page.page_id),
+        ["id-b", "id-c"],
+      );
+
+      for (
+        const request of [
+          { namespace_query: "alice" },
+          { namespace_query: "ali", page_name_query: "a" },
+          {},
+        ]
+      ) {
+        assertEquals(
+          await repository.explore_public({
+            ...request,
+            limit: 2,
+            cursor: first.next_cursor,
+          }),
+          { ok: false, reason: "invalid_cursor" },
+        );
+      }
+      const namespace_cursor = await repository.list_public({
+        namespace: "alice",
+        limit: 1,
+      });
+      assert(namespace_cursor.ok && namespace_cursor.next_cursor !== null);
+      for (
+        const cursor of [
+          "not base64url!",
+          "A".repeat(3000),
+          `${first.next_cursor}=`,
+          namespace_cursor.next_cursor,
+        ]
+      ) {
+        assertEquals(
+          await repository.explore_public({
+            namespace_query: "ali",
+            limit: 2,
+            cursor,
+          }),
+          { ok: false, reason: "invalid_cursor" },
+        );
+      }
+    },
+  );
+
+  conformance_test(
+    "concurrent renames cannot claim one locator twice",
+    async (repository) => {
+      await seed_managed(
+        repository,
+        "source-1",
+        "owner-1",
+        "race",
+        "one",
+        "one",
+      );
+      await seed_managed(
+        repository,
+        "source-2",
+        "owner-1",
+        "race",
+        "two",
+        "two",
+      );
+      const results = await Promise.all(
+        ["source-1", "source-2"].map((page_id) =>
+          repository.rename_managed({
+            page_id,
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+            locator: { namespace: "race", page_name: "winner" },
+            now: t2,
+          })
+        ),
+      );
+      assertEquals(only_ok(results).length, 1);
+      assertEquals(
+        results.filter((result) => !result.ok).map((result) => result.reason),
+        ["locator_conflict"],
+      );
+      const winner = await repository.find_by_locator({
+        namespace: "race",
+        page_name: "winner",
+      });
+      assert(winner !== null);
+      assertEquals(winner.revision, 2);
+      const losing_id = winner.page_id === "source-1" ? "source-2" : "source-1";
+      assertEquals((await repository.find_by_id(losing_id))?.revision, 1);
+    },
+  );
+
+  conformance_test(
+    "concurrent duplicates cannot claim one generated locator twice",
+    async (repository) => {
+      const source = await seed_managed(
+        repository,
+        "source",
+        "owner-1",
+        "race",
+        "source",
+        "source",
+      );
+      const results = await Promise.all(
+        ["copy-1", "copy-2"].map((page_id) =>
+          repository.duplicate_managed({
+            source_page_id: "source",
+            owner_user_id: "owner-1",
+            expected_revision: 1,
+            page_id,
+            locator: { namespace: "race", page_name: "generated" },
+            now: t2,
+          })
+        ),
+      );
+      assertEquals(only_ok(results).length, 1);
+      assertEquals(
+        results.filter((result) => !result.ok).map((result) => result.reason),
+        ["locator_conflict"],
+      );
+      assertEquals(await repository.find_by_id("source"), source);
+      const winner = await repository.find_by_locator({
+        namespace: "race",
+        page_name: "generated",
+      });
+      assert(winner !== null);
+      assertEquals(winner.revision, 1);
+      assertEquals(winner.content, source.content);
     },
   );
 
@@ -1017,6 +1976,17 @@ export function test_page_repository_conformance(
         })
       );
       await assertRejects(() =>
+        repository.create_managed({
+          page_id: "ok-id",
+          locator: { namespace: "ns" },
+          owner_user_id: "owner-1",
+          access: "public",
+          tags: ["news", "deno"],
+          content,
+          now: t1,
+        })
+      );
+      await assertRejects(() =>
         repository.replace_managed({
           page_id: "ok-id",
           owner_user_id: "owner-1",
@@ -1034,6 +2004,25 @@ export function test_page_repository_conformance(
         })
       );
       await assertRejects(() =>
+        repository.rename_managed({
+          page_id: "ok-id",
+          owner_user_id: "owner-1",
+          expected_revision: 0,
+          locator: { namespace: "ns", page_name: "moved" },
+          now: t1,
+        })
+      );
+      await assertRejects(() =>
+        repository.duplicate_managed({
+          source_page_id: "bad id!",
+          owner_user_id: "owner-1",
+          expected_revision: 1,
+          page_id: "copy",
+          locator: { namespace: "ns", page_name: "copy" },
+          now: t1,
+        })
+      );
+      await assertRejects(() =>
         repository.list_managed({ owner_user_id: "owner-1", limit: 0 })
       );
       await assertRejects(() =>
@@ -1045,6 +2034,36 @@ export function test_page_repository_conformance(
           namespace: "",
           limit: 10,
         })
+      );
+      await assertRejects(() =>
+        repository.list_managed({
+          owner_user_id: "owner-1",
+          page_name_query: "Notes",
+          limit: 10,
+        })
+      );
+      await assertRejects(() =>
+        repository.list_managed({
+          owner_user_id: "owner-1",
+          tag: "News",
+          limit: 10,
+        })
+      );
+      await assertRejects(() =>
+        repository.list_public({ namespace: "", limit: 10 })
+      );
+      await assertRejects(() =>
+        repository.list_public({ namespace: "alice", limit: 0 })
+      );
+      await assertRejects(() => repository.explore_public({ limit: 0 }));
+      await assertRejects(() =>
+        repository.explore_public({ namespace_query: "Alice", limit: 10 })
+      );
+      await assertRejects(() =>
+        repository.explore_public({ page_name_query: "", limit: 10 })
+      );
+      await assertRejects(() =>
+        repository.explore_public({ tag: "News", limit: 10 })
       );
     },
   );

@@ -142,26 +142,48 @@ The first publishing slice currently provides:
   repository contract with deterministic owner pagination, memory and Deno KV
   backends passing the same conformance suite, and an HTTP-independent
   `PageService` for trial publish plus managed create, list, source inspection,
-  content/access update, deletion, and owner-only private delivery. The durable
-  adapter uses coherent ID/locator/owner indexes and immutable binary-safe
-  content chunks in a fresh keyspace. The composition root selects one page
-  repository and exposes this service plus its strict HTTP adapter to thin Fresh
-  collection, item, and direct-delivery routes. The current publishing form
-  sends the nested explicit public-create request and creator CSRF token without
+  content/access update, deletion, revision-bound same-namespace rename,
+  generated-name duplication, bounded per-page-result bulk access/deletion,
+  owner-only private delivery, public wrapped viewing, and bounded
+  namespace-public listing. Rename preserves stable page identity and atomically
+  moves locator/owner indexes; duplication copies one exact source revision into
+  a fresh identity. Both memory and Deno KV reject managed destination conflicts
+  and may retire a pre-reservation trial at the destination. Public summaries
+  omit page IDs, revisions, and owner identity; private and guest pages never
+  enter creator listings. The durable adapter uses coherent ID/locator/owner
+  indexes and immutable binary-safe content chunks in a fresh keyspace. The
+  composition root selects one page repository and exposes this service plus its
+  strict HTTP adapter to thin Fresh collection, item, action, bulk,
+  direct-delivery, and wrapped-view routes. The current publishing form sends
+  the nested explicit public-create request and creator CSRF token without
   losing draft state on API errors; see
   [the page API contract](docs/api/pages.md);
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
-  `/site/*`, with soft in-field four-word random locator helpers, a collapsible
+  `/site`, with soft in-field four-word random locator helpers, a collapsible
   Page workspace with exclusive Markdown/CSS source panes, split or full-width
   preview layouts, fullscreen preview, raw and guided Markdown section editing,
   fenced code-block sections, grip-driven section ordering and value merging,
   CSS-reactive sandboxed section previews, editable element-based CSS presets,
   CDN-backed CSS syntax highlighting, and a sandboxed live Markdown/CSS preview;
-  `site`, `api`, and `auth` remain reserved as namespaces;
-- `GET`/`POST /api/pages` and `GET`/`PATCH`/`DELETE /api/pages/:page_id` for
-  trial creation and authenticated page management, including pagination,
-  owner-safe source inspection, CSRF, and revision ETags;
+- a thin public wrapper at `/site/<locator>` with a sandboxed, no-referrer HTML
+  preview or content fallback, direct-content and creator-default links, and
+  bounded links to other public managed pages; trial pages remain known-locator
+  only and private or missing pages share a real 404; `site`, `api`, and `auth`
+  remain reserved as namespaces;
+- public exploration on `/` and `/site`: an HTTP-independent
+  `PublicPageExplorer` browses current public managed pages or applies
+  case-insensitive namespace/page-name substring filters plus an exact tag
+  filter with AND semantics. Results are deterministically cursor-paginated and
+  open the public wrapper or direct content; memory and Deno KV satisfy the same
+  exclusion and cursor conformance, so private and guest pages never cross the
+  contract. The web form exposes both name fields and one exact tag;
+  text-content search remains later work;
+- `GET`/`POST /api/pages`, `GET`/`PATCH`/`DELETE /api/pages/:page_id`,
+  revision-bound rename/duplicate actions, and per-page-result bulk
+  access/delete commands for trial creation and authenticated page management,
+  including tags, name/access/tag filters, pagination, owner-safe source
+  inspection, CSRF, and revision ETags;
 - authenticated `GET /api/namespaces` and CSRF-protected `POST /api/namespaces`
   for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -173,16 +195,24 @@ Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
 sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
-replaceable by anyone. Total page capacity, publishing frequency, guest expiry,
-management UI, rename/duplicate/bulk operations, search, and backend migration
-are not implemented; these endpoints are not ready for untrusted public traffic.
+replaceable by anyone. Rename, duplicate, bounded tags, managed name/access/tag
+filtering, public tag exploration, and explicit per-page-result bulk access and
+deletion are exposed by the page API and creator site. The creator panel keeps
+filter-bound pagination, refreshes stale rows, edits content and comma-separated
+tags together, supports default/named renames and generated duplication, and
+applies access or deletion to an explicit selection of at most 100 current row
+revisions while showing one result per page. Total page capacity, publishing
+frequency, guest expiry, exploration text indexing/relevance, and backend
+migration are not implemented; these endpoints are not ready for untrusted
+public traffic.
 
 ## Local development
 
-Run `deno task dev`, open `http://localhost:5173`, draft Markdown and CSS with
-the live preview, publish the page, and use the resulting link to open its
-direct URL. The development task explicitly sets
-`IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
+Run `deno task dev`, open `http://localhost:5173`, browse or search current
+public creator pages, draft Markdown and CSS with the live preview, publish the
+page, and use the resulting link to open its direct URL. Prefix that locator
+with `/site` to open the wrapped public view. The development task explicitly
+sets `IAM_PAGER_SESSION_COOKIE_MODE=local`, selecting the non-secure
 `iam_pager_session_local` cookie for localhost. It also explicitly selects the
 local gauth preset with the localhost Google callback and mock-consent URLs.
 
@@ -194,8 +224,12 @@ authenticated header shows only signed-in state and the CSRF-protected
 `Sign out` action; signing out revokes that authenticated bearer and immediately
 rotates the browser to a distinct guest session. Signed-in creators can reserve
 and list namespaces through the creator panel, then publish into their own
-claim. Page inspection, access control, and deletion are available through the
-management API; their site UI and broader management remain future work.
+claim. The creator management panel lists and filters pages by name, access, and
+exact tag; inspects and edits content/tags; changes individual access; renames,
+duplicates, and deletes; and applies access or deletion to an explicit bounded
+selection. Every mutation uses the revision-bound management API, stale
+individual results refresh their rows, and bulk commands show one outcome per
+selected page. Public tag exploration remains available through site search.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

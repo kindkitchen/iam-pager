@@ -41,6 +41,13 @@ The app can show an eligible public page inside a thin wrapper that provides:
 - a link to the creator's default page when one exists;
 - a link to the creator's other public pages.
 
+The capability is implemented through HTTP-independent `PublicPageViewer` and
+`PublicPageLister` interfaces. Public summaries omit management identity,
+revision, and owner data; creator listings are bounded, cursor-paginated, and
+exclude private and guest pages in both memory and Deno KV. `/site/<locator>`
+projects that model with a sandboxed content frame or a direct-content fallback.
+A private, invalid, or missing wrapped view is the same non-disclosing 404.
+
 ## CP-NAMESPACE — Authentication and namespace management
 
 Account entry and namespace authority are separate capabilities. The implemented
@@ -82,29 +89,63 @@ The HTTP-independent management core now implements trial publishing and managed
 create, bounded list, source inspection, revision-bound content/access update,
 deletion, and owner-only private delivery over the `PageRepository` interface.
 Its memory and Deno KV adapters are complete and pass the same repository
-conformance. Fresh collection and item routes now expose the strict bounded
-create/list/inspect/update/delete adapter with synchronizer CSRF, owner-safe
-presenters, pagination, and strong revision ETags. The composed catch-all route
-uses the same service and session-derived actor for public or owner-private
-delivery, while deployment storage selection targets `PageRepository`. Rename,
-duplicate, tags, filters, and bulk actions remain DS-MANAGE scope.
+conformance. Fresh collection, item, action, and bulk routes now expose the
+strict bounded management adapter with synchronizer CSRF, owner-safe presenters,
+pagination, and strong revision ETags. The composed catch-all route uses the
+same service and session-derived actor for public or owner-private delivery,
+while deployment storage selection targets `PageRepository`. The site renders a
+creator management panel over these same contracts: a server presenter lists the
+first page of managed rows, and the island continues through `/api/pages` for
+pagination, inspection, editor-based content updates, access toggling, and
+deletion, always revision-bound via the published strong ETags. The DS-MANAGE
+core now adds explicit `ManagedPageRenamer` and `ManagedPageDuplicator`
+contracts plus bounded tag mutation and filtering. Rename is revision-bound,
+keeps stable identity and metadata, atomically moves locator and owner indexes,
+and reports a managed destination conflict; duplicate copies one exact source
+revision, including tags, under a bounded generated available name and fresh ID.
+Managed create/update normalize at most ten tags into a lowercase sorted unique
+set, while list supports AND-combined page-name substring, exact access, and
+exact tag filters. Public exploration accepts the same exact tag without
+disclosing private or guest pages. Memory and Deno KV pass common
+mutation/filter/cursor conformance, and old durable records without tags read as
+untagged. `ManagedPageBulkAccessChanger` and `ManagedPageBulkDeleter` now accept
+a prevalidated bounded set of distinct page/revision pairs and return one
+ordered, independently revision-bound, non-disclosing result per page. Partial
+item failure does not undo successful items, while invalid selections fail
+before any mutation. Strict HTTP routes expose tags and managed filters,
+revision-bound rename/duplicate actions, and bulk access/delete with session
+authentication, synchronizer CSRF, and exact source revisions. The
+web-independent management projection now carries locator and canonical tag
+data, validates API rows and ordered bulk outcomes, and prepares every
+filter/action/bulk request. The creator island exposes filter-bound
+continuation, content/tag editing, rename, duplicate, explicit selection of at
+most 100 visible current revisions, and bulk access/delete with one visible
+result per selected page. Stale individual or bulk revisions refresh their
+affected rows instead of retrying silently.
 
 ## CP-EXPLORE — Public exploration
 
-The app can browse or search public pages by:
+The first exploration version can browse all eligible pages or search by
+case-insensitive namespace and page-name substrings, independently or together,
+and can require one exact canonical tag. All supplied fields use AND semantics;
+default pages match only when the page-name query is absent. Results are ordered
+deterministically and cursor-paginated. They open the site-mediated view, which
+links onward to direct content, the creator's default page when it exists, and
+other public pages.
 
-- page name;
-- author namespace;
-- tags;
-- textual content when the format can be represented and indexed as text.
+The capability is implemented through the HTTP-independent `PublicPageExplorer`
+interface over `PageService`. Memory and Deno KV repositories satisfy the same
+cross-namespace exploration conformance tests, and opaque continuations are
+bound to both normalized query values and the optional exact tag. Visitor
+summaries expose no page ID, revision, access field, or owner identity.
+Eligibility is read from current page state, so private pages and guest trials
+never enter browsing or search and a public-to-private change disappears
+immediately. The site projects the model as a bounded GET search form and result
+list, including one exact tag field and canonical tags on matching rows.
 
-Results can lead to the site-mediated page, direct content, the creator's
-default page, and other public pages. Private content is excluded. Guest pages
-are also excluded from exploration; they are locatable only by their direct URL
-for raw preview.
-
-Names and tags are enough for an initial search implementation; content search
-can be added without changing page URLs.
+Text-content extraction, indexing, relevance, and view-count sorting remain
+later work and can be added without changing page URLs or the visitor-facing
+contract.
 
 ## CP-EXTERNAL — External content storage
 
