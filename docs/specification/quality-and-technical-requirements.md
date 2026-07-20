@@ -144,9 +144,10 @@ process-local `PageService` detects and uses the focused capabilities directly.
 The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
 complete kv-toolbox-backed aggregate adapter and explicit record migration.
 
-The required page/content utility is pinned `@kitsonk/kv-toolbox` 0.31.0. Its
-named blob operations will sit behind a storage-local binary interface over a
-caller-owned `Deno.Kv`; the package does not define domain models, repository
+The required Deno KV utility is pinned `@kitsonk/kv-toolbox` 0.31.0. Every KV
+operation passes through a narrow project-owned storage interface whose
+production implementation alone owns the wrapper. Ordinary and blob operations
+delegate to the toolbox; the package does not define domain models, repository
 contracts, page indexes, or web responses. The earlier Kvdex asset prototype was
 never selected and is superseded. Its useful behavior is retained as the
 replacement acceptance baseline: random unreachable payload staging,
@@ -155,12 +156,15 @@ published immutable manifest, best-effort known-failure cleanup, retention after
 an ambiguous manifest exception, and corruption rejection on every read.
 
 Toolbox blob writes may span multiple commits, and `KvToolbox.atomic()` may
-split an operation. They therefore cannot publish application visibility.
-Manifest, page, complete endpoint set, owner/public index, and revision
-transitions use one native `Deno.Kv.atomic()` commit over explicit adapter-owned
-records. Only a fully verified manifest-backed immutable asset may be referenced
-by a page. Toolbox query and response helpers do not replace deterministic
-repository indexes or the web-independent HTTP adapter.
+split an operation. They therefore cannot publish application visibility. The
+project storage interface exposes an explicit native-atomic capability backed by
+`toolbox.db.atomic()`; manifest, page, complete endpoint set, owner/public
+index, and revision transitions use it for one commit over adapter-owned
+records. The concrete wrapper is never supplied to repositories, preventing
+accidental use of its batched atomic. Only a fully verified manifest-backed
+immutable asset may be referenced by a page. Toolbox query and response helpers
+do not replace deterministic repository indexes or the web-independent HTTP
+adapter.
 
 The replacement remains unselected until it satisfies unchanged aggregate
 conformance and preserved application behavior. Existing raw-KV schema-v1 page

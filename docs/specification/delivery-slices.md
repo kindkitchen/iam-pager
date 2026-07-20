@@ -124,8 +124,10 @@ metadata, declares both profiles, and keeps bytes out of management inspection.
 Generic application endpoint-set commands are now complete: create and
 revision-bound update plan the full set, canonical rename retains alternates,
 and endpoint-aware duplication requires a fresh full destination set. Durable
-persistence is being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0 behind a
-storage-local blob interface. The verified random-stage, integrity-check, and
+persistence is being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0 behind one
+project-owned KV gateway. Its production implementation alone owns the wrapper
+and exposes an explicit native-atomic capability backed by
+`toolbox.db.atomic()`. The verified random-stage, integrity-check, and
 native-manifest publication protocol is retained; toolbox batches never provide
 page visibility. Native-atomic page/endpoint persistence, aggregate conformance,
 source-preserving raw-keyspace migration, strict bounded HTTP upload/delivery,

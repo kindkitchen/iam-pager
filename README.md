@@ -180,13 +180,15 @@ The first publishing slice currently provides:
   direct HTTP disposition follows the resolved binding profile rather than a
   suffix or filename hint. The initial unselected Kvdex prototype is now
   rejected: the required Deno KV utility is pinned `@kitsonk/kv-toolbox` 0.31.0.
-  Its blob API will replace only physical payload segmentation behind a
-  storage-local interface. The already-proven random staging identity,
-  reconstruction, length/SHA-256/codec verification, and separate native
-  manifest compare-and-set remain the safety protocol because toolbox blob
-  writes can span commits. Page/endpoint persistence, prototype replacement, and
-  raw-keyspace compatibility remain incomplete, so the raw-Deno-KV repository
-  stays on its legacy service path and deployment selection is unchanged;
+  One project-owned storage interface will mediate every KV operation while its
+  production implementation alone owns the concrete wrapper. Ordinary and blob
+  calls delegate to the toolbox; invariant-bearing commits explicitly delegate
+  to `toolbox.db.atomic()` because toolbox batches can span commits. The
+  already-proven random staging identity, reconstruction, length/SHA-256/codec
+  verification, and separate native manifest compare-and-set remain the safety
+  protocol. Page/endpoint persistence, prototype replacement, and raw-keyspace
+  compatibility remain incomplete, so the raw-Deno-KV repository stays on its
+  legacy service path and deployment selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -352,10 +354,12 @@ complete endpoint-set intent for trial and managed creation and revision-bound
 replacement. Canonical rename preserves every alternate; endpoint-aware
 duplication requires a fresh complete destination set, while the existing
 one-inline-endpoint command remains the compatibility path. Durable persistence
-is now being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0. A storage-local
-blob adapter will reuse the verified immutable-asset staging protocol from the
-superseded, unselected prototype; page, endpoint, owner, revision, and manifest
-visibility will continue to use one native `Deno.Kv.atomic()` commit rather than
+is now being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0. Every KV call
+will pass through a project-owned storage gateway whose production
+implementation alone owns the wrapper. It will reuse the verified
+immutable-asset staging protocol from the superseded, unselected prototype;
+page, endpoint, owner, revision, and manifest visibility will use the gateway's
+explicit native-atomic capability, backed by `toolbox.db.atomic()`, rather than
 the toolbox's potentially split batched atomic. The complete aggregate adapter,
 repeat-safe source-preserving raw-keyspace migration, strict bounded
 upload/direct delivery, and the PDF site projection follow. The retained

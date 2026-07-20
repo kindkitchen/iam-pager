@@ -12,14 +12,15 @@ Top priority, active, chain position 3 of 5. The Kvdex direction is rejected;
 application, HTTP, and site contracts remain unchanged.
 
 Library assessment and the gated plan are complete; `deno task check` passes.
-The completed staging protocol and tests are salvageable: random unreachable
-payload, reconstruction plus length/SHA-256/codec verification, then one native
-Deno KV manifest CAS. kv-toolbox blob operations replace only the physical
-payload implementation. Native `Deno.Kv.atomic()` remains mandatory for
-manifest and complete page/endpoint visibility because `KvToolbox.atomic()` may
-split a commit.
+All KV access will pass through a project-owned storage interface backed by
+`KvToolbox`; the concrete wrapper cannot leak beyond its infrastructure
+implementation. Ordinary/blob calls delegate to the toolbox, while the
+interface's native-atomic capability delegates to `toolbox.db.atomic()` because
+`KvToolbox.atomic()` may split a commit. See [[006.decision]].
 
-Next: establish the storage-local blob/codec seams, replace the unselected asset
-prototype without changing composition, then implement and migrate the aggregate
-adapter through the gated plan in [[004.plan]]. The raw Deno KV page adapter
+The completed random-stage, length/SHA-256/codec verification, and native
+manifest-CAS protocol remains salvageable. Ready for development; see
+[[007.review]]. First implement and contract-test the KV gateway and codec seam,
+then replace the unselected asset prototype and implement/migrate the aggregate
+adapter through [[004.plan]] as refined by [[006.decision]]. The raw Deno KV page adapter
 stays selected until conformance, migration, and cutover gates pass.

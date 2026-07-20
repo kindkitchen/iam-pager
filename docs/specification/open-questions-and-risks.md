@@ -247,12 +247,13 @@ accidental generic-file contract.
 
 ### OQ-KV-TOOLBOX — kv-toolbox atomicity and migration
 
-`@kitsonk/kv-toolbox` 0.31.0 is the required utility for the Deno KV
-page/content adapter. Its named blob API accepts a caller-owned `Deno.Kv` and
-provides segmented binary set/get/remove operations. Package types and physical
-blob suffixes remain inside storage implementation files; domain, application,
-HTTP, and site contracts do not depend on them. The earlier unselected Kvdex
-prototype is rejected and will be removed after behavioral parity.
+`@kitsonk/kv-toolbox` 0.31.0 is the required utility for Deno KV persistence.
+Every KV operation passes through a narrow project-owned storage interface whose
+production implementation alone owns the wrapper. Ordinary and segmented blob
+operations delegate to the toolbox. Package types and physical blob suffixes
+remain inside that implementation; domain, application, HTTP, and site contracts
+do not depend on them. The earlier unselected Kvdex prototype is rejected and
+will be removed after behavioral parity.
 
 Blob segmentation does not itself provide application visibility. Each encoded
 immutable payload is staged under a random identity, reconstructed and checked
@@ -263,10 +264,11 @@ payload rather than risk deleting data referenced by a commit that succeeded.
 Every read repeats integrity checks.
 
 `KvToolbox.atomic()` may split work across commits and returns multiple commit
-results, so it cannot replace native `Deno.Kv.atomic()` for all-or-none page,
-endpoint, owner, revision, index, or manifest visibility. The aggregate adapter
-must use explicit adapter-owned records and native commits, while only payload
-bytes use toolbox blob operations. Deployment continues to select the legacy raw
-Deno KV page repository until unchanged aggregate conformance passes and a
-manual, repeat-safe, source-preserving schema-v1 migration prevents an existing
-database from being presented as empty.
+results, so it cannot provide all-or-none page, endpoint, owner, revision,
+index, or manifest visibility. The project gateway exposes a separate
+native-atomic capability backed by `toolbox.db.atomic()` for those explicit
+adapter-owned record commits. Batched atomic remains opt-in; no repository can
+accidentally select it by receiving the concrete wrapper. Deployment continues
+to select the legacy raw Deno KV page repository until unchanged aggregate
+conformance passes and a manual, repeat-safe, source-preserving schema-v1
+migration prevents an existing database from being presented as empty.

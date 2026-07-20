@@ -2,6 +2,13 @@
 
 ## 2026-07-20
 
+- Settled one project-owned KV gateway as the only persistence entry point. Its
+  production implementation owns `KvToolbox`, delegates ordinary and blob
+  operations to it, and exposes native all-or-none commits explicitly through
+  `toolbox.db.atomic()`. Concrete wrapper types and key layout remain outside
+  repositories, domain, services, HTTP, Fresh, and site code; the toolbox's
+  potentially split batched atomic cannot be selected accidentally.
+
 - Corrected the durable page/content direction from Kvdex to
   `@kitsonk/kv-toolbox` 0.31.0 and activated `kv-toolbox-content-persistence` as
   the top-priority task. Library review confirmed that toolbox blob operations
