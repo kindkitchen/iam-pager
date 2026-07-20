@@ -175,6 +175,80 @@ Deno.test("direct delivery disposition follows the endpoint rather than filename
   await unnamed_attachment.body?.cancel();
 });
 
+Deno.test("direct PDF delivery supports validators and strict single byte ranges", async () => {
+  const body = new TextEncoder().encode("0123456789");
+  const result: DeliverPageResult = {
+    ok: true,
+    page: page_with_meta("application/pdf", body.byteLength),
+    endpoint: delivery_endpoint("attachment"),
+    payload: {
+      body,
+      media_type: "application/pdf",
+      download_filename: "report.pdf",
+    },
+  };
+  const full = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer(result),
+    new Request("https://pager.test/ada/notes"),
+    guest_actor,
+    "request-1",
+  );
+  const etag = full.headers.get("etag")!;
+  assertEquals(full.status, 200);
+  assertEquals(full.headers.get("accept-ranges"), "bytes");
+  assertEquals(full.headers.get("x-request-id"), "request-1");
+  assertEquals(new Uint8Array(await full.arrayBuffer()), body);
+
+  const partial = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer(result),
+    new Request("https://pager.test/ada/notes", {
+      headers: { range: "bytes=2-5", "if-range": etag },
+    }),
+    guest_actor,
+  );
+  assertEquals(partial.status, 206);
+  assertEquals(partial.headers.get("content-range"), "bytes 2-5/10");
+  assertEquals(partial.headers.get("content-length"), "4");
+  assertEquals(await partial.text(), "2345");
+
+  for (const range of ["bytes=10-", "bytes=5-2", "bytes=0-1,4-5"]) {
+    const rejected = await deliver_page_locator_path(
+      engine,
+      fixed_deliverer(result),
+      new Request("https://pager.test/ada/notes", { headers: { range } }),
+      guest_actor,
+    );
+    assertEquals(rejected.status, 416, range);
+    assertEquals(rejected.headers.get("content-range"), "bytes */10");
+    await rejected.body?.cancel();
+  }
+
+  const changed_if_range = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer(result),
+    new Request("https://pager.test/ada/notes", {
+      headers: { range: "bytes=0-1", "if-range": '"other"' },
+    }),
+    guest_actor,
+  );
+  assertEquals(changed_if_range.status, 200);
+  assertEquals(await changed_if_range.text(), "0123456789");
+
+  const not_modified = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer(result),
+    new Request("https://pager.test/ada/notes", {
+      headers: { "if-none-match": etag },
+    }),
+    guest_actor,
+  );
+  assertEquals(not_modified.status, 304);
+  assertEquals(not_modified.headers.get("etag"), etag);
+  assertEquals(await not_modified.text(), "");
+});
+
 Deno.test("direct delivery keeps invalid, missing, and undeliverable outcomes explicit", async () => {
   const missing = fixed_deliverer({ ok: false, reason: "not_found" });
   for (

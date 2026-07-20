@@ -182,15 +182,23 @@ Active HTML, SVG, scripts, generic raw binary, and broader media-type inference
 remain unselected. Each later type still needs an explicit size band and
 display, download, or isolation policy.
 
-### OQ-PDF-TRANSPORT — PDF upload and range delivery
+### OQ-PDF-TRANSPORT — resolved: bounded multipart and single ranges
 
-The current JSON API is not an appropriate binary transport. The PDF HTTP task
-must settle a strict bounded multipart or dedicated upload contract without
-leaking base64 into the content/application interfaces. The core's 16 MiB limit
-makes bounded full `200` delivery possible, but does not itself decide HTTP
-buffering. Byte-range support is explicitly deferred to that HTTP task, where it
-must be implemented and tested or rejected as unnecessary for the first
-transport.
+PDF create and revision-bound replacement use the existing page endpoints with
+strict `multipart/form-data`: exactly one 16 KiB JSON metadata file part and one
+16 MiB `application/pdf` file part inside a stream-enforced 16 MiB-plus-64 KiB
+request bound. Duplicate/unknown parts, malformed boundaries, wrong media types,
+and invalid UTF-8/JSON are rejected before mutation; `Content-Length` is not
+trusted as the only bound. Metadata supplies a canonical inline endpoint and at
+least one attachment alternate. Bytes and HTTP fields do not enter the content
+core, and JSON `md-page` remains unchanged.
+
+Direct PDF delivery uses bounded full `200` plus strict single-byte-range
+`206`/`416`, `If-Range`, `If-None-Match`, one opaque strong ETag per page
+revision, and `Accept-Ranges: bytes`. Multiple or malformed ranges are rejected
+rather than coalesced. This is deliberately sufficient for browser-native
+viewers at the first 16 MiB size band; generic streaming and multi-range bodies
+remain later work.
 
 ### OQ-LIMITS — Publishing limits
 

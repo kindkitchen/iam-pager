@@ -5,6 +5,7 @@ import {
 } from "../http/request-body.ts";
 import type { Session } from "../session/model.ts";
 import { max_page_list_cursor_length } from "./cursor.ts";
+import type { PageEndpointSetIntent } from "./endpoint.ts";
 import { format_page_etag, parse_page_etag } from "./etag.ts";
 import type {
   BulkChangeManagedPageAccessResult,
@@ -33,6 +34,11 @@ import type {
   UserPageActor,
 } from "./interfaces.ts";
 import { is_valid_page_id, type PageAccess } from "./model.ts";
+import {
+  type PdfMultipartDecodeFailure,
+  type PdfMultipartDecoder,
+  WebPdfMultipartDecoder,
+} from "./pdf-http.ts";
 
 /** One bound covers create and replacement content before handler limits run. */
 export const page_request_max_bytes = 96 * 1024;
@@ -74,19 +80,28 @@ export interface PageHttpHandler {
 
 export interface PageHttpAdapterOptions {
   readonly pages: PageHttpApplication;
+  readonly pdf_multipart_decoder?: PdfMultipartDecoder;
 }
 
-interface CreateBody {
-  locator: { namespace: string; page_name?: string };
-  access: PageAccess;
-  tags?: string[];
-  content: { content_type: string; input: unknown };
-}
+type CreateBody =
+  & (
+    | {
+      locator: { namespace: string; page_name?: string };
+      endpoint_set?: never;
+    }
+    | { locator?: never; endpoint_set: PageEndpointSetIntent }
+  )
+  & {
+    access: PageAccess;
+    tags?: string[];
+    content: { content_type: string; input: unknown };
+  };
 
 interface PatchBody {
   access?: PageAccess;
   tags?: string[];
   content?: { content_type: string; input: unknown };
+  endpoint_set?: PageEndpointSetIntent;
 }
 
 interface RenameBody {
@@ -108,9 +123,12 @@ type DecodeResult<Value> =
 
 export class PageHttpAdapter implements PageHttpHandler {
   readonly #pages: PageHttpApplication;
+  readonly #pdf_multipart_decoder: PdfMultipartDecoder;
 
   constructor(options: PageHttpAdapterOptions) {
     this.#pages = options.pages;
+    this.#pdf_multipart_decoder = options.pdf_multipart_decoder ??
+      new WebPdfMultipartDecoder();
   }
 
   collection(
@@ -176,10 +194,15 @@ export class PageHttpAdapter implements PageHttpHandler {
       return invalid_csrf_response();
     }
 
-    const decoded = await decode_json_body(request, decode_create_body);
+    const decoded = await decode_create_request_body(
+      request,
+      this.#pdf_multipart_decoder,
+    );
     if (!decoded.ok) return decoded.response;
     const command = {
-      locator: decoded.value.locator,
+      ...(decoded.value.endpoint_set === undefined
+        ? { locator: decoded.value.locator! }
+        : { endpoint_set: decoded.value.endpoint_set }),
       access: decoded.value.access,
       content: decoded.value.content,
     };
@@ -261,7 +284,10 @@ export class PageHttpAdapter implements PageHttpHandler {
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
     if (!precondition.ok) return precondition.response;
-    const decoded = await decode_json_body(request, decode_patch_body);
+    const decoded = await decode_update_request_body(
+      request,
+      this.#pdf_multipart_decoder,
+    );
     if (!decoded.ok) return decoded.response;
     const result = await this.#pages.update_managed({
       actor,
@@ -435,6 +461,55 @@ function actor_from_session(
   session: Extract<Session, { kind: "authenticated" }>,
 ): UserPageActor {
   return { kind: "user", user_id: session.user_id };
+}
+
+async function decode_create_request_body(
+  request: Request,
+  pdf_decoder: PdfMultipartDecoder,
+): Promise<
+  | { ok: true; value: CreateBody }
+  | { ok: false; response: Response }
+> {
+  if (is_json_media_type(request.headers.get("content-type"))) {
+    return await decode_json_body(request, decode_create_body);
+  }
+  const decoded = await pdf_decoder.decode_create(request);
+  return decoded.ok
+    ? { ok: true, value: decoded.value }
+    : { ok: false, response: pdf_multipart_failure_response(decoded) };
+}
+
+async function decode_update_request_body(
+  request: Request,
+  pdf_decoder: PdfMultipartDecoder,
+): Promise<
+  | { ok: true; value: PatchBody }
+  | { ok: false; response: Response }
+> {
+  if (is_json_media_type(request.headers.get("content-type"))) {
+    return await decode_json_body(request, decode_patch_body);
+  }
+  const decoded = await pdf_decoder.decode_update(request);
+  return decoded.ok
+    ? { ok: true, value: decoded.value }
+    : { ok: false, response: pdf_multipart_failure_response(decoded) };
+}
+
+function pdf_multipart_failure_response(
+  failure: PdfMultipartDecodeFailure,
+): Response {
+  switch (failure.reason) {
+    case "unsupported_media_type":
+      return error_response(415, failure.reason, failure.detail);
+    case "too_large":
+      return error_response(413, "request_too_large", failure.detail);
+    case "invalid_json":
+      return error_response(400, failure.reason, failure.detail);
+    case "unreadable":
+    case "malformed_multipart":
+    case "invalid_metadata":
+      return error_response(400, "invalid_request", failure.detail);
+  }
 }
 
 async function decode_json_body<Value>(

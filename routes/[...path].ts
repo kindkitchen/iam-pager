@@ -12,8 +12,9 @@ export const handler = define.handlers({
     return deliver_page_locator_path(
       engine,
       pages,
-      ctx.url.pathname,
+      ctx.req,
       page_actor_from_session(ctx.state.request_context.session),
+      ctx.state.request_context.request_id,
     );
   },
 });

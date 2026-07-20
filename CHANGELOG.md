@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed PDF HTTP publication and delivery. The Fresh-independent page
+  adapter now accepts exact two-part, stream-bounded multipart create and
+  revision-bound replacement requests without base64, requires a
+  publisher-configured canonical inline endpoint and attachment alternate, and
+  keeps JSON Markdown compatible. Direct PDF responses now provide opaque
+  revision validators, `Accept-Ranges`, strict single-range `206`/`416`,
+  conditional full-body fallback, safe endpoint-selected disposition, and
+  request IDs. Added malformed/oversized/misleading-length, lifecycle,
+  composition, byte-identity, ETag, and range coverage; updated API/product
+  documentation and resolved `OQ-PDF-TRANSPORT`. All 548 tests, tracked-source
+  formatting/lint/type checks, and the production build pass.
+
 - Completed the controlled durable-v2 composition cutover. The explicit
   `deno-kv-v2` page profile inherits the ownership database, revalidates the
   source-bound migration readiness and complete v2 destination, then supplies

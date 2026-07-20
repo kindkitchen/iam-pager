@@ -64,8 +64,9 @@ direct URL is the only way to reach them.
 
 ## EX-PDF — Publisher creates and shares a PDF page
 
-The planned PDF flow accepts one bounded PDF file and creates one logical page.
-A configured direct endpoint can return `application/pdf` for browser-native
+The implemented PDF HTTP flow accepts one strictly bounded multipart PDF file
+and creates one logical page; the secondary site controls remain planned. A
+configured direct endpoint can return `application/pdf` for browser-native
 inline viewing. Another configured endpoint can return the same content asset
 with attachment disposition and a safe filename. The publisher chooses both
 locators; a `.pdf` suffix is only an ordinary possible name. The site wrapper

@@ -111,8 +111,10 @@ fixed `application/pdf` media type, detached immutable bytes, bounded safe
 filename metadata, and both inline and attachment profile support. Generic
 application commands now accept user-configured complete endpoint intent for
 creation, revision-bound replacement, and duplication; either profile may use
-any valid, non-conflicting locator. Binary HTTP upload and generic raw-binary
-handling remain later.
+any valid, non-conflicting locator. The concrete PDF HTTP boundary now requires
+a canonical inline binding and at least one attachment alternate, accepts the
+binary through strict bounded multipart rather than JSON, and serves strict
+single ranges. Generic raw-binary handling remains later.
 
 ## DA-ACCESS — Access
 

@@ -249,10 +249,11 @@ The first publishing slice currently provides:
   for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
   length, cache, disposition, and active-content isolation headers;
-- prototype limits of 96 KiB per guest API request, 64 KiB of Markdown, 16 KiB
-  of CSS (text limits are measured as UTF-8 bytes), and 16 MiB per PDF at the
-  transport-independent content boundary. The current JSON API cannot upload PDF
-  bytes.
+- prototype limits of 96 KiB per JSON page request, 64 KiB of Markdown, 16 KiB
+  of CSS (text limits are measured as UTF-8 bytes), and 16 MiB per PDF. PDF
+  create/replacement uses an exact metadata-plus-file multipart contract bounded
+  to 16 MiB plus 64 KiB; metadata is capped at 16 KiB and bytes never enter
+  JSON.
 
 Pages, users, external identities, namespace reservations, and sessions are
 process-local by default. Deno KV can persist linked ownership records, while
@@ -414,11 +415,16 @@ KV checks. The manual source-preserving raw-keyspace migration is now complete:
 it uses deterministic assets/payloads, conditional idempotent aggregate imports,
 strict source/destination verification, and a source-bound readiness record
 without changing v1. Explicit `deno-kv-v2` composition now gates and selects the
-aggregate; `deno-kv` retains the raw schema-v1 compatibility path. Strict
-bounded upload/direct delivery and the PDF site projection follow. The readiness
-check runs only when v2 storage is deliberately selected and never migrates at
-startup or deploy. Generic raw-binary publishing, PDF.js, thumbnails, text
-extraction, and external storage remain later work.
+aggregate; `deno-kv` retains the raw schema-v1 compatibility path. Strict PDF
+HTTP is now complete: create and exact-revision replacement accept one bounded
+JSON metadata file part plus one bounded PDF file part; metadata requires a
+publisher-configured canonical inline endpoint and at least one attachment
+alternate. Direct PDF responses provide opaque strong validators,
+`Accept-Ranges`, and strict single-range `206`/`416` behavior while preserving
+endpoint-selected disposition over identical bytes. The PDF site projection
+follows. The readiness check runs only when v2 storage is deliberately selected
+and never migrates at startup or deploy. Generic raw-binary publishing, PDF.js,
+thumbnails, text extraction, and external storage remain later work.
 
 ## Local development
 
