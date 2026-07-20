@@ -6,20 +6,21 @@
 > PDF publication is not part of this HTTP contract yet. The implemented
 > transport-independent handler accepts validated `Uint8Array` input up to 16
 > MiB, but the future HTTP extension will use a strict bounded binary upload
-> boundary rather than base64 inside the JSON content command. It will return
-> one logical page with a complete user-configured set of 1–8 endpoints over the
-> same asset. Exactly one endpoint is explicitly canonical; each binding
+> boundary rather than base64 inside the JSON content command. Generic
+> application contracts already accept a complete user-configured set of 1–8
+> endpoints over the same asset for create, revision-bound endpoint replacement,
+> and duplication. Exactly one endpoint is explicitly canonical; each binding
 > supplies an ordinary same-namespace locator and a content-supported `inline`
-> or `attachment` profile. No filename suffix has special routing or delivery
-> meaning. The immutable-asset/atomic-endpoint contract now backs the composed
-> process-local `PageService`. The current create/update commands remain the
-> compatible one-canonical-inline-endpoint `md-page` shape, while every
-> owner-safe summary now exposes the complete endpoint link set and direct
-> delivery obeys the resolved binding profile. PDF management inspection is
-> defined to expose only bounded filename/media-type/size/version/replace
-> metadata, never complete bytes. Binary upload fields are not exposed yet; the
-> retained raw-Deno-KV repository continues through the legacy compatibility
-> path pending its replacement.
+> or `attachment` profile. Canonical rename retains every alternate. No filename
+> suffix has special routing or delivery meaning. The immutable-asset/atomic-
+> endpoint contract backs the composed process-local `PageService`. This HTTP
+> JSON contract keeps its compatible one-canonical-inline-endpoint `md-page`
+> shape until the strict PDF upload extension, while every owner-safe summary
+> exposes the complete endpoint link set and direct delivery obeys the resolved
+> binding profile. PDF management inspection exposes only bounded filename/
+> media-type/size/version/replace metadata, never complete bytes. Binary upload
+> fields are not exposed yet; the retained raw-Deno-KV repository rejects
+> non-compatible endpoint sets pending its replacement.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the
@@ -64,7 +65,9 @@ fields. `endpoints.canonical` is singular; alternates retain deterministic
 locator order. Paths are formatted by the locator boundary and must be local
 absolute paths, never caller-supplied URLs. The profile, not a filename suffix
 or content filename hint, selects inline versus attachment direct delivery.
-Current `md-page` commands produce one canonical inline link and no alternates.
+Current HTTP `md-page` commands produce one canonical inline link and no
+alternates. Transport-independent callers may instead supply complete endpoint
+intent.
 
 ## Create or replace — `POST /api/pages`
 

@@ -46,18 +46,20 @@ The PDF capability now has a transport-independent content core that:
   resolves the same exact bytes through already-established generic inline and
   attachment endpoint contracts.
 
-The remaining PDF capability will:
+The generic application core now:
 
-- bind one logical page to user-configured endpoints through application
-  commands, including inline and attachment profiles;
-- validate each supplied locator through the ordinary locator interfaces and
-  keep endpoint persistence behind interfaces, without PDF-specific path
+- binds one logical page to complete user-configured endpoint intent, including
+  inline and attachment profiles;
+- validates each supplied locator through the ordinary locator interfaces and
+  keeps endpoint persistence behind interfaces, without PDF-specific path
   generation;
-- apply access, revision, rename, duplication, and deletion to the logical page
-  and all its endpoints coherently;
-- keep alternate delivery endpoints out of creator lists and public exploration;
-- expose browser-native PDF viewing through the site when supported, with direct
-  preview and download fallbacks.
+- applies access, content and endpoint replacement, revision, canonical rename,
+  fresh-set duplication, and deletion to the logical page coherently;
+- keeps alternate delivery endpoints out of creator lists and public
+  exploration.
+
+The remaining PDF capability exposes these contracts through strict bounded HTTP
+upload and browser-native site viewing with direct preview/download fallbacks.
 
 The PDF content core is implemented and registered with `PageService`; strict
 binary HTTP upload is not. Its generic prerequisites include the endpoint
@@ -65,11 +67,12 @@ planner plus immutable-asset and atomic page/endpoint capability contracts, a
 process-local reference, and shared persistence conformance. Core integration
 coverage proves detached immutable bytes, bounded inspection, one-row queries,
 coherent replacement/access/deletion, and identical inline/attachment delivery
-over a generic configured endpoint set. Generic application commands still need
-to accept complete endpoint intent and preserve it through rename and
-duplication. Owner/public summaries already expose complete safe endpoint links
-without duplicating rows, and direct delivery selects disposition from the
-resolved binding profile. Generic raw-binary content, PDF.js, text extraction,
+over a generic configured endpoint set. Generic application commands now accept
+complete intent for create and revision-bound replacement, preserve alternates
+through canonical rename, and require a fresh complete set for endpoint-aware
+duplication. Owner/public summaries expose complete safe endpoint links without
+duplicating rows, and direct delivery selects disposition from the resolved
+binding profile. Generic raw-binary content, PDF.js, text extraction,
 thumbnails, and external storage are outside its first slice.
 
 ## CP-VIEW — Site-mediated viewing

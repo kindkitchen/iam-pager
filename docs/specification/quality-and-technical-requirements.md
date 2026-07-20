@@ -78,8 +78,13 @@ summaries retain canonical compatibility fields and expose the complete set as
 safe application-relative links. Direct delivery carries the exact resolved
 binding, rejects content-handler/profile incoherence, and maps the stored
 profile to inline or attachment disposition; filename hints never override it.
-Fresh, `Request`, `Response`, multipart parsing, browser preview, Deno KV, and
-Kvdex types remain outside the split contracts.
+Application commands accept either the one-inline-locator compatibility shape or
+complete endpoint intent. Complete updates are revision-bound and no-op when
+only alternate input order changes; canonical rename retains alternates; and
+endpoint-aware duplication requires a fresh planned set. The legacy repository
+path rejects non-compatible sets rather than truncating them. Fresh, `Request`,
+`Response`, multipart parsing, browser preview, Deno KV, and Kvdex types remain
+outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 

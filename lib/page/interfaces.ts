@@ -1,6 +1,11 @@
 import type { DeliveryPayload } from "../content/model.ts";
 import type { Locator } from "../locator/model.ts";
-import type { PageEndpointLink, PageEndpointLinks } from "./endpoint.ts";
+import type {
+  PageEndpointLink,
+  PageEndpointLinks,
+  PageEndpointSetIntent,
+  PlanPageEndpointSetResult,
+} from "./endpoint.ts";
 import type {
   PageAccess,
   PageContent,
@@ -308,12 +313,23 @@ export interface PageContentCommand {
   input: unknown;
 }
 
-export interface PublishTrialPageRequest {
+/** One-locator compatibility or a complete publisher-configured endpoint set. */
+export type PageEndpointCommand =
+  | { readonly locator: Locator; readonly endpoint_set?: never }
+  | {
+    readonly locator?: never;
+    readonly endpoint_set: PageEndpointSetIntent;
+  };
+
+export type PageEndpointCommandFailureReason =
+  | Exclude<PlanPageEndpointSetResult, { ok: true }>["reason"]
+  | "endpoint_set_unsupported";
+
+export type PublishTrialPageRequest = PageEndpointCommand & {
   actor: GuestPageActor;
-  locator: Locator;
   access: PageAccess;
   content: PageContentCommand;
-}
+};
 
 export type PublishTrialPageResult =
   | {
@@ -324,23 +340,23 @@ export type PublishTrialPageResult =
   | {
     ok: false;
     reason:
-      | "forbidden_namespace"
-      | "invalid_locator"
+      | PageEndpointCommandFailureReason
       | "invalid_access"
       | "private_requires_managed_page"
       | "namespace_reserved"
+      | "endpoint_conflict"
+      | "revision_exhausted"
       | "unknown_content_type"
       | "page_id_generation_exhausted";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
 
-export interface CreateManagedPageRequest {
+export type CreateManagedPageRequest = PageEndpointCommand & {
   actor: UserPageActor;
-  locator: Locator;
   access: PageAccess;
   tags?: readonly string[];
   content: PageContentCommand;
-}
+};
 
 export type CreateManagedPageResult =
   | {
@@ -351,8 +367,7 @@ export type CreateManagedPageResult =
   | {
     ok: false;
     reason:
-      | "forbidden_namespace"
-      | "invalid_locator"
+      | PageEndpointCommandFailureReason
       | "invalid_access"
       | "invalid_tags"
       | "namespace_not_reserved"
@@ -404,6 +419,8 @@ export interface UpdateManagedPageRequest {
     access?: PageAccess;
     tags?: readonly string[];
     content?: PageContentCommand;
+    /** Complete replacement intent; omission preserves every binding. */
+    endpoint_set?: PageEndpointSetIntent;
   };
 }
 
@@ -418,6 +435,8 @@ export type UpdateManagedPageResult =
       | "empty_patch"
       | "invalid_access"
       | "invalid_tags"
+      | "page_exists"
+      | PageEndpointCommandFailureReason
       | "unknown_content_type";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -511,6 +530,8 @@ export interface DuplicateManagedPageRequest {
   actor: UserPageActor;
   page_id: PageId;
   expected_revision: number;
+  /** Required for sources outside the one-inline-endpoint compatibility shape. */
+  endpoint_set?: PageEndpointSetIntent;
 }
 
 export type DuplicateManagedPageResult =
@@ -525,6 +546,9 @@ export type DuplicateManagedPageResult =
       | "not_found"
       | "revision_conflict"
       | "unknown_content_type"
+      | "endpoint_set_required"
+      | "page_exists"
+      | PageEndpointCommandFailureReason
       | "page_name_generation_exhausted"
       | "page_id_generation_exhausted";
   };

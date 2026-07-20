@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed `pdf-content-core`. Generic trial and managed application commands
+  now accept either the one-inline-locator compatibility shape or a complete
+  planned endpoint set; revision-bound updates replace all bindings atomically,
+  preserve exact sets for content/access changes, and treat reordered identical
+  alternates as a no-op. Canonical rename retains every alternate, while
+  endpoint-aware duplication requires and validates a fresh complete destination
+  set instead of dropping aliases. Typed conflicts, unsupported profiles, trial
+  cross-page collisions, and the legacy repository's one-endpoint limit fail
+  without partial mutation. PDF lifecycle coverage now spans create, inspect,
+  endpoint update, content replacement, access, rename, duplicate, conflict,
+  delivery, and deletion. All 493 tests pass.
+
 - Began `pdf-content-core` with the complete transport-independent handler step.
   The registered `pdf` handler accepts detached immutable `Uint8Array` payloads
   up to 16 MiB, supports PDF 1.0–1.7 and 2.0 after byte-zero header and terminal
