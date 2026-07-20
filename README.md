@@ -178,14 +178,15 @@ The first publishing slice currently provides:
   Owner/public summaries expose a complete safe canonical/alternate link set,
   the site renders configured alternates without creating extra page rows, and
   direct HTTP disposition follows the resolved binding profile rather than a
-  suffix or filename hint. The first unselected Kvdex storage slice now pins
-  3.6.7 and stages encoded immutable asset payloads under random identities,
-  verifies their reconstruction, length, and SHA-256, then publishes a separate
-  manifest identity. Interrupted batches remain unreachable and are cleaned
-  best-effort; fresh repository instances round-trip multi-segment bytes over
-  the same supplied Deno KV. Page/endpoint persistence and raw-keyspace
-  compatibility remain incomplete, so the raw-Deno-KV repository stays on its
-  legacy service path and deployment selection is unchanged;
+  suffix or filename hint. The initial unselected Kvdex prototype is now
+  rejected: the required Deno KV utility is pinned `@kitsonk/kv-toolbox` 0.31.0.
+  Its blob API will replace only physical payload segmentation behind a
+  storage-local interface. The already-proven random staging identity,
+  reconstruction, length/SHA-256/codec verification, and separate native
+  manifest compare-and-set remain the safety protocol because toolbox blob
+  writes can span commits. Page/endpoint persistence, prototype replacement, and
+  raw-keyspace compatibility remain incomplete, so the raw-Deno-KV repository
+  stays on its legacy service path and deployment selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,
@@ -350,18 +351,19 @@ keeps bytes out of management inspection. Generic application commands accept
 complete endpoint-set intent for trial and managed creation and revision-bound
 replacement. Canonical rename preserves every alternate; endpoint-aware
 duplication requires a fresh complete destination set, while the existing
-one-inline-endpoint command remains the compatibility path. The first Kvdex
-adapter step is implemented: pinned 3.6.7 remains inside `lib/storage`, and an
-interface-backed content-asset repository writes V8-serialized payloads through
-its segmented encoded collection, verifies them, then publishes one unencoded
-manifest. Failed multi-operation batches expose no asset identity and permit a
-retry; corruption is rejected on read. The complete atomic page/endpoint
-adapter, raw-keyspace compatibility, strict bounded upload/direct delivery, and
-the PDF site projection follow. The retained raw-Deno-KV repository remains
-selected and rejects non-compatible endpoint sets without partial mutation.
-Existing raw Deno KV records require explicit compatibility or migration before
-Kvdex can become the durable default. Generic raw-binary publishing, PDF.js,
-thumbnails, text extraction, and external storage remain later work.
+one-inline-endpoint command remains the compatibility path. Durable persistence
+is now being corrected to pinned `@kitsonk/kv-toolbox` 0.31.0. A storage-local
+blob adapter will reuse the verified immutable-asset staging protocol from the
+superseded, unselected prototype; page, endpoint, owner, revision, and manifest
+visibility will continue to use one native `Deno.Kv.atomic()` commit rather than
+the toolbox's potentially split batched atomic. The complete aggregate adapter,
+repeat-safe source-preserving raw-keyspace migration, strict bounded
+upload/direct delivery, and the PDF site projection follow. The retained
+raw-Deno-KV repository remains selected and rejects non-compatible endpoint sets
+without partial mutation. Existing raw Deno KV records require explicit
+compatibility or migration before the aggregate adapter can become durable
+default. Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and
+external storage remain later work.
 
 ## Local development
 

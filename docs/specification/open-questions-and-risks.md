@@ -245,25 +245,28 @@ delivery flow. Start with an explicit subset and keep external storage for
 later. PDF is intentionally a specific first binary type; it must not create an
 accidental generic-file contract.
 
-### OQ-KVDEX — Kvdex atomicity and migration
+### OQ-KV-TOOLBOX — kv-toolbox atomicity and migration
 
-Kvdex 3.6.7 is pinned for the Deno KV page/content adapter because it provides
-typed collections and segmented `Uint8Array` storage. It remains inside storage
-implementation files and does not enter domain or application interfaces.
+`@kitsonk/kv-toolbox` 0.31.0 is the required utility for the Deno KV
+page/content adapter. Its named blob API accepts a caller-owned `Deno.Kv` and
+provides segmented binary set/get/remove operations. Package types and physical
+blob suffixes remain inside storage implementation files; domain, application,
+HTTP, and site contracts do not depend on them. The earlier unselected Kvdex
+prototype is rejected and will be removed after behavioral parity.
 
-The implemented first slice stages each V8-serialized immutable payload under a
-random Kvdex identity, verifies reconstructed length, SHA-256, and decoding, and
-only then publishes a separate unencoded asset manifest. Failed multi-operation
-segment batches expose no application asset identity, receive best-effort
-partial-record cleanup, and can be retried; readers reject missing or changed
-segments. An ambiguous manifest-commit exception deliberately retains the staged
-payload because deleting it could corrupt a commit that actually succeeded.
+Blob segmentation does not itself provide application visibility. Each encoded
+immutable payload is staged under a random identity, reconstructed and checked
+for expected length, SHA-256, and decoding, and only then exposed by a separate
+manifest published with native Deno KV compare-and-set. Known failed staging
+receives best-effort cleanup; an ambiguous manifest exception retains the
+payload rather than risk deleting data referenced by a commit that succeeded.
+Every read repeats integrity checks.
 
-The larger risk remains open. Encoded collections cannot participate in Kvdex
-atomic builders, and their batched writes are not one visibility transaction.
-Pages and endpoints are not yet persisted by this adapter, and deployment still
-selects the raw-Deno-KV compatibility path. Built-in index deletion cannot
-replace existing atomic rename/delete guarantees without proof. The current raw
-Deno KV keyspace is not a Kvdex keyspace, so switching implementations requires
-explicit compatibility or migration; silently presenting an empty database is
-not acceptable.
+`KvToolbox.atomic()` may split work across commits and returns multiple commit
+results, so it cannot replace native `Deno.Kv.atomic()` for all-or-none page,
+endpoint, owner, revision, index, or manifest visibility. The aggregate adapter
+must use explicit adapter-owned records and native commits, while only payload
+bytes use toolbox blob operations. Deployment continues to select the legacy raw
+Deno KV page repository until unchanged aggregate conformance passes and a
+manual, repeat-safe, source-preserving schema-v1 migration prevents an existing
+database from being presented as empty.

@@ -2,6 +2,17 @@
 
 ## 2026-07-20
 
+- Corrected the durable page/content direction from Kvdex to
+  `@kitsonk/kv-toolbox` 0.31.0 and activated `kv-toolbox-content-persistence` as
+  the top-priority task. Library review confirmed that toolbox blob operations
+  fit storage-local payload staging but its potentially split `atomic()` must
+  not replace native Deno KV commits for manifest or page/endpoint visibility.
+  The plan preserves the completed random staging, integrity verification, and
+  fault-test work; keeps the raw Deno KV page adapter selected; requires a
+  manual source-preserving migration; and prevents storage or HTTP behavior from
+  entering domain, Fresh, or site code. The superseded Kvdex task is rejected,
+  and both remaining PDF tasks now depend on the corrected storage boundary.
+
 - Activated `kvdex-content-persistence` and completed its first coherent storage
   slice. Pinned Kvdex 3.6.7 behind an adapter-owned Deno KV schema factory and
   added an interface-backed immutable content-asset repository. V8-serialized

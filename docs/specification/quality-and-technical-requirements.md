@@ -43,12 +43,12 @@ ID, and revision conditions. Owner-safe summaries and inspection input exclude
 stewardship IDs and stored derivations. The process-local composition now runs
 this service through focused content-asset/page-aggregate capabilities; the
 retained raw-Deno-KV selection uses the legacy `PageRepository` compatibility
-path until the conforming Kvdex adapter replaces it. The service and strict HTTP
-boundary are still exposed once, and Fresh collection/item/direct routes remain
-thin adapters. Public exploration extends that boundary through
-`PublicPageExplorer`: callers supply optional name queries and an opaque
-continuation, while the selected persistence decides whether the MVP scan or a
-future index satisfies it.
+path until the conforming kv-toolbox-backed aggregate adapter replaces it. The
+service and strict HTTP boundary are still exposed once, and Fresh
+collection/item/direct routes remain thin adapters. Public exploration extends
+that boundary through `PublicPageExplorer`: callers supply optional name queries
+and an opaque continuation, while the selected persistence decides whether the
+MVP scan or a future index satisfies it.
 
 The endpoint foundation exposes a transport/storage-neutral
 `PageEndpointPlanner` interface and default implementation. It accepts one
@@ -83,8 +83,8 @@ complete endpoint intent. Complete updates are revision-bound and no-op when
 only alternate input order changes; canonical rename retains alternates; and
 endpoint-aware duplication requires a fresh planned set. The legacy repository
 path rejects non-compatible sets rather than truncating them. Fresh, `Request`,
-`Response`, multipart parsing, browser preview, Deno KV, and Kvdex types remain
-outside the split contracts.
+`Response`, multipart parsing, browser preview, Deno KV, and kv-toolbox types
+remain outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -142,31 +142,31 @@ alternates cannot duplicate rows. `MemoryPageRepository` is now only a
 one-endpoint compatibility projection over that reference, and the composed
 process-local `PageService` detects and uses the focused capabilities directly.
 The raw-Deno-KV `PageRepository` remains on the compatibility path pending the
-complete Kvdex adapter and explicit record migration.
+complete kv-toolbox-backed aggregate adapter and explicit record migration.
 
-The replacement page/content adapter pins Kvdex 3.6.7 only as an implementation
-detail over Deno KV. Its first implemented slice is an interface-backed
-immutable content-asset repository and adapter-owned schema factory. Payload
-data is V8-serialized, written to a segmented encoded collection under a random
-staging identity with batched operations, reconstructed, length-checked,
-SHA-256-checked, and deserialized before an unencoded manifest publishes the
-application asset identity. Readers resolve only manifests and repeat every
-integrity check; a failed segment batch has no visible identity, best-effort
-pinned-layout cleanup removes partial staging records, and an ambiguous
-manifest-commit exception retains the payload rather than risk corrupting a
-visible record. Focused tests cover immutable conflicts/isolation,
-cross-instance multi-segment bytes, interruption/retry, corruption, and
-coexistence with the legacy keyspace.
+The required page/content utility is pinned `@kitsonk/kv-toolbox` 0.31.0. Its
+named blob operations will sit behind a storage-local binary interface over a
+caller-owned `Deno.Kv`; the package does not define domain models, repository
+contracts, page indexes, or web responses. The earlier Kvdex asset prototype was
+never selected and is superseded. Its useful behavior is retained as the
+replacement acceptance baseline: random unreachable payload staging,
+reconstruction, encoded-length/SHA-256/codec verification, one separately
+published immutable manifest, best-effort known-failure cleanup, retention after
+an ambiguous manifest exception, and corruption rejection on every read.
 
-This asset slice is not selected by deployment composition yet. The adapter must
-still satisfy the complete aggregate conformance and preserved application
-behavior before replacing raw Deno KV. Kvdex encoded collections cannot join
-Kvdex atomic builders, and batched writes are not one visibility transaction;
-page references therefore remain forbidden until a manifest exists. Critical
-locator and owner indexes may not use Kvdex shortcuts whose delete/update
-behavior weakens atomic rename, replacement, or deletion. Existing raw-KV
-records require an explicit compatibility or migration path before selection
-changes.
+Toolbox blob writes may span multiple commits, and `KvToolbox.atomic()` may
+split an operation. They therefore cannot publish application visibility.
+Manifest, page, complete endpoint set, owner/public index, and revision
+transitions use one native `Deno.Kv.atomic()` commit over explicit adapter-owned
+records. Only a fully verified manifest-backed immutable asset may be referenced
+by a page. Toolbox query and response helpers do not replace deterministic
+repository indexes or the web-independent HTTP adapter.
+
+The replacement remains unselected until it satisfies unchanged aggregate
+conformance and preserved application behavior. Existing raw-KV schema-v1 page
+records require a manual, adjacent, repeat-safe, source-preserving migration to
+a shadow aggregate keyspace plus an explicit readiness rule; selecting the new
+adapter must fail rather than silently present an unmigrated database as empty.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
@@ -562,8 +562,9 @@ Tests should cover the behavior that defines the product:
   bytes and endpoint-specific headers;
 - all-or-nothing endpoint-set create/rename, page-wide access, coherent content
   replacement, deletion, and single-row management/exploration;
-- staged Kvdex multi-segment assets never becoming reachable while incomplete,
-  plus compatibility or migration from the existing raw Deno KV keyspace;
+- staged kv-toolbox multi-segment payloads never publishing an asset while
+  incomplete or corrupt, plus source-preserving migration from the existing raw
+  Deno KV keyspace;
 - strict bounded PDF upload, malformed/non-PDF rejection, safe filenames, and a
   browser preview/download acceptance flow.
 
