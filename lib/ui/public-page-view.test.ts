@@ -129,6 +129,49 @@ Deno.test("public page presenter builds isolated preview and creator links", asy
   assertEquals(pages.list_calls, [{ namespace: "Alice", limit: 3 }]);
 });
 
+Deno.test("public PDF view derives native preview and downloads from endpoint profiles", async () => {
+  const pages = new FakePublicPages();
+  const pdf_page: PublicPageSummary = {
+    ...summary("Alice"),
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Alice" },
+        path: "/Alice",
+        delivery_profile: "inline",
+      },
+      alternates: [{
+        locator: { namespace: "Alice", page_name: "download-report" },
+        path: "/Alice/download-report",
+        delivery_profile: "attachment",
+      }],
+    },
+    content_type: "pdf",
+    media_type: "application/pdf",
+    size_bytes: 2048,
+  };
+  pages.views.set(locator_key(pdf_page.locator), {
+    ok: true,
+    page: pdf_page,
+    payload: {
+      media_type: "application/pdf",
+      body: new Uint8Array([37, 80, 68, 70]),
+    },
+  });
+  const presenter = new CreatorPublicPageViewPresenter({ pages });
+
+  const view = await presenter.present(pdf_page.locator);
+
+  assertEquals(view.kind, "page");
+  if (view.kind !== "page") return;
+  assertEquals(view.preview, {
+    kind: "pdf",
+    preview: pdf_page.endpoints.canonical,
+    downloads: pdf_page.endpoints.alternates,
+    size_bytes: 2048,
+  });
+  assertEquals(pages.list_calls, [{ namespace: "Alice", limit: 22 }]);
+});
+
 Deno.test("public default page does not link to itself", async () => {
   const pages = new FakePublicPages();
   const current = summary("Alice");

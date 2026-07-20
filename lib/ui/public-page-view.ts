@@ -1,5 +1,6 @@
 import type { DeliveryPayload } from "../content/model.ts";
 import { type Locator, locator_key } from "../locator/model.ts";
+import type { PageEndpointLink } from "../page/endpoint.ts";
 import type {
   PublicPageLister,
   PublicPageSummary,
@@ -14,6 +15,12 @@ export interface PublicPageLink {
 
 export type PublicContentPreview =
   | { readonly kind: "html"; readonly document: string }
+  | {
+    readonly kind: "pdf";
+    readonly preview: PageEndpointLink;
+    readonly downloads: readonly PageEndpointLink[];
+    readonly size_bytes: number;
+  }
   | {
     readonly kind: "fallback";
     readonly media_type: string;
@@ -129,6 +136,23 @@ function preview_from_payload(
     payload.media_type.toLowerCase().startsWith("text/html")
   ) {
     return { kind: "html", document: payload.body };
+  }
+  if (
+    page.content_type === "pdf" &&
+    page.media_type.toLowerCase() === "application/pdf" &&
+    page.endpoints.canonical.delivery_profile === "inline"
+  ) {
+    const downloads = page.endpoints.alternates.filter((endpoint) =>
+      endpoint.delivery_profile === "attachment"
+    );
+    if (downloads.length > 0) {
+      return {
+        kind: "pdf",
+        preview: structuredClone(page.endpoints.canonical),
+        downloads: structuredClone(downloads),
+        size_bytes: page.size_bytes,
+      };
+    }
   }
   return {
     kind: "fallback",

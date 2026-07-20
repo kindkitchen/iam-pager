@@ -36,9 +36,9 @@ same basic content and locator idea but has stricter limits and no namespace
 reservation. Content at a guest locator may be replaced by another guest or by
 an authenticated creator using the same namespace.
 
-## PD-PDF — Planned PDF page
+## PD-PDF — PDF page
 
-PDF is the next explicit content type. One uploaded PDF content asset backs one
+PDF is the first binary content type. One uploaded PDF content asset backs one
 logical page with at least two delivery behaviors:
 
 - one configured endpoint can provide browser-native inline viewing;
@@ -48,9 +48,10 @@ The publisher chooses each valid endpoint locator and its delivery behavior. A
 name such as `example.pdf` has no special product meaning. Delivery behavior
 belongs to an endpoint binding, not to a second physical copy of the PDF, a
 filename guess, or content-specific locator generation in the page service. The
-site may embed the browser-native viewer when supported, but must always retain
-explicit direct preview and download links. PDF.js, generated thumbnails, text
-extraction, and generic raw-binary publication remain later choices.
+site embeds the canonical inline endpoint with the browser-native viewer and
+retains explicit Back, direct preview, attachment download, and unsupported-
+browser fallback links. PDF.js, generated thumbnails, text extraction, and
+generic raw-binary publication remain later choices.
 
 ## PD-VISITORS — Visitors and exploration
 

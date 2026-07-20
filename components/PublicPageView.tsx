@@ -46,14 +46,31 @@ export function PublicPageViewPage(
           Public content at <strong>{view.page.locator.namespace}</strong>
         </p>
         <nav class="public-page-actions" aria-label="Page actions">
-          <a href={view.page.endpoints.canonical.path}>
-            Open canonical {view.page.endpoints.canonical.delivery_profile}
-          </a>
-          {view.page.endpoints.alternates.map((endpoint) => (
-            <a key={endpoint.path} href={endpoint.path}>
-              Open alternate {endpoint.delivery_profile}: {endpoint.path}
-            </a>
-          ))}
+          <a href="/site">Back to public pages</a>
+          {view.preview.kind === "pdf"
+            ? (
+              <>
+                <a href={view.preview.preview.path}>Open PDF directly</a>
+                {view.preview.downloads.map((endpoint, index) => (
+                  <a key={endpoint.path} href={endpoint.path}>
+                    {index === 0 ? "Download PDF" : `Download PDF ${index + 1}`}
+                  </a>
+                ))}
+              </>
+            )
+            : (
+              <>
+                <a href={view.page.endpoints.canonical.path}>
+                  Open canonical{" "}
+                  {view.page.endpoints.canonical.delivery_profile}
+                </a>
+                {view.page.endpoints.alternates.map((endpoint) => (
+                  <a key={endpoint.path} href={endpoint.path}>
+                    Open alternate {endpoint.delivery_profile}: {endpoint.path}
+                  </a>
+                ))}
+              </>
+            )}
           {view.default_page !== null && (
             <a href={view.default_page.site_path}>Creator default page</a>
           )}
@@ -70,6 +87,39 @@ export function PublicPageViewPage(
               referrerpolicy="no-referrer"
               srcdoc={view.preview.document}
             />
+          )
+          : view.preview.kind === "pdf"
+          ? (
+            <div class="public-pdf-preview">
+              <object
+                aria-label={`${title} PDF preview`}
+                data={view.preview.preview.path}
+                type="application/pdf"
+              >
+                <div class="public-content-fallback">
+                  <h2>PDF preview unavailable</h2>
+                  <p>
+                    This browser cannot display the PDF inline. Open it directly
+                    or use a download link.
+                  </p>
+                  <a href={view.preview.preview.path}>Open PDF directly</a>
+                  {view.preview.downloads.map((endpoint, index) => (
+                    <a key={endpoint.path} href={endpoint.path}>
+                      {index === 0
+                        ? "Download PDF"
+                        : `Download PDF ${index + 1}`}
+                    </a>
+                  ))}
+                </div>
+              </object>
+              <p class="public-pdf-alternative">
+                Preview not visible?{" "}
+                <a href={view.preview.preview.path}>
+                  Open the PDF directly
+                </a>{" "}
+                or <a href={view.preview.downloads[0].path}>download it</a>.
+              </p>
+            </div>
           )
           : (
             <div class="public-content-fallback">

@@ -157,8 +157,11 @@ controls, multipart submission, and typed API failure presentation. Creator
 management now derives preview/download actions from returned endpoint profiles,
 validates bounded PDF metadata without bytes, and sends replacement as one exact
 revision-bound multipart request while retaining the selected file across
-failure or stale refresh. The public native-preview wrapper follows. Generic
-binary fallback and external storage remain later.
+failure or stale refresh. The public wrapper now embeds the canonical inline
+endpoint with browser-native PDF support and keeps Back, direct-preview,
+attachment-download, and unsupported-browser fallback navigation available.
+Exploration still projects one logical PDF row with content type and size.
+Generic binary fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 

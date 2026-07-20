@@ -27,8 +27,8 @@ Deno.test("public exploration component renders GET search and safe result links
           delivery_profile: "attachment",
         }],
       },
-      content_type: "md-page",
-      size_bytes: 42,
+      content_type: "pdf",
+      size_bytes: 2048,
       tags: ["news", "release"],
       updated_at: new Date("2026-07-19T02:00:00.000Z"),
     }],
@@ -50,6 +50,8 @@ Deno.test("public exploration component renders GET search and safe result links
   assertStringIncludes(html, 'href="/Alice/Notes"');
   assertStringIncludes(html, 'href="/Alice/Notes-download"');
   assertStringIncludes(html, "Open alternate attachment");
+  assertStringIncludes(html, "pdf · 2048 bytes");
+  assertEquals(html.match(/class="public-exploration-result"/g)?.length, 1);
   assertStringIncludes(html, "Private and guest pages never appear here");
   assertStringIncludes(html, "More public pages");
   assertEquals(html.includes("page_id"), false);

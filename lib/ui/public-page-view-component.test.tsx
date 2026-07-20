@@ -69,6 +69,66 @@ Deno.test("public page wrapper isolates creator HTML and renders platform links"
   assertStringIncludes(html, "Creator content");
 });
 
+Deno.test("public page wrapper embeds native PDF with persistent navigation and fallback", () => {
+  const view: PublicPageView = {
+    kind: "page",
+    page: {
+      locator: { namespace: "Alice", page_name: "report" },
+      path: "/Alice/report",
+      endpoints: {
+        canonical: {
+          locator: { namespace: "Alice", page_name: "report" },
+          path: "/Alice/report",
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Alice", page_name: "get-report" },
+          path: "/Alice/get-report",
+          delivery_profile: "attachment",
+        }],
+      },
+      stewardship: "managed",
+      content_type: "pdf",
+      media_type: "application/pdf",
+      size_bytes: 2048,
+      tags: ["reports"],
+      created_at: new Date("2026-07-19T01:00:00.000Z"),
+      updated_at: new Date("2026-07-19T02:00:00.000Z"),
+    },
+    direct_path: "/Alice/report",
+    preview: {
+      kind: "pdf",
+      preview: {
+        locator: { namespace: "Alice", page_name: "report" },
+        path: "/Alice/report",
+        delivery_profile: "inline",
+      },
+      downloads: [{
+        locator: { namespace: "Alice", page_name: "get-report" },
+        path: "/Alice/get-report",
+        delivery_profile: "attachment",
+      }],
+      size_bytes: 2048,
+    },
+    default_page: null,
+    other_pages: [],
+    has_more_public_pages: false,
+  };
+
+  const html = render_to_string(
+    <PublicPageViewPage navigation={navigation} view={view} />,
+  );
+
+  assertStringIncludes(html, '<object aria-label="report PDF preview"');
+  assertStringIncludes(html, 'data="/Alice/report"');
+  assertStringIncludes(html, 'type="application/pdf"');
+  assertStringIncludes(html, 'href="/site">Back to public pages');
+  assertStringIncludes(html, 'href="/Alice/report">Open PDF directly');
+  assertStringIncludes(html, 'href="/Alice/get-report">Download PDF');
+  assertStringIncludes(html, "This browser cannot display the PDF inline");
+  assertStringIncludes(html, "Preview not visible?");
+});
+
 Deno.test("public page wrapper renders a non-disclosing missing view", () => {
   const html = render_to_string(
     <PublicPageViewPage navigation={navigation} view={{ kind: "missing" }} />,
