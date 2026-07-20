@@ -123,6 +123,39 @@ invisible to readers and harmless, but no sweeper reclaims them yet. These
 operational limits must remain visible until broader lifecycle and migration
 behavior is delivered.
 
+## QT-PREDEPLOY — Explicit pre-deploy and schema upgrades
+
+Deployment preparation is one explicit `deno task pre-deploy` task graph. It is
+not application startup behavior. The graph uses Deno task-object dependencies:
+`pre-deploy::check`, `pre-deploy::test`, and `pre-deploy::build` run in
+parallel; `pre-deploy::upgrade-db-schema` runs only after all three succeed; the
+commandless `pre-deploy` parent completes after the upgrade task. Dependencies
+are listed explicitly because Deno wildcard matching is a CLI operation, not
+dependency expansion. Operators may bound dependency parallelism with `--jobs`
+or `DENO_JOBS`.
+
+The schema-upgrade core is storage-agnostic and interface-first. A stable schema
+ID has one persisted current version, one declared target, and a contiguous set
+of forward-only steps. The runner validates the complete plan before writes,
+atomically claims the expected transition, invokes its idempotent
+transformation, and marks completion. An interrupted claim resumes the same
+step; a completed plan returns an empty/no-change report on every later run.
+Missing steps, duplicate versions, downgrades, unknown pending transitions, and
+concurrent conflicts fail closed. No rollback machinery is provided.
+
+Deno KV is the first implementation of schema state and coordination. It uses
+versionstamp checks so only one runner can claim a transition and stores no
+secrets or transformed data in diagnostics. Upgrade functions may use a supplied
+Deno KV context, but Deno types stay outside the runner interfaces. The initial
+work establishes a baseline for existing databases and tests fresh, already-
+current, multi-step, interrupted, repeated, and concurrent runs across
+repository instances.
+
+`pre-deploy::upgrade-db-schema` must not opt into Deno task file caching: its
+input includes external database state, which `files`, `output`, and `env`
+fingerprints cannot prove unchanged. Check/test/build caching may be evaluated
+separately, but explicit pre-deploy correctness cannot depend on a cache hit.
+
 ## QT-ROUTING — Routing and HTTP behavior
 
 - Namespace and page matching must follow `DA-LOCATOR` consistently during

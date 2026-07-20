@@ -2,6 +2,14 @@
 
 ## 2026-07-20
 
+- Activated `explicit-pre-deploy`: the planned `deno.json` dependency graph runs
+  check/test/build in parallel before a forward-only schema upgrade task. The
+  planned interface-backed runner detects persisted-version gaps, resumes
+  idempotent steps, returns no-change on repeated runs, and uses Deno KV atomic
+  claims as its first adapter. Verified these task-object, dependency,
+  concurrency, naming, and caching capabilities against the current Deno 2.9.3
+  schema and official task-runner documentation.
+
 - Moved the complete five-task PDF/content-endpoint chain to the `todo` backlog
   before starting the explicit pre-deploy direction.
 

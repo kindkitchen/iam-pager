@@ -76,6 +76,21 @@ the page service nor HTTP generates a locator, interprets `.pdf`, or infers
 behavior from any path shape. PDF.js, generated preview images, and text
 extraction are later adapters or capabilities.
 
+### OQ-SCHEMA-UPGRADES — Explicit forward-only database evolution
+
+Database schema evolution runs only through the explicit pre-deploy command; the
+application does not mutate schema during startup or a normal request. Code
+declares a target version and contiguous forward steps for each stable schema
+ID. The runner compares that declaration with persisted database state, applies
+only missing steps, and returns a no-change success after the target is reached.
+
+There is no automatic schema-diff inference and no rollback framework. Every
+transformation is explicitly authored and idempotent, because interruption may
+require the same claimed step to resume. A one-way helper may be removed only
+after every supported environment can no longer start below its source version.
+The first state/coordination adapter is Deno KV behind the same agnostic
+interfaces.
+
 ### OQ-API — API surface
 
 The concrete page API includes `POST`/`GET /api/pages`,

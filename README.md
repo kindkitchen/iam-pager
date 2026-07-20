@@ -209,7 +209,24 @@ frequency, guest expiry, exploration text indexing/relevance, and backend
 migration are not implemented; these endpoints are not ready for untrusted
 public traffic.
 
-## Next planned direction: PDF pages
+## Active direction: explicit pre-deploy
+
+The next operational slice adds one explicit `deno task pre-deploy` graph. Deno
+2.9 task-object dependencies will run check, test, and build branches in
+parallel and invoke `pre-deploy::upgrade-db-schema` only after they all succeed.
+The schema task always inspects durable state; it is not file-cacheable and
+repeated runs must become successful no-ops once every registered upgrade is
+complete.
+
+Schema evolution remains outside application startup. A transport-independent,
+forward-only runner compares each declared schema target with a persisted
+version, resumes a stable idempotent step after interruption, and has no
+rollback path. The first adapter stores upgrade state in Deno KV and uses atomic
+claims so parallel invocations cannot apply one transition unsafely. Individual
+one-way transform helpers remain explicit until every supported environment has
+advanced past them.
+
+## Backlog direction: PDF pages
 
 The next chain first separates logical pages, immutable content assets, and
 delivery endpoint bindings. One asset may back multiple locators while the page
