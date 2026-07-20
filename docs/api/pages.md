@@ -284,6 +284,23 @@ An accepted command returns `200` even when an individual item fails:
 Item errors are `revision_conflict` or non-disclosing `not_found`. An invalid
 selection returns `422` before mutation.
 
+## Creator site projection
+
+The authenticated creator panel is a secondary projection of these contracts,
+not a separate management implementation. Its initial server model and every API
+row carry locator, canonical tags, revision, and exact ETag. Name, access, and
+exact-tag filters remain attached to continuation requests. Content and a
+comma-separated tag draft save through one revision-bound PATCH; empty tags
+clear the set. Rename sends an omitted `page_name` for the default page, while
+duplicate remains bodyless.
+
+Bulk controls select at most 100 currently visible rows and derive the explicit
+`page_id`/`expected_revision` pairs at submission time. The panel validates the
+ordered response before changing state and shows one outcome per item.
+Successful rows update or leave the active filter, missing rows disappear, and
+revision conflicts are inspected again; the browser never retries a stale
+mutation.
+
 ## Public tag exploration
 
 Public exploration remains a site GET surface rather than a management JSON

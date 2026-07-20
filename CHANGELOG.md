@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-20
+
+- Completed the DS-MANAGE creator surface. The web-independent management
+  projection now carries and validates locators/tags, builds filter-bound list,
+  revision action, and bounded bulk requests, and validates ordered per-page
+  outcomes. The creator island adds name/access/exact-tag filters, tag editing,
+  default/named rename, generated duplication, explicit selection of up to 100
+  current visible revisions, and bulk access/deletion with one result per page;
+  stale outcomes refresh affected rows. Added projection and server-rendered
+  component coverage, responsive controls, and synchronized README/spec/API/task
+  documentation. All 430 tests, check, and the production build pass.
+
 ## 2026-07-19
 
 - Exposed the expanded page-management contracts through strict HTTP routes:

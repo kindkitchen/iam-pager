@@ -11,11 +11,21 @@ import type { AuthenticatedSession, Session } from "../session/model.ts";
 import {
   CreatorPageManagementPresenter,
   format_size_bytes,
+  managed_bulk_access_from_api,
+  managed_bulk_delete_from_api,
+  managed_list_from_api,
   managed_md_page_draft,
+  managed_revision_selection,
+  managed_tags_from_input,
   management_summary_from_api,
+  management_summary_matches_filters,
+  prepare_managed_bulk_access_request,
+  prepare_managed_bulk_delete_request,
   prepare_managed_delete_request,
+  prepare_managed_duplicate_request,
   prepare_managed_inspect_request,
   prepare_managed_list_request,
+  prepare_managed_rename_request,
   prepare_managed_update_request,
   present_management_summary,
 } from "./page-management.ts";
@@ -87,6 +97,25 @@ async function create_page(pages: PageService, page_name: string) {
   return result.page;
 }
 
+function api_summary(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  return {
+    page_id: "p1",
+    locator: { namespace: "Mine", page_name: "notes" },
+    path: "/Mine/notes",
+    access: "private",
+    content_type: "md-page",
+    size_bytes: 10,
+    tags: ["notes"],
+    updated_at: now.toISOString(),
+    revision: 2,
+    etag: '"page-p1-r2"',
+    management_url: "/api/pages/p1",
+    ...overrides,
+  };
+}
+
 Deno.test("panel stays hidden for guest sessions", async () => {
   const { presenter } = await make_fixture();
   assertEquals(await presenter.present(guest_session), { kind: "hidden" });
@@ -101,10 +130,12 @@ Deno.test("panel lists creator pages as API-shaped rows", async () => {
   assertEquals(panel.next_cursor, null);
   assertEquals(panel.pages, [{
     page_id: "page-1",
+    locator: { namespace: "Mine", page_name: "notes/today" },
     path: "/Mine/notes/today",
     access: "private",
     content_type: "md-page",
     size_bytes: panel.pages[0]!.size_bytes,
+    tags: [],
     updated_at: now.toISOString(),
     revision: 1,
     etag: '"page-page-1-r1"',
@@ -131,22 +162,25 @@ Deno.test("present_management_summary round-trips through the API validator", as
 });
 
 Deno.test("management_summary_from_api rejects malformed rows", () => {
-  const valid = {
-    page_id: "p1",
-    path: "/Mine",
-    access: "public",
-    content_type: "md-page",
-    size_bytes: 10,
-    updated_at: now.toISOString(),
-    revision: 2,
-    etag: '"page-p1-r2"',
-    management_url: "/api/pages/p1",
-  };
+  const valid = api_summary();
   assert(management_summary_from_api(valid) !== null);
   assertEquals(management_summary_from_api(null), null);
   assertEquals(management_summary_from_api("row"), null);
   assertEquals(
     management_summary_from_api({ ...valid, access: "internal" }),
+    null,
+  );
+  assertEquals(
+    management_summary_from_api({ ...valid, tags: ["Notes"] }),
+    null,
+  );
+  assertEquals(management_summary_from_api({ ...valid, locator: null }), null);
+  assertEquals(
+    management_summary_from_api({ ...valid, path: "javascript:alert(1)" }),
+    null,
+  );
+  assertEquals(
+    management_summary_from_api({ ...valid, updated_at: "July 20, 2026" }),
     null,
   );
   assertEquals(management_summary_from_api({ ...valid, etag: "" }), null);
@@ -156,14 +190,47 @@ Deno.test("management_summary_from_api rejects malformed rows", () => {
   );
 });
 
-Deno.test("list request carries limit and URL-safe cursor", () => {
+Deno.test("list request carries filters, limit, and URL-safe cursor", () => {
   assertEquals(prepare_managed_list_request().url, "/api/pages?limit=20");
   const request = prepare_managed_list_request({
     cursor: "abc+/=",
     limit: 5,
+    filters: { name: " Notes ", access: "private", tag: " Work " },
   });
   assertEquals(request.method, "GET");
-  assertEquals(request.url, "/api/pages?limit=5&cursor=abc%2B%2F%3D");
+  assertEquals(
+    request.url,
+    "/api/pages?limit=5&name=Notes&access=private&tag=Work&cursor=abc%2B%2F%3D",
+  );
+  assertEquals(
+    prepare_managed_list_request({ filters: { name: " ", tag: "" } }).url,
+    "/api/pages?limit=20",
+  );
+});
+
+Deno.test("managed_list_from_api validates complete list responses", () => {
+  const expected = management_summary_from_api(api_summary());
+  assert(expected !== null);
+  assertEquals(
+    managed_list_from_api({
+      ok: true,
+      pages: [api_summary()],
+      next_cursor: "next",
+    }),
+    { pages: [expected], next_cursor: "next" },
+  );
+  assertEquals(
+    managed_list_from_api({ ok: false, pages: [], next_cursor: null }),
+    null,
+  );
+  assertEquals(
+    managed_list_from_api({ ok: true, pages: [null], next_cursor: null }),
+    null,
+  );
+  assertEquals(
+    managed_list_from_api({ ok: true, pages: [], next_cursor: 1 }),
+    null,
+  );
 });
 
 Deno.test("inspect request targets the management URL without credentials", () => {
@@ -196,13 +263,18 @@ Deno.test("update request binds CSRF, If-Match, and only supplied fields", () =>
     content: { content_type: "md-page", input: { md: "# New" } },
   });
 
-  const both = prepare_managed_update_request(
+  const combined = prepare_managed_update_request(
     target,
-    { access: "private", content: { markdown: "# New", css: "b { }" } },
+    {
+      access: "private",
+      tags: ["notes", "work"],
+      content: { markdown: "# New", css: "b { }" },
+    },
     "token-1",
   );
-  assertEquals(both.body, {
+  assertEquals(combined.body, {
     access: "private",
+    tags: ["notes", "work"],
     content: {
       content_type: "md-page",
       input: { md: "# New", css: "b { }" },
@@ -212,7 +284,7 @@ Deno.test("update request binds CSRF, If-Match, and only supplied fields", () =>
   assertThrows(
     () => prepare_managed_update_request(target, {}, "token-1"),
     Error,
-    "access, content, or both",
+    "access, tags, or content",
   );
 });
 
@@ -226,6 +298,145 @@ Deno.test("delete request is bodyless with CSRF and If-Match", () => {
   assertEquals(request.headers.get("x-csrf-token"), "token-1");
   assertEquals(request.headers.get("if-match"), '"page-p1-r3"');
   assertEquals(request.headers.get("content-type"), null);
+});
+
+Deno.test("rename and duplicate requests bind the source revision", () => {
+  const target = { management_url: "/api/pages/p1", etag: '"page-p1-r2"' };
+  const rename = prepare_managed_rename_request(
+    target,
+    "archive/notes",
+    "csrf",
+  );
+  assertEquals(rename.url, "/api/pages/p1/rename");
+  assertEquals(rename.method, "POST");
+  assertEquals(rename.headers.get("content-type"), "application/json");
+  assertEquals(rename.headers.get("x-csrf-token"), "csrf");
+  assertEquals(rename.headers.get("if-match"), '"page-p1-r2"');
+  assertEquals(rename.body, { page_name: "archive/notes" });
+  assertEquals(
+    prepare_managed_rename_request(target, undefined, "csrf").body,
+    {},
+  );
+
+  const duplicate = prepare_managed_duplicate_request(target, "csrf");
+  assertEquals(duplicate.url, "/api/pages/p1/duplicate");
+  assertEquals(duplicate.method, "POST");
+  assertEquals(duplicate.headers.get("if-match"), '"page-p1-r2"');
+  assertEquals(duplicate.headers.get("content-type"), null);
+  assertEquals(duplicate.body, undefined);
+});
+
+Deno.test("bulk requests use current explicit revisions and strict JSON shapes", () => {
+  const first = management_summary_from_api(api_summary());
+  const second = management_summary_from_api(api_summary({
+    page_id: "p2",
+    locator: { namespace: "Mine", page_name: "other" },
+    path: "/Mine/other",
+    revision: 3,
+    etag: '"page-p2-r3"',
+    management_url: "/api/pages/p2",
+  }));
+  assert(first !== null && second !== null);
+  const selection = managed_revision_selection(
+    [first, second],
+    new Set(["p2", "p1"]),
+  );
+  assertEquals(selection, [
+    { page_id: "p1", expected_revision: 2 },
+    { page_id: "p2", expected_revision: 3 },
+  ]);
+
+  const access = prepare_managed_bulk_access_request(
+    selection,
+    "public",
+    "csrf",
+  );
+  assertEquals(access.url, "/api/pages/bulk/access");
+  assertEquals(access.method, "POST");
+  assertEquals(access.headers.get("content-type"), "application/json");
+  assertEquals(access.headers.get("x-csrf-token"), "csrf");
+  assertEquals(access.headers.get("if-match"), null);
+  assertEquals(access.body, { access: "public", selection });
+
+  const deletion = prepare_managed_bulk_delete_request(selection, "csrf");
+  assertEquals(deletion.url, "/api/pages/bulk/delete");
+  assertEquals(deletion.body, { selection });
+  assertThrows(
+    () => managed_revision_selection([first], new Set()),
+    Error,
+    "requires 1-100 pages",
+  );
+});
+
+Deno.test("bulk response validators preserve ordered independent outcomes", () => {
+  const page = management_summary_from_api(api_summary());
+  assert(page !== null);
+  assertEquals(
+    managed_bulk_access_from_api({
+      ok: true,
+      results: [
+        { page_id: "p1", ok: true, page: api_summary() },
+        { page_id: "p2", ok: false, error: "revision_conflict" },
+      ],
+    }),
+    [
+      { page_id: "p1", ok: true, page },
+      { page_id: "p2", ok: false, error: "revision_conflict" },
+    ],
+  );
+  assertEquals(
+    managed_bulk_delete_from_api({
+      ok: true,
+      results: [
+        { page_id: "p1", ok: true },
+        { page_id: "p2", ok: false, error: "not_found" },
+      ],
+    }),
+    [
+      { page_id: "p1", ok: true },
+      { page_id: "p2", ok: false, error: "not_found" },
+    ],
+  );
+  assertEquals(
+    managed_bulk_access_from_api({
+      ok: true,
+      results: [{ page_id: "p1", ok: true, page: null }],
+    }),
+    null,
+  );
+  assertEquals(
+    managed_bulk_delete_from_api({
+      ok: true,
+      results: [{ page_id: "p1", ok: false, error: "revision_exhausted" }],
+    }),
+    null,
+  );
+});
+
+Deno.test("tag input and local filter matching mirror management semantics", () => {
+  const page = management_summary_from_api(api_summary());
+  assert(page !== null);
+  assertEquals(managed_tags_from_input(" Notes, work, ,Deno "), [
+    "Notes",
+    "work",
+    "Deno",
+  ]);
+  assertEquals(
+    management_summary_matches_filters(page, {
+      name: " NOTE ",
+      access: "private",
+      tag: " Notes ",
+    }),
+    true,
+  );
+  assertEquals(
+    management_summary_matches_filters(page, { name: "missing" }),
+    false,
+  );
+  assertEquals(
+    management_summary_matches_filters(page, { access: "public" }),
+    false,
+  );
 });
 
 Deno.test("managed_md_page_draft accepts only editable md-page content", () => {

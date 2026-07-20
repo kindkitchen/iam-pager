@@ -112,10 +112,16 @@ untagged. `ManagedPageBulkAccessChanger` and `ManagedPageBulkDeleter` now accept
 a prevalidated bounded set of distinct page/revision pairs and return one
 ordered, independently revision-bound, non-disclosing result per page. Partial
 item failure does not undo successful items, while invalid selections fail
-before any mutation. Strict HTTP routes now expose tags and managed filters,
+before any mutation. Strict HTTP routes expose tags and managed filters,
 revision-bound rename/duplicate actions, and bulk access/delete with session
-authentication, synchronizer CSRF, and exact source revisions. Expanded
-creator-panel controls are still pending.
+authentication, synchronizer CSRF, and exact source revisions. The
+web-independent management projection now carries locator and canonical tag
+data, validates API rows and ordered bulk outcomes, and prepares every
+filter/action/bulk request. The creator island exposes filter-bound
+continuation, content/tag editing, rename, duplicate, explicit selection of at
+most 100 visible current revisions, and bulk access/delete with one visible
+result per selected page. Stale individual or bulk revisions refresh their
+affected rows instead of retrying silently.
 
 ## CP-EXPLORE — Public exploration
 

@@ -59,7 +59,8 @@ Guest publishing is a limited variation of the publishing flow, not the purpose
 of the product. Public exploration supports namespace and page-name browsing and
 search plus exact-tag filtering; text extraction remains later. Advanced
 management is API-accessible after basic create, update, and delete behavior,
-while its expanded creator controls remain later.
+and the creator site now projects its filters, tags, rename, duplicate, and
+explicit per-page-result bulk controls.
 
 External storage providers are later scope. They are valuable because page
 formats and sizes vary, but first-party content must establish the page and

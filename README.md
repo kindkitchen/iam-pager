@@ -197,11 +197,14 @@ sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
 replaceable by anyone. Rename, duplicate, bounded tags, managed name/access/tag
 filtering, public tag exploration, and explicit per-page-result bulk access and
-deletion are exposed by the page API and public site search; the creator panel
-still exposes only the earlier individual controls. Total page capacity,
-publishing frequency, guest expiry, exploration text indexing/relevance, and
-backend migration are not implemented; these endpoints are not ready for
-untrusted public traffic.
+deletion are exposed by the page API and creator site. The creator panel keeps
+filter-bound pagination, refreshes stale rows, edits content and comma-separated
+tags together, supports default/named renames and generated duplication, and
+applies access or deletion to an explicit selection of at most 100 current row
+revisions while showing one result per page. Total page capacity, publishing
+frequency, guest expiry, exploration text indexing/relevance, and backend
+migration are not implemented; these endpoints are not ready for untrusted
+public traffic.
 
 ## Local development
 
@@ -221,12 +224,12 @@ authenticated header shows only signed-in state and the CSRF-protected
 `Sign out` action; signing out revokes that authenticated bearer and immediately
 rotates the browser to a distinct guest session. Signed-in creators can reserve
 and list namespaces through the creator panel, then publish into their own
-claim. The creator management panel lists, inspects, edits, changes access, and
-deletes their pages over the revision-bound management API. Core rename,
-generated-name duplicate, bounded tag mutation, managed name/access/tag
-filtering, public tag exploration, and bounded per-page-result bulk
-access/deletion contracts are implemented and exposed by the API or public
-search. Expanded creator-panel controls remain future work.
+claim. The creator management panel lists and filters pages by name, access, and
+exact tag; inspects and edits content/tags; changes individual access; renames,
+duplicates, and deletes; and applies access or deletion to an explicit bounded
+selection. Every mutation uses the revision-bound management API, stale
+individual results refresh their rows, and bulk commands show one outcome per
+selected page. Public tag exploration remains available through site search.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

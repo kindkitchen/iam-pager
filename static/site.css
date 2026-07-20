@@ -337,6 +337,59 @@ h2 {
   margin-bottom: 3rem;
 }
 
+.page-management-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  border: 1px solid #c9cec7;
+  border-radius: 0.5rem;
+  padding: 0.8rem;
+  background: rgb(255 254 250 / 55%);
+}
+
+.page-management-filter-actions,
+.page-management-bulk,
+.page-management-rename,
+.page-management-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.page-management-filter-actions button,
+.page-management-bulk button,
+.page-management-rename button,
+.page-management-editor-actions button {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.page-management-bulk {
+  border: 1px solid #aeb9b0;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #e9eee8;
+}
+
+.page-management-bulk strong {
+  align-self: center;
+  margin-right: auto;
+  font-size: 0.9rem;
+}
+
+.page-management-bulk label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-management-bulk select {
+  width: auto;
+  padding: 0.5rem 2rem 0.5rem 0.65rem;
+}
+
 .page-management-empty {
   color: #59635c;
 }
@@ -364,17 +417,28 @@ h2 {
   gap: 0.5rem 0.75rem;
 }
 
+.page-management-select {
+  display: block;
+  align-self: center;
+}
+
+.page-management-select input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
 .page-management-path {
   font-family: ui-monospace, monospace;
   word-break: break-all;
 }
 
 .page-management-access {
-  font-size: 0.8rem;
+  border: 1px solid #b7b9b2;
   border-radius: 0.25rem;
   padding: 0.1rem 0.45rem;
-  border: 1px solid #b7b9b2;
   color: #59635c;
+  font-size: 0.8rem;
 }
 
 .page-management-access-public {
@@ -382,9 +446,15 @@ h2 {
   color: #2f5b41;
 }
 
-.page-management-meta {
-  font-size: 0.85rem;
+.page-management-meta,
+.page-management-tags {
   color: #59635c;
+  font-size: 0.85rem;
+}
+
+.page-management-tags {
+  flex-basis: 100%;
+  padding-left: 1.75rem;
 }
 
 .page-management-actions {
@@ -395,24 +465,31 @@ h2 {
 }
 
 .page-management-actions button {
-  font-size: 0.85rem;
   padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
 }
 
 .page-management-danger {
   color: #8c2f2f;
 }
 
+.page-management-rename,
 .page-management-editor {
-  display: grid;
-  gap: 1rem;
   border-top: 1px solid #d8dad2;
   padding-top: 1rem;
 }
 
-.page-management-editor-actions {
-  display: flex;
-  gap: 0.75rem;
+.page-management-rename label {
+  flex: 1 1 16rem;
+}
+
+.page-management-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.page-management-tags-editor {
+  max-width: 36rem;
 }
 
 .page-management-more {
@@ -421,6 +498,18 @@ h2 {
 
 .page-management-result p {
   margin: 0;
+}
+
+.page-management-bulk-results {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.page-management-bulk-results code {
+  word-break: break-all;
 }
 
 .publish-form {

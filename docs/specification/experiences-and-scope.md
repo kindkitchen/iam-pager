@@ -89,10 +89,14 @@ including tags to a fresh ID. Bounded raw bulk commands accept 1-100 distinct,
 explicit page/revision selections for one access target or deletion, then return
 an ordered success, stale, or non-disclosing missing result for each item;
 accepted items are independent rather than transactionally all-or-nothing.
-Memory and Deno KV enforce each mutation atomically. The current API exposes
+Memory and Deno KV enforce each mutation atomically. The API exposes
 create/update tags, managed filters, rename, duplicate, and both bulk commands
 through the same strict session/CSRF/revision boundary as earlier management.
-The site management panel still exposes only its earlier individual controls.
+The site management panel projects those contracts with filter-bound
+continuation, content/tag editing, same-namespace rename, generated duplication,
+and an explicit selection of at most 100 visible current revisions for bulk
+access or deletion. It shows one outcome per selected page and refreshes
+revision conflicts without silently overwriting concurrent work.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

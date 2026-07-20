@@ -27,11 +27,12 @@ the creator session.
 
 The API-first core of this slice is composed: Fresh exposes collection, item,
 action, and bulk management routes over the selected page repository, and direct
-delivery uses the same page service with session-derived authority. The site now
-also projects that boundary as a creator management panel - bounded listing with
-continuation, inspection, content editing, revision-bound access changes, and
-confirmed deletion - without adding management rules to the web layer. DS-MANAGE
-now extends the API; its creator-panel controls remain later work.
+delivery uses the same page service with session-derived authority. The site
+projects that boundary as a creator management panel without adding management
+rules to the web layer. It covers filter-bound listing and continuation,
+inspection, content/tag editing, revision-bound individual access changes,
+rename, duplicate, confirmed deletion, and explicit bounded bulk access/delete
+selection with per-page outcomes.
 
 ## DS-VIEW — Present a page through the site
 
@@ -85,11 +86,16 @@ The raw service also exposes bounded bulk access and deletion interfaces: each
 command prevalidates 1-100 distinct page ID/revision pairs, applies accepted
 items independently under current ownership and exact revisions, and preserves
 selection order in one result per page. A failed item does not roll back another
-item; malformed selections cannot partially mutate. Strict Fresh routes now
-expose managed tags and filters, revision-bound rename/duplicate actions, and
-bulk access/delete with browser-session authentication, synchronizer CSRF, and
-source revisions. The creator panel still exposes only its earlier individual
-controls.
+item; malformed selections cannot partially mutate. Strict Fresh routes expose
+managed tags and filters, revision-bound rename/duplicate actions, and bulk
+access/delete with browser-session authentication, synchronizer CSRF, and source
+revisions. The creator panel now projects the complete slice:
+name/access/exact-tag filters stay bound through pagination; content and
+comma-separated tags save together; rename supports a named or default
+destination; duplicate inserts the generated result when it matches the active
+filters; and explicit selection uses the visible rows' current revisions for
+bounded bulk access or deletion. Every accepted bulk item gets a visible
+outcome, while conflicts refresh the affected row.
 
 ## DS-EXTERNAL — Evaluate external storage
 
