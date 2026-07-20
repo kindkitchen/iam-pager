@@ -1,3 +1,4 @@
+import { is_safe_page_path } from "../page/endpoint.ts";
 import type { NamespacePanel } from "./namespace-panel.ts";
 
 /** Safe page-publishing authority presented to the island; no session IDs. */
@@ -10,6 +11,10 @@ export interface PagePublishDraft {
   readonly page_name: string;
   readonly markdown: string;
   readonly css: string;
+}
+
+export interface PagePublishSuccess {
+  readonly path: string;
 }
 
 export interface PreparedPagePublishRequest {
@@ -34,6 +39,23 @@ export function page_publish_authorization(
   return namespace_panel.kind === "creator"
     ? { kind: "creator", csrf_token: namespace_panel.csrf_token }
     : { kind: "guest" };
+}
+
+/** Validates only the bounded local link the publishing result renders. */
+export function page_publish_success_from_api(
+  value: unknown,
+): PagePublishSuccess | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    record.ok !== true || typeof record.path !== "string" ||
+    !is_safe_page_path(record.path)
+  ) {
+    return null;
+  }
+  return { path: record.path };
 }
 
 /** Maps editable state to the explicit page API contract without mutating it. */

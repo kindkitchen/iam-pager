@@ -1,3 +1,10 @@
+import {
+  default_pdf_limits,
+  pdf_filename_violation,
+  pdf_media_type,
+  type PdfVersion,
+  supported_pdf_versions,
+} from "../content/pdf.ts";
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
   is_safe_page_path,
@@ -228,7 +235,8 @@ export interface PreparedManagedRequest {
     | ManagedUpdateBody
     | ManagedRenameBody
     | ManagedBulkAccessBody
-    | ManagedBulkDeleteBody;
+    | ManagedBulkDeleteBody
+    | FormData;
 }
 
 /** Builds one filter-bound bounded page of the managed list. */
@@ -322,6 +330,68 @@ export function prepare_managed_update_request(
       }),
     },
   };
+}
+
+export interface ManagedPdfReplacementDraft {
+  readonly filename: string;
+  readonly bytes: Uint8Array;
+  /** Omit to preserve current tags; provide a complete set to replace them. */
+  readonly tags?: readonly string[];
+}
+
+/**
+ * Maps one selected file onto the exact revision-bound PDF replacement
+ * contract. The complete current endpoint set is repeated without deriving
+ * aliases or delivery behavior from paths.
+ */
+export function prepare_managed_pdf_replace_request(
+  page: PageManagementSummary,
+  draft: ManagedPdfReplacementDraft,
+  csrf_token: string,
+): PreparedManagedRequest {
+  const violation = managed_pdf_replacement_violation(draft);
+  if (violation !== null) throw new Error(violation);
+  const metadata = {
+    endpoint_set: {
+      canonical: endpoint_binding_from_link(page.endpoints.canonical),
+      alternates: page.endpoints.alternates.map(endpoint_binding_from_link),
+    },
+    ...(draft.tags === undefined ? {} : { tags: [...draft.tags] }),
+  };
+  const form_data = new FormData();
+  form_data.append(
+    "metadata",
+    new File([JSON.stringify(metadata)], "metadata.json", {
+      type: "application/json",
+    }),
+  );
+  form_data.append(
+    "file",
+    new File([draft.bytes as BlobPart], draft.filename, {
+      type: pdf_media_type,
+    }),
+  );
+  return {
+    url: page.management_url,
+    method: "PATCH",
+    headers: revision_mutation_headers(csrf_token, page.etag),
+    body: form_data,
+  };
+}
+
+/** Advisory replacement check; the server remains authoritative. */
+export function managed_pdf_replacement_violation(
+  draft: ManagedPdfReplacementDraft,
+): string | null {
+  if (!(draft.bytes instanceof Uint8Array) || draft.bytes.byteLength === 0) {
+    return "select a PDF replacement file";
+  }
+  if (draft.bytes.byteLength > default_pdf_limits.max_bytes) {
+    return `PDF exceeds ${default_pdf_limits.max_bytes} bytes`;
+  }
+  const filename_error = pdf_filename_violation(draft.filename);
+  if (filename_error !== null) return filename_error;
+  return null;
 }
 
 /** Builds the revision-bound same-namespace rename request. */
@@ -483,6 +553,82 @@ export function managed_md_page_draft(
   return { markdown: input.md, css: input.css ?? "" };
 }
 
+export interface ManagedPdfMetadata {
+  readonly filename: string;
+  readonly media_type: typeof pdf_media_type;
+  readonly size_bytes: number;
+  readonly pdf_version: PdfVersion;
+  readonly replaceable: true;
+}
+
+/** Accepts only the bounded PDF inspection projection; bytes are never read. */
+export function managed_pdf_metadata(
+  content: unknown,
+  expected_size_bytes?: number,
+): ManagedPdfMetadata | null {
+  if (
+    typeof content !== "object" || content === null || Array.isArray(content)
+  ) {
+    return null;
+  }
+  const content_record = content as Record<string, unknown>;
+  if (
+    content_record.content_type !== "pdf" ||
+    typeof content_record.input !== "object" ||
+    content_record.input === null || Array.isArray(content_record.input)
+  ) {
+    return null;
+  }
+  const input = content_record.input as Record<string, unknown>;
+  if (
+    typeof input.filename !== "string" ||
+    pdf_filename_violation(input.filename) !== null ||
+    input.media_type !== pdf_media_type ||
+    typeof input.size_bytes !== "number" ||
+    !Number.isSafeInteger(input.size_bytes) || input.size_bytes < 1 ||
+    input.size_bytes > default_pdf_limits.max_bytes ||
+    (expected_size_bytes !== undefined &&
+      input.size_bytes !== expected_size_bytes) ||
+    typeof input.pdf_version !== "string" ||
+    !supported_pdf_versions.includes(input.pdf_version as PdfVersion) ||
+    input.replaceable !== true
+  ) {
+    return null;
+  }
+  return {
+    filename: input.filename,
+    media_type: pdf_media_type,
+    size_bytes: input.size_bytes,
+    pdf_version: input.pdf_version as PdfVersion,
+    replaceable: true,
+  };
+}
+
+export interface ManagedPdfDeliveryLinks {
+  readonly preview: PageEndpointLink;
+  readonly downloads: readonly PageEndpointLink[];
+}
+
+/** Derives creator PDF actions from server-returned endpoint profiles only. */
+export function managed_pdf_delivery_links(
+  page: PageManagementSummary,
+): ManagedPdfDeliveryLinks | null {
+  if (
+    page.content_type !== "pdf" ||
+    page.endpoints.canonical.delivery_profile !== "inline"
+  ) {
+    return null;
+  }
+  const downloads = page.endpoints.alternates.filter((endpoint) =>
+    endpoint.delivery_profile === "attachment"
+  );
+  if (downloads.length === 0) return null;
+  return {
+    preview: structuredClone(page.endpoints.canonical),
+    downloads: structuredClone(downloads),
+  };
+}
+
 /** Human size for management rows; exact bytes below one KiB. */
 export function format_size_bytes(size_bytes: number): string {
   if (!Number.isSafeInteger(size_bytes) || size_bytes < 0) {
@@ -492,6 +638,13 @@ export function format_size_bytes(size_bytes: number): string {
   const kib = size_bytes / 1024;
   if (kib < 1024) return `${format_scaled(kib)} KiB`;
   return `${format_scaled(kib / 1024)} MiB`;
+}
+
+function endpoint_binding_from_link(link: PageEndpointLink) {
+  return {
+    locator: structuredClone(link.locator),
+    delivery_profile: link.delivery_profile,
+  };
 }
 
 function management_endpoint_links(

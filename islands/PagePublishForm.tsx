@@ -16,7 +16,13 @@ import {
   pdf_file_selection_presenter,
 } from "../lib/ui/pdf-file-selection.ts";
 import {
+  page_api_failure_presenter,
+  type PageApiFailure,
+} from "../lib/ui/page-api-failure.ts";
+import {
+  page_publish_success_from_api,
   type PagePublishAuthorization,
+  type PagePublishSuccess,
   prepare_page_publish_request,
 } from "../lib/ui/page-publish.ts";
 import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
@@ -26,23 +32,11 @@ import {
   type RandomNameGenerator,
 } from "../lib/ui/random-name.ts";
 
-interface PublishSuccess {
-  ok: true;
-  path: string;
-  url: string;
-}
-
-interface PublishFailure {
-  ok: false;
-  error: string;
-  detail: string;
-}
-
 type PublishState =
   | { status: "idle" }
   | { status: "publishing" }
-  | { status: "success"; result: PublishSuccess }
-  | { status: "error"; message: string };
+  | { status: "success"; result: PagePublishSuccess }
+  | { status: "error"; failure: PageApiFailure };
 
 const initial_markdown = `# Your page
 
@@ -129,7 +123,14 @@ export default function PagePublishForm(props: PagePublishFormProps) {
   ) {
     event.preventDefault();
     if (content_type === "pdf" && pdf_file === null) {
-      set_state({ status: "error", message: "Select a PDF file to publish." });
+      set_state({
+        status: "error",
+        failure: {
+          kind: "pdf",
+          code: null,
+          message: "Select a PDF file to publish.",
+        },
+      });
       return;
     }
 
@@ -169,7 +170,10 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         };
         const violation = pdf_publish_draft_violation(draft);
         if (violation !== null) {
-          set_state({ status: "error", message: violation });
+          set_state({
+            status: "error",
+            failure: { kind: "pdf", code: null, message: violation },
+          });
           return;
         }
         const request = prepare_pdf_publish_request(
@@ -183,19 +187,28 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         });
       }
 
-      const result = await response.json() as PublishSuccess | PublishFailure;
-      if (!response.ok || !result.ok) {
-        const detail = result.ok
-          ? `Publishing failed (${response.status})`
-          : result.detail;
-        set_state({ status: "error", message: detail });
+      const body: unknown = await response.json();
+      const result = page_publish_success_from_api(body);
+      if (!response.ok || result === null) {
+        set_state({
+          status: "error",
+          failure: page_api_failure_presenter.present(
+            response.status,
+            body,
+            { operation: "publish", content_type },
+          ),
+        });
         return;
       }
       set_state({ status: "success", result });
-    } catch (error) {
+    } catch {
       set_state({
         status: "error",
-        message: error instanceof Error ? error.message : String(error),
+        failure: {
+          kind: "availability",
+          code: null,
+          message: "Page publishing could not be reached. Try again.",
+        },
       });
     }
   }
@@ -397,8 +410,11 @@ export default function PagePublishForm(props: PagePublishFormProps) {
           </>
         )}
         {state.status === "error" && (
-          <p class="error-message">
-            <strong>Could not publish.</strong> {state.message}
+          <p
+            class={`error-message page-api-failure-${state.failure.kind}`}
+            data-failure-kind={state.failure.kind}
+          >
+            <strong>Could not publish.</strong> {state.failure.message}
           </p>
         )}
       </div>

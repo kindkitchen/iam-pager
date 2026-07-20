@@ -2,7 +2,7 @@
 name: pdf-content-site
 description: Add the secondary site experience for publishing, managing, previewing, and downloading PDF pages. Load when working on PDF file controls, browser-native wrapped previews, fallbacks, or PDF management projection.
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-07-21
 tags: [frontend, pdf, publishing, management]
 relates: [pdf-content-http, pdf-content-core, kv-toolbox-content-persistence]
 ---
@@ -22,9 +22,14 @@ Done:
   picker now feed the multipart boundary from the existing publish island with
   explicit ordinary endpoint/profile controls and preserved API-error draft
   state. See [[010.log]].
+- Typed failures and creator PDF management — one raw failure presenter maps
+  endpoint/PDF/size/authority/stale/availability outcomes without unknown detail;
+  creator rows derive preview/download links from returned profiles, inspect only
+  bounded metadata, and replace through one exact-revision multipart request
+  while retaining the selected file on failure. See [[011.log]].
 
-Next: typed PDF/API failure presentation and creator PDF metadata,
-preview/download, and revision-bound replacement, then the public native-preview
-wrapper with download and fallback. Must not import kv-toolbox, inspect storage
-keys, or own persistence/HTTP behavior. PDF.js and generic binary UI remain
-later. See [[001.draft]] and [[002.decision]].
+Next: add the public browser-native PDF wrapper with explicit preview/download
+fallbacks, then verify exploration one-row/type/size behavior and responsive
+browser acceptance. Must not import kv-toolbox, inspect storage keys, or own
+persistence/HTTP behavior. PDF.js and generic binary UI remain later. See
+[[012.summary]].

@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   page_publish_authorization,
+  page_publish_success_from_api,
   prepare_page_publish_request,
 } from "./page-publish.ts";
 
@@ -41,6 +42,26 @@ Deno.test("page publish request uses the nested explicit API shape and creator C
     },
   });
   assertEquals(draft.namespace, "  Alice  ");
+});
+
+Deno.test("publish success validator exposes only a safe local page path", () => {
+  assertEquals(
+    page_publish_success_from_api({
+      ok: true,
+      path: "/Alice/report",
+      url: "https://pager.test/Alice/report",
+      page: { owner_user_id: "hidden" },
+    }),
+    { path: "/Alice/report" },
+  );
+  assertEquals(
+    page_publish_success_from_api({ ok: true, path: "//outside.test/report" }),
+    null,
+  );
+  assertEquals(
+    page_publish_success_from_api({ ok: false, path: "/Alice/report" }),
+    null,
+  );
 });
 
 Deno.test("guest page publish request omits CSRF and optional empty fields", () => {

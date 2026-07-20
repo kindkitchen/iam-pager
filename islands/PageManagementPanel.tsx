@@ -1,15 +1,20 @@
 import type { JSX } from "preact";
 import { useMemo, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
+import { PdfFileSelection } from "../components/PdfFileSelection.tsx";
 import {
   format_size_bytes,
   managed_bulk_access_from_api,
   managed_bulk_delete_from_api,
   managed_list_from_api,
   managed_md_page_draft,
+  managed_pdf_delivery_links,
+  managed_pdf_metadata,
+  managed_pdf_replacement_violation,
   managed_revision_selection,
   managed_tags_from_input,
   type ManagedPageFilters,
+  type ManagedPdfMetadata,
   management_summary_from_api,
   management_summary_matches_filters,
   type PageManagementSummary,
@@ -19,23 +24,41 @@ import {
   prepare_managed_duplicate_request,
   prepare_managed_inspect_request,
   prepare_managed_list_request,
+  prepare_managed_pdf_replace_request,
   prepare_managed_rename_request,
   prepare_managed_update_request,
   type PreparedManagedRequest,
 } from "../lib/ui/page-management.ts";
+import { page_api_failure_presenter } from "../lib/ui/page-api-failure.ts";
 import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
+import {
+  describe_pdf_file,
+  pdf_file_selection_presenter,
+} from "../lib/ui/pdf-file-selection.ts";
 
 type PanelNotice =
   | { kind: "success"; message: string }
   | { kind: "error"; message: string };
 
-interface EditorState {
+interface MdEditorState {
+  kind: "md-page";
   page_id: string;
   markdown: string;
   css: string;
   tags_input: string;
   saving: boolean;
 }
+
+interface PdfEditorState {
+  kind: "pdf";
+  page_id: string;
+  metadata: ManagedPdfMetadata;
+  selected_file: File | null;
+  tags_input: string;
+  saving: boolean;
+}
+
+type EditorState = MdEditorState | PdfEditorState;
 
 interface RenameState {
   page_id: string;
@@ -101,6 +124,18 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
   );
   const [rename, set_rename] = useState<RenameState | null>(null);
   const [editor, set_editor] = useState<EditorState | null>(null);
+  const selected_pdf_replacement = editor?.kind === "pdf"
+    ? editor.selected_file
+    : null;
+  const pdf_replacement_file_view = useMemo(
+    () =>
+      selected_pdf_replacement === null
+        ? pdf_file_selection_presenter.present(null)
+        : pdf_file_selection_presenter.present(
+          describe_pdf_file(selected_pdf_replacement),
+        ),
+    [selected_pdf_replacement],
+  );
 
   const controls_busy = filtering || bulk_busy || busy_page !== null;
   const has_applied_filters = Object.keys(applied_filters).length > 0;
@@ -158,25 +193,32 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     set_notice({ kind: "error", message });
   }
 
-  async function read_error(response: Response): Promise<string> {
+  async function read_error(
+    response: Response,
+    content_type?: string,
+  ): Promise<string> {
+    let body: unknown = null;
     try {
-      const body = await response.json();
-      if (typeof body?.detail === "string" && body.detail !== "") {
-        return body.detail;
-      }
+      body = await response.json();
     } catch {
-      // Fall through to the status-based message.
+      // The typed fallback intentionally ignores non-JSON response text.
     }
-    return `request failed (${response.status})`;
+    return page_api_failure_presenter.present(
+      response.status,
+      body,
+      { operation: "manage", content_type },
+    ).message;
   }
 
   async function send(request: PreparedManagedRequest): Promise<Response> {
     return await fetch(request.url, {
       method: request.method,
       headers: request.headers,
-      ...(request.body === undefined
-        ? {}
-        : { body: JSON.stringify(request.body) }),
+      ...(request.body === undefined ? {} : {
+        body: request.body instanceof FormData
+          ? request.body
+          : JSON.stringify(request.body),
+      }),
     });
   }
 
@@ -191,7 +233,20 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     if (!response.ok) return;
     const body = await response.json();
     const refreshed = management_summary_from_api(body?.page);
-    if (refreshed !== null) update_filtered_row(page.page_id, refreshed);
+    if (refreshed !== null) {
+      update_filtered_row(page.page_id, refreshed);
+      const pdf_metadata = managed_pdf_metadata(
+        body?.page?.content,
+        refreshed.size_bytes,
+      );
+      if (pdf_metadata !== null) {
+        set_editor((current) =>
+          current?.kind === "pdf" && current.page_id === page.page_id
+            ? { ...current, metadata: pdf_metadata }
+            : current
+        );
+      }
+    }
   }
 
   async function replace_list(filters: ManagedPageFilters) {
@@ -367,21 +422,41 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       }
       const body = await response.json();
       const refreshed = management_summary_from_api(body?.page);
-      const draft = managed_md_page_draft(body?.page?.content);
-      if (refreshed === null || draft === null) {
+      if (refreshed === null) {
+        fail("page inspection response was not understood");
+        return;
+      }
+      const md_draft = managed_md_page_draft(body?.page?.content);
+      const pdf_metadata = managed_pdf_metadata(
+        body?.page?.content,
+        refreshed.size_bytes,
+      );
+      if (md_draft === null && pdf_metadata === null) {
         fail(`${page.path} cannot be edited here (${page.content_type}).`);
         return;
       }
       update_filtered_row(page.page_id, refreshed);
       set_confirming_delete(null);
       set_rename(null);
-      set_editor({
-        page_id: page.page_id,
-        markdown: draft.markdown,
-        css: draft.css,
-        tags_input: refreshed.tags.join(", "),
-        saving: false,
-      });
+      set_editor(
+        md_draft !== null
+          ? {
+            kind: "md-page",
+            page_id: page.page_id,
+            markdown: md_draft.markdown,
+            css: md_draft.css,
+            tags_input: refreshed.tags.join(", "),
+            saving: false,
+          }
+          : {
+            kind: "pdf",
+            page_id: page.page_id,
+            metadata: pdf_metadata!,
+            selected_file: null,
+            tags_input: refreshed.tags.join(", "),
+            saving: false,
+          },
+      );
     } catch (error) {
       fail(error instanceof Error ? error.message : String(error));
     } finally {
@@ -389,8 +464,8 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     }
   }
 
-  async function save_editor(page: PageManagementSummary) {
-    if (editor === null || editor.saving) return;
+  async function save_md_editor(page: PageManagementSummary) {
+    if (editor?.kind !== "md-page" || editor.saving) return;
     set_editor({ ...editor, saving: true });
     set_notice(null);
     try {
@@ -436,6 +511,80 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       fail(error instanceof Error ? error.message : String(error));
       set_editor((current) =>
         current === null ? null : { ...current, saving: false }
+      );
+    }
+  }
+
+  async function save_pdf_editor(page: PageManagementSummary) {
+    if (editor?.kind !== "pdf" || editor.saving) return;
+    const selected_file = editor.selected_file;
+    if (selected_file === null) {
+      fail("Select a PDF replacement file.");
+      return;
+    }
+    const current_editor = editor;
+    set_editor({ ...current_editor, saving: true });
+    set_notice(null);
+    try {
+      const bytes = new Uint8Array(await selected_file.arrayBuffer());
+      const draft = {
+        filename: selected_file.name,
+        bytes,
+        tags: managed_tags_from_input(current_editor.tags_input),
+      };
+      const violation = managed_pdf_replacement_violation(draft);
+      if (violation !== null) {
+        fail(violation);
+        set_editor((current) =>
+          current?.kind === "pdf" ? { ...current, saving: false } : current
+        );
+        return;
+      }
+      const response = await send(
+        prepare_managed_pdf_replace_request(page, draft, props.csrf_token),
+      );
+      if (response.status === 412) {
+        fail(
+          `${page.path} changed elsewhere; review the refreshed metadata and replace again.`,
+        );
+        await refresh_row(page);
+        set_editor((current) =>
+          current?.kind === "pdf" ? { ...current, saving: false } : current
+        );
+        return;
+      }
+      if (!response.ok) {
+        fail(await read_error(response, "pdf"));
+        set_editor((current) =>
+          current?.kind === "pdf" ? { ...current, saving: false } : current
+        );
+        return;
+      }
+      const body = await response.json();
+      const updated = management_summary_from_api(body?.page);
+      const metadata = managed_pdf_metadata(
+        body?.page?.content,
+        updated?.size_bytes,
+      );
+      if (updated === null || metadata === null) {
+        fail("PDF replacement response was not understood");
+        set_editor((current) =>
+          current?.kind === "pdf" ? { ...current, saving: false } : current
+        );
+        return;
+      }
+      update_filtered_row(page.page_id, updated);
+      set_editor(null);
+      set_notice({
+        kind: "success",
+        message: `${updated.path} now serves ${metadata.filename}.`,
+      });
+    } catch {
+      fail(
+        "The PDF replacement could not be sent. Keep the file and try again.",
+      );
+      set_editor((current) =>
+        current?.kind === "pdf" ? { ...current, saving: false } : current
       );
     }
   }
@@ -869,18 +1018,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                   <a class="page-management-path" href={page.path}>
                     {page.path}
                   </a>
-                  {page.endpoints.alternates.length > 0 && (
-                    <nav
-                      class="page-management-endpoints"
-                      aria-label={`${page.path} alternate delivery endpoints`}
-                    >
-                      {page.endpoints.alternates.map((endpoint) => (
-                        <a key={endpoint.path} href={endpoint.path}>
-                          {endpoint.delivery_profile}: {endpoint.path}
-                        </a>
-                      ))}
-                    </nav>
-                  )}
+                  <ManagedDeliveryActions page={page} />
                   <span
                     class={`page-management-access page-management-access-${page.access}`}
                   >
@@ -905,7 +1043,11 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                           ? set_editor(null)
                           : open_editor(page)}
                     >
-                      {editor?.page_id === page.page_id ? "Close" : "Edit"}
+                      {editor?.page_id === page.page_id
+                        ? "Close"
+                        : page.content_type === "pdf"
+                        ? "Inspect PDF"
+                        : "Edit"}
                     </button>
                     <button
                       type="button"
@@ -925,18 +1067,20 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                         ? "Close rename"
                         : "Rename"}
                     </button>
+                    {page.content_type === "md-page" && (
+                      <button
+                        type="button"
+                        disabled={controls_busy}
+                        onClick={() => duplicate_page(page)}
+                      >
+                        Duplicate
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={controls_busy}
                       onClick={() =>
-                        duplicate_page(page)}
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      disabled={controls_busy}
-                      onClick={() => toggle_access(page)}
+                        toggle_access(page)}
                     >
                       Make {page.access === "public" ? "private" : "public"}
                     </button>
@@ -1006,52 +1150,126 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                   </form>
                 )}
 
-                {editor?.page_id === page.page_id && (
+                {editor?.kind === "md-page" &&
+                  editor.page_id === page.page_id && (
                   <form
                     class="page-management-editor"
                     onSubmit={(
                       event: JSX.TargetedSubmitEvent<HTMLFormElement>,
                     ) => {
                       event.preventDefault();
-                      save_editor(page);
+                      save_md_editor(page);
                     }}
                   >
-                    <label class="page-management-tags-editor">
-                      Tags
-                      <input
-                        value={editor.tags_input}
-                        placeholder="notes, work"
-                        onInput={(event) =>
-                          set_editor((current) =>
-                            current === null ? null : {
-                              ...current,
-                              tags_input: event.currentTarget.value,
-                            }
-                          )}
-                      />
-                      <small>
-                        Comma-separated; up to 10 canonical tags. Empty clears
-                        all tags.
-                      </small>
-                    </label>
+                    <ManagedTagsEditor
+                      value={editor.tags_input}
+                      on_input={(value) =>
+                        set_editor((current) =>
+                          current?.kind !== "md-page"
+                            ? current
+                            : { ...current, tags_input: value }
+                        )}
+                    />
                     <PageEditor
                       markdown={editor.markdown}
                       css={editor.css}
                       on_markdown_input={(value) =>
                         set_editor((current) =>
-                          current === null
-                            ? null
+                          current?.kind !== "md-page"
+                            ? current
                             : { ...current, markdown: value }
                         )}
                       on_css_input={(value) =>
                         set_editor((current) =>
-                          current === null ? null : { ...current, css: value }
+                          current?.kind !== "md-page"
+                            ? current
+                            : { ...current, css: value }
                         )}
                       previewer={page_previewer}
                     />
                     <div class="page-management-editor-actions">
                       <button type="submit" disabled={editor.saving}>
                         {editor.saving ? "Saving…" : "Save content and tags"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={editor.saving}
+                        onClick={() => set_editor(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {editor?.kind === "pdf" &&
+                  editor.page_id === page.page_id && (
+                  <form
+                    class="page-management-editor page-management-pdf-editor"
+                    onSubmit={(
+                      event: JSX.TargetedSubmitEvent<HTMLFormElement>,
+                    ) => {
+                      event.preventDefault();
+                      save_pdf_editor(page);
+                    }}
+                  >
+                    <div>
+                      <h3>PDF metadata</h3>
+                      <dl class="page-management-pdf-metadata">
+                        <div>
+                          <dt>Filename</dt>
+                          <dd>{editor.metadata.filename}</dd>
+                        </div>
+                        <div>
+                          <dt>Format</dt>
+                          <dd>
+                            PDF {editor.metadata.pdf_version} ·{" "}
+                            {format_size_bytes(editor.metadata.size_bytes)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Media type</dt>
+                          <dd>{editor.metadata.media_type}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <ManagedTagsEditor
+                      value={editor.tags_input}
+                      on_input={(value) =>
+                        set_editor((current) =>
+                          current?.kind !== "pdf"
+                            ? current
+                            : { ...current, tags_input: value }
+                        )}
+                    />
+                    <PdfFileSelection
+                      view={pdf_replacement_file_view}
+                      name="replacement_file"
+                      input_id={`pdf-replacement-${page.page_id}`}
+                      label="Replacement PDF"
+                      required
+                      on_select={(file) =>
+                        set_editor((current) =>
+                          current?.kind !== "pdf"
+                            ? current
+                            : { ...current, selected_file: file }
+                        )}
+                    />
+                    <p class="field-hint">
+                      Replacement keeps the current preview and download
+                      endpoints and is bound to revision{" "}
+                      {page.revision}. A changed page is refreshed and never
+                      retried silently.
+                    </p>
+                    <div class="page-management-editor-actions">
+                      <button
+                        type="submit"
+                        disabled={editor.saving ||
+                          editor.selected_file === null}
+                      >
+                        {editor.saving
+                          ? "Replacing…"
+                          : "Replace PDF and save tags"}
                       </button>
                       <button
                         type="button"
@@ -1099,6 +1317,70 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         )}
       </div>
     </section>
+  );
+}
+
+interface ManagedDeliveryActionsProps {
+  readonly page: PageManagementSummary;
+}
+
+/** Renders only delivery actions derived by the raw endpoint presenter. */
+function ManagedDeliveryActions({ page }: ManagedDeliveryActionsProps) {
+  const pdf_links = managed_pdf_delivery_links(page);
+  if (pdf_links !== null) {
+    return (
+      <nav
+        class="page-management-endpoints page-management-pdf-actions"
+        aria-label={`${page.path} PDF delivery actions`}
+      >
+        <a
+          href={pdf_links.preview.path}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Preview PDF
+        </a>
+        {pdf_links.downloads.map((endpoint) => (
+          <a key={endpoint.path} href={endpoint.path}>
+            Download PDF: {endpoint.path}
+          </a>
+        ))}
+      </nav>
+    );
+  }
+  if (page.endpoints.alternates.length === 0) return null;
+  return (
+    <nav
+      class="page-management-endpoints"
+      aria-label={`${page.path} alternate delivery endpoints`}
+    >
+      {page.endpoints.alternates.map((endpoint) => (
+        <a key={endpoint.path} href={endpoint.path}>
+          {endpoint.delivery_profile}: {endpoint.path}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+interface ManagedTagsEditorProps {
+  readonly value: string;
+  readonly on_input: (value: string) => void;
+}
+
+function ManagedTagsEditor({ value, on_input }: ManagedTagsEditorProps) {
+  return (
+    <label class="page-management-tags-editor">
+      Tags
+      <input
+        value={value}
+        placeholder="notes, work"
+        onInput={(event) => on_input(event.currentTarget.value)}
+      />
+      <small>
+        Comma-separated; up to 10 canonical tags. Empty clears all tags.
+      </small>
+    </label>
   );
 }
 

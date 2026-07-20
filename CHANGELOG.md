@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-21
+
+- Added typed page API failure presentation and the creator PDF management
+  slice. Publishing now distinguishes endpoint, PDF, size, authority, stale, and
+  deployment failures without rendering unknown response detail. Creator rows
+  derive explicit preview/download actions from returned profiles; inspection
+  renders bounded metadata without bytes; and replacement repeats the complete
+  endpoint set in one CSRF- and ETag-bound multipart request, preserving the
+  selected file through failures and stale refresh without a silent retry. Added
+  raw presenter, multipart round-trip, response-boundary, and component
+  coverage. All 577 tests, tracked-source checks, and the production build pass.
+
 ## 2026-07-20
 
 - Added first-party PDF publishing to the site form. A raw presenter now derives

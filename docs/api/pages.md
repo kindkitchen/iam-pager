@@ -425,7 +425,18 @@ ETag. The canonical path remains the main row link and configured alternates are
 shown explicitly. Name, access, and exact-tag filters remain attached to
 continuation requests. Content and a comma-separated tag draft save through one
 revision-bound PATCH; empty tags clear the set. Rename sends an omitted
-`page_name` for the default page, while duplicate remains bodyless.
+`page_name` for the default page, while Markdown duplicate remains bodyless.
+
+A PDF row derives explicit preview and download actions only from returned
+endpoint profiles. Inspection validates and renders the bounded filename,
+`application/pdf` media type, exact size, PDF version, and replace capability;
+it never places bytes in UI state. Replacement repeats the complete current
+endpoint set in multipart metadata, sends one newly selected PDF, and binds CSRF
+plus the row's exact ETag. A `412` refreshes the row and bounded metadata while
+keeping the selected replacement, but does not retry. The shared failure
+presenter distinguishes endpoint, PDF, request-size, authority, stale-revision,
+and deployment-availability outcomes and does not render unknown response
+detail.
 
 Bulk controls select at most 100 currently visible rows and derive the explicit
 `page_id`/`expected_revision` pairs at submission time. The panel validates the
