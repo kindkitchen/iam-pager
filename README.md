@@ -174,8 +174,11 @@ The first publishing slice currently provides:
   one-canonical-inline-endpoint `md-page` flow: validated content is staged as
   an asset, access-only changes retain it, content changes atomically flip the
   reference, and direct delivery resolves the endpoint before reading content.
-  The raw-Deno-KV repository stays on a legacy service compatibility path until
-  the planned conforming adapter and migration;
+  Owner/public summaries expose a complete safe canonical/alternate link set,
+  the site renders configured alternates without creating extra page rows, and
+  direct HTTP disposition follows the resolved binding profile rather than a
+  suffix or filename hint. The raw-Deno-KV repository stays on a legacy service
+  compatibility path until the planned conforming adapter and migration;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with soft in-field four-word random locator helpers, a collapsible
@@ -317,17 +320,21 @@ moves, concurrent winners, coherent asset switches, safe immutable sharing,
 endpoint-wide deletion, and one-row query cardinality.
 
 `PageService` and the process-local `md-page` composition now run on those split
-contracts without changing JSON/API behavior. The remaining active-task step is
-to expose safe explicit endpoint links while keeping one page projection. PDF
-content logic, a conforming Kvdex-backed Deno KV page/content adapter, strict
-bounded upload/direct delivery, and the site projection follow. The retained
-raw-Deno-KV repository still uses the legacy compatibility path. Kvdex remains
-inside the durable adapter. Its segmented blob writes do not by themselves
-preserve atomic visibility, so immutable assets must be fully staged before page
-endpoints can reference them. Existing raw Deno KV records require explicit
-compatibility or migration before that adapter becomes the durable default.
-Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and external
-storage remain later work.
+contracts. Owner and public summaries retain canonical `locator`/`path`
+compatibility fields and add a complete safe `endpoints` link set; management,
+wrapped-view, and exploration projections preserve one logical row while showing
+alternates. Direct delivery returns the exact resolved binding, rejects a
+profile unsupported by the content handler, and maps that profile—not a path
+suffix or filename hint—to inline or attachment disposition. This completes the
+content/endpoint prerequisite. PDF content logic, a conforming Kvdex-backed Deno
+KV page/content adapter, strict bounded upload/direct delivery, and the PDF site
+projection follow. The retained raw-Deno-KV repository still uses the legacy
+compatibility path. Kvdex remains inside the durable adapter. Its segmented blob
+writes do not by themselves preserve atomic visibility, so immutable assets must
+be fully staged before page endpoints can reference them. Existing raw Deno KV
+records require explicit compatibility or migration before that adapter becomes
+the durable default. Generic raw-binary publishing, PDF.js, thumbnails, text
+extraction, and external storage remain later work.
 
 ## Local development
 

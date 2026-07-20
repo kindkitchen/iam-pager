@@ -11,11 +11,12 @@
 > same-namespace locator and a content-supported `inline` or `attachment`
 > profile. No filename suffix has special routing or delivery meaning. The
 > immutable-asset/atomic-endpoint contract now backs the composed process-local
-> `PageService`, but this HTTP contract deliberately remains the compatible
-> one-canonical-inline-endpoint `md-page` shape. Explicit endpoint links and
-> binary upload/delivery fields are not exposed yet; the retained raw-Deno-KV
-> repository continues through the legacy compatibility path pending its
-> replacement.
+> `PageService`. The current create/update commands remain the compatible
+> one-canonical-inline-endpoint `md-page` shape, while every owner-safe summary
+> now exposes the complete endpoint link set and direct delivery obeys the
+> resolved binding profile. Binary upload fields are not exposed yet; the
+> retained raw-Deno-KV repository continues through the legacy compatibility
+> path pending its replacement.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the
@@ -33,6 +34,34 @@ and lowercased, duplicates collapse, and output is a sorted unique set. Each tag
 must be 1–32 ASCII characters, start and end with an alphanumeric character, and
 contain only alphanumerics, `-`, or `_`. Trial pages do not accept tags. Every
 page summary includes `tags`; trials always return an empty array.
+
+Every page summary also includes safe application-relative endpoint links:
+
+```json
+{
+  "endpoints": {
+    "canonical": {
+      "locator": { "namespace": "Alice", "page_name": "notes/today" },
+      "path": "/Alice/notes/today",
+      "delivery_profile": "inline"
+    },
+    "alternates": [
+      {
+        "locator": { "namespace": "Alice", "page_name": "notes/download" },
+        "path": "/Alice/notes/download",
+        "delivery_profile": "attachment"
+      }
+    ]
+  }
+}
+```
+
+The top-level summary `locator` and `path` remain canonical compatibility
+fields. `endpoints.canonical` is singular; alternates retain deterministic
+locator order. Paths are formatted by the locator boundary and must be local
+absolute paths, never caller-supplied URLs. The profile, not a filename suffix
+or content filename hint, selects inline versus attachment direct delivery.
+Current `md-page` commands produce one canonical inline link and no alternates.
 
 ## Create or replace — `POST /api/pages`
 
@@ -98,6 +127,14 @@ by the caller returns the same `404` shape as a missing resource.
       "page_id": "opaque-id",
       "locator": { "namespace": "Alice", "page_name": "notes/today" },
       "path": "/Alice/notes/today",
+      "endpoints": {
+        "canonical": {
+          "locator": { "namespace": "Alice", "page_name": "notes/today" },
+          "path": "/Alice/notes/today",
+          "delivery_profile": "inline"
+        },
+        "alternates": []
+      },
       "access": "private",
       "content_type": "md-page",
       "size_bytes": 1234,
@@ -133,6 +170,14 @@ ETag: "page-opaque-id-r1"
     "page_id": "opaque-id",
     "locator": { "namespace": "Alice", "page_name": "notes/today" },
     "path": "/Alice/notes/today",
+    "endpoints": {
+      "canonical": {
+        "locator": { "namespace": "Alice", "page_name": "notes/today" },
+        "path": "/Alice/notes/today",
+        "delivery_profile": "inline"
+      },
+      "alternates": []
+    },
     "access": "private",
     "content_type": "md-page",
     "size_bytes": 1234,
@@ -245,6 +290,14 @@ one result in selection order. Items then apply independently:
         "page_id": "page-a",
         "locator": { "namespace": "Alice", "page_name": "notes" },
         "path": "/Alice/notes",
+        "endpoints": {
+          "canonical": {
+            "locator": { "namespace": "Alice", "page_name": "notes" },
+            "path": "/Alice/notes",
+            "delivery_profile": "inline"
+          },
+          "alternates": []
+        },
         "access": "public",
         "content_type": "md-page",
         "size_bytes": 1234,
@@ -302,11 +355,12 @@ selection returns `422` before mutation.
 
 The authenticated creator panel is a secondary projection of these contracts,
 not a separate management implementation. Its initial server model and every API
-row carry locator, canonical tags, revision, and exact ETag. Name, access, and
-exact-tag filters remain attached to continuation requests. Content and a
-comma-separated tag draft save through one revision-bound PATCH; empty tags
-clear the set. Rename sends an omitted `page_name` for the default page, while
-duplicate remains bodyless.
+row carry locator, complete endpoint links, canonical tags, revision, and exact
+ETag. The canonical path remains the main row link and configured alternates are
+shown explicitly. Name, access, and exact-tag filters remain attached to
+continuation requests. Content and a comma-separated tag draft save through one
+revision-bound PATCH; empty tags clear the set. Rename sends an omitted
+`page_name` for the default page, while duplicate remains bodyless.
 
 Bulk controls select at most 100 currently visible rows and derive the explicit
 `page_id`/`expected_revision` pairs at submission time. The panel validates the
@@ -321,14 +375,17 @@ Public exploration remains a site GET surface rather than a management JSON
 endpoint. `/` and `/site` accept optional `namespace` and `page` substring
 fields plus one exact `tag`; all supplied fields use AND semantics. The opaque
 `cursor` retains the complete filter scope. Only public managed pages are
-eligible, and the rendered rows expose their canonical tags without page IDs,
-revisions, access fields, or owner identity.
+eligible, and the rendered rows expose their canonical tags and complete direct
+endpoint links without page IDs, revisions, access fields, or owner identity.
 
 ## Direct delivery
 
-The management URL is separate from the direct locator path. Public trial and
-managed pages are directly readable. A private managed page is directly readable
-only by its stored creator's current session; guest, logged-out creator, and
-another user receive the ordinary missing-page response. The catch-all Fresh
-route derives the actor from the resolved session and uses the same composed
-page service as management.
+The management URL is separate from every direct endpoint path. Public trial and
+managed pages are directly readable through canonical or alternate bindings. A
+private managed page is directly readable only by its stored creator's current
+session; guest, logged-out creator, and another user receive the ordinary
+missing-page response. The catch-all Fresh route derives the actor from the
+resolved session and uses the same composed page service as management. After
+access checks, the resolved endpoint's stored profile exclusively selects
+`Content-Disposition: inline` or `attachment`; safe suggested filenames are
+encoded only for attachment delivery.

@@ -157,6 +157,14 @@ Deno.test("PageService trial publish creates and replaces complete public conten
   assertEquals(second.page.created_at, t1);
   assertEquals(second.page.updated_at, t2);
   assertEquals(second.page.path, "/FREE");
+  assertEquals(second.page.endpoints, {
+    canonical: {
+      locator: { namespace: "FREE" },
+      path: "/FREE",
+      delivery_profile: "inline",
+    },
+    alternates: [],
+  });
 
   const stored = await repository.find_by_id(first.page.page_id);
   assert(stored !== null);
@@ -1040,6 +1048,68 @@ Deno.test("PageService direct delivery permits public pages and only the private
   );
   assert(delivered.ok);
   assertEquals(delivered.payload.media_type, "text/html; charset=utf-8");
+});
+
+Deno.test("PageService projects one page with complete endpoint links and resolves the selected binding", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["multi-endpoint"],
+    dates: [t1],
+  });
+  const created = await service.create_managed(
+    managed_request("preview", "public"),
+  );
+  assert(created.ok);
+  const updated = await repository.update_managed_page_aggregate({
+    page_id: created.page.page_id,
+    owner_user_id: owner.user_id,
+    expected_revision: 1,
+    patch: {
+      endpoint_set: {
+        canonical: {
+          locator: { namespace: "Mine", page_name: "preview" },
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Mine", page_name: "read-copy" },
+          delivery_profile: "inline",
+        }],
+      },
+    },
+    now: t2,
+  });
+  assert(updated.ok);
+
+  const expected_endpoints = {
+    canonical: {
+      locator: { namespace: "Mine", page_name: "preview" },
+      path: "/Mine/preview",
+      delivery_profile: "inline" as const,
+    },
+    alternates: [{
+      locator: { namespace: "Mine", page_name: "read-copy" },
+      path: "/Mine/read-copy",
+      delivery_profile: "inline" as const,
+    }],
+  };
+  const managed = await service.list_managed({ actor: owner, limit: 10 });
+  assert(managed.ok);
+  assertEquals(managed.pages.length, 1);
+  assertEquals(managed.pages[0].endpoints, expected_endpoints);
+
+  const viewed = await service.view_public({
+    namespace: "mine",
+    page_name: "READ-COPY",
+  });
+  assert(viewed.ok);
+  assertEquals(viewed.page.path, "/Mine/preview");
+  assertEquals(viewed.page.endpoints, expected_endpoints);
+
+  const delivered = await service.deliver(
+    { namespace: "MINE", page_name: "read-copy" },
+    guest,
+  );
+  assert(delivered.ok);
+  assertEquals(delivered.endpoint, expected_endpoints.alternates[0]);
 });
 
 Deno.test("PageService authorizes private delivery before retired-handler disclosure", async () => {

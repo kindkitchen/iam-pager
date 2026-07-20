@@ -55,10 +55,12 @@ PDF handling remains planned. Its generic prerequisites now include the endpoint
 planner plus immutable-asset and atomic page/endpoint capability contracts, a
 process-local reference, and shared persistence conformance. `PageService` now
 uses those capabilities for the compatible one-canonical-inline-endpoint
-`md-page` flow, including immutable staging, aggregate query projections, and
-endpoint resolution. Explicit endpoint links and endpoint-selected delivery are
-not yet in the public API. Generic raw-binary content, PDF.js, text extraction,
-thumbnails, and external storage are outside its first slice.
+`md-page` command flow, including immutable staging, aggregate query
+projections, and endpoint resolution. Owner/public summaries expose complete
+safe endpoint links without duplicating rows, and direct delivery selects
+disposition from the resolved binding profile. Generic raw-binary content,
+PDF.js, text extraction, thumbnails, and external storage are outside its first
+slice.
 
 ## CP-VIEW — Site-mediated viewing
 

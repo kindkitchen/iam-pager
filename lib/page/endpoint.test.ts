@@ -2,7 +2,12 @@ import { assert, assertEquals, assertThrows } from "@std/assert";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import type { PageEndpointBinding } from "./endpoint.ts";
-import { DefaultPageEndpointPlanner, max_page_endpoints } from "./endpoint.ts";
+import {
+  DefaultPageEndpointPlanner,
+  is_safe_page_path,
+  max_page_endpoints,
+  project_page_endpoint_links,
+} from "./endpoint.ts";
 
 function make_planner(): DefaultPageEndpointPlanner {
   return new DefaultPageEndpointPlanner(
@@ -23,6 +28,41 @@ function endpoint(
     delivery_profile,
   };
 }
+
+Deno.test("endpoint links preserve canonical structure and format safe paths", () => {
+  const links = project_page_endpoint_links({
+    canonical: endpoint("Preview", "inline"),
+    alternates: [endpoint("Download copy", "attachment")],
+  }, new LocatorEngine({ strategies: [new PathSlugStrategy()] }));
+  assertEquals(links, {
+    canonical: {
+      locator: { namespace: "Alice", page_name: "Preview" },
+      path: "/Alice/Preview",
+      delivery_profile: "inline",
+    },
+    alternates: [{
+      locator: { namespace: "Alice", page_name: "Download copy" },
+      path: "/Alice/Download%20copy",
+      delivery_profile: "attachment",
+    }],
+  });
+  assert(is_safe_page_path(links.canonical.path));
+  assertEquals(is_safe_page_path("//outside.test/page"), false);
+  assertEquals(is_safe_page_path("/page?next=outside"), false);
+  assertEquals(is_safe_page_path("javascript:alert(1)"), false);
+});
+
+Deno.test("endpoint link projection rejects unsafe formatter output", () => {
+  assertThrows(
+    () =>
+      project_page_endpoint_links({
+        canonical: endpoint("page"),
+        alternates: [],
+      }, { format: () => "//outside.test/page" }),
+    Error,
+    "unsafe path",
+  );
+});
 
 Deno.test("endpoint planner accepts one canonical endpoint", () => {
   assertEquals(

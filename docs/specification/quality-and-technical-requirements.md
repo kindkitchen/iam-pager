@@ -73,11 +73,13 @@ aggregates rather than endpoint rows.
 `PageService` now stages each validated `md-page` representation as an immutable
 asset before atomic page publication, resolves direct requests through endpoint
 bindings, materializes management/public projections from the aggregate plus its
-asset, and keeps access-only changes on the existing asset. The current JSON and
-HTTP behavior deliberately remains one canonical inline endpoint. Explicit
-endpoint links and endpoint-selected attachment responses are the next
-projection step. Fresh, `Request`, `Response`, multipart parsing, browser
-preview, Deno KV, and Kvdex types remain outside the split contracts.
+asset, and keeps access-only changes on the existing asset. Owner/public
+summaries retain canonical compatibility fields and expose the complete set as
+safe application-relative links. Direct delivery carries the exact resolved
+binding, rejects content-handler/profile incoherence, and maps the stored
+profile to inline or attachment disposition; filename hints never override it.
+Fresh, `Request`, `Response`, multipart parsing, browser preview, Deno KV, and
+Kvdex types remain outside the split contracts.
 
 ## QT-STORAGE — Repository persistence
 

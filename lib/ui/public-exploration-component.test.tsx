@@ -15,6 +15,18 @@ Deno.test("public exploration component renders GET search and safe result links
       label: "Notes",
       direct_path: "/Alice/Notes",
       site_path: "/site/Alice/Notes",
+      endpoints: {
+        canonical: {
+          locator: { namespace: "Alice", page_name: "Notes" },
+          path: "/Alice/Notes",
+          delivery_profile: "inline",
+        },
+        alternates: [{
+          locator: { namespace: "Alice", page_name: "Notes-download" },
+          path: "/Alice/Notes-download",
+          delivery_profile: "attachment",
+        }],
+      },
       content_type: "md-page",
       size_bytes: 42,
       tags: ["news", "release"],
@@ -36,6 +48,8 @@ Deno.test("public exploration component renders GET search and safe result links
   assertStringIncludes(html, "tags: news, release");
   assertStringIncludes(html, 'href="/site/Alice/Notes"');
   assertStringIncludes(html, 'href="/Alice/Notes"');
+  assertStringIncludes(html, 'href="/Alice/Notes-download"');
+  assertStringIncludes(html, "Open alternate attachment");
   assertStringIncludes(html, "Private and guest pages never appear here");
   assertStringIncludes(html, "More public pages");
   assertEquals(html.includes("page_id"), false);

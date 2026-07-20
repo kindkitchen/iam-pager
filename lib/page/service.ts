@@ -32,8 +32,10 @@ import type {
 } from "./aggregate-interfaces.ts";
 import {
   DefaultPageEndpointPlanner,
+  type PageEndpointBinding,
   type PageEndpointPlanner,
   type PageEndpointSet,
+  project_page_endpoint_links,
 } from "./endpoint.ts";
 import {
   max_bulk_managed_pages,
@@ -177,6 +179,11 @@ export class PageService
   readonly #page_id_generator: PageIdGenerator;
   readonly #content_asset_id_generator: ContentAssetIdGenerator;
   readonly #endpoint_planner: PageEndpointPlanner;
+  /** Exact aggregate snapshot associated with each materialized legacy record. */
+  readonly #materialized_endpoint_sets = new WeakMap<
+    PageRecord,
+    PageEndpointSet
+  >();
   readonly #clock: PageClock;
   readonly #max_page_id_attempts: number;
   readonly #page_name_generator: RandomNameGenerator;
@@ -783,9 +790,20 @@ export class PageService
     if (handler === undefined) {
       return { ok: false as const, reason: "unknown_content_type" as const };
     }
+    if (
+      !handler.supported_delivery_profiles.includes(
+        resolved.endpoint.delivery_profile,
+      )
+    ) {
+      return { ok: false as const, reason: "corrupt" as const };
+    }
     return {
       ok: true as const,
       page,
+      endpoint: project_page_endpoint_links(
+        { canonical: resolved.endpoint, alternates: [] },
+        this.#engine,
+      ).canonical,
       payload: handler.render(page.content.data),
     };
   }
@@ -1051,7 +1069,11 @@ export class PageService
     locator: Locator,
     actor: { kind: "guest" } | UserPageActor,
   ): Promise<
-    | { readonly ok: true; readonly page: PageRecord }
+    | {
+      readonly ok: true;
+      readonly page: PageRecord;
+      readonly endpoint: PageEndpointBinding;
+    }
     | { readonly ok: false; readonly reason: "not_found" | "corrupt" }
   > {
     if (this.#aggregate_persistence === null) {
@@ -1066,7 +1088,14 @@ export class PageService
       if (!can_deliver_page_to(page, actor)) {
         return { ok: false, reason: "not_found" };
       }
-      return { ok: true, page };
+      return {
+        ok: true,
+        page,
+        endpoint: {
+          locator: structuredClone(page.locator),
+          delivery_profile: "inline",
+        },
+      };
     }
 
     const resolved = await this.#aggregate_persistence.resolve_page_endpoint(
@@ -1093,6 +1122,7 @@ export class PageService
     return {
       ok: true,
       page: this.#materialize_aggregate_with_asset(resolved.page, asset),
+      endpoint: resolved.endpoint,
     };
   }
 
@@ -1142,7 +1172,7 @@ export class PageService
     page: PageAggregate,
     asset: ContentAsset,
   ): PageRecord {
-    return {
+    const materialized: PageRecord = {
       page_id: page.page_id,
       locator: structuredClone(page.endpoint_set.canonical.locator),
       stewardship: structuredClone(page.stewardship),
@@ -1157,6 +1187,11 @@ export class PageService
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
     };
+    this.#materialized_endpoint_sets.set(
+      materialized,
+      structuredClone(page.endpoint_set),
+    );
+    return materialized;
   }
 
   #canonical_inline_endpoint_set(
@@ -1256,6 +1291,7 @@ export class PageService
     return {
       locator: structuredClone(page.locator),
       path: this.#engine.format(page.locator),
+      endpoints: this.#endpoint_links(page),
       stewardship: page.stewardship.kind,
       content_type: page.content.content_type,
       media_type: page.content.meta.media_type,
@@ -1271,6 +1307,7 @@ export class PageService
       page_id: page.page_id,
       locator: structuredClone(page.locator),
       path: this.#engine.format(page.locator),
+      endpoints: this.#endpoint_links(page),
       access: page.access,
       content_type: page.content.content_type,
       size_bytes: page.content.meta.size_bytes,
@@ -1279,6 +1316,17 @@ export class PageService
       updated_at: new Date(page.updated_at),
       revision: page.revision,
     };
+  }
+
+  #endpoint_links(page: PageRecord) {
+    const endpoint_set = this.#materialized_endpoint_sets.get(page) ?? {
+      canonical: {
+        locator: page.locator,
+        delivery_profile: "inline" as const,
+      },
+      alternates: [],
+    };
+    return project_page_endpoint_links(endpoint_set, this.#engine);
   }
 
   #locator_error(locator: Locator):

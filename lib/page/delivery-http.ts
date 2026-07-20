@@ -1,3 +1,4 @@
+import type { DeliveryProfile } from "../content/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Session } from "../session/model.ts";
 import type { PageActor, PageDeliverer } from "./interfaces.ts";
@@ -28,12 +29,15 @@ export async function deliver_page_locator_path(
       ? text_response(404, "page not found")
       : text_response(500, "page content is not deliverable");
   }
-  const { page, payload } = delivery;
+  const { endpoint, page, payload } = delivery;
   const headers = new Headers({
     "content-type": payload.media_type,
     "content-length": String(page.content.meta.size_bytes),
     "cache-control": "no-store",
-    "content-disposition": content_disposition(payload.download_filename),
+    "content-disposition": content_disposition(
+      endpoint.delivery_profile,
+      payload.download_filename,
+    ),
     "x-content-type-options": "nosniff",
   });
   if (is_active_content(payload.media_type)) {
@@ -61,8 +65,12 @@ function text_response(status: number, message: string): Response {
   });
 }
 
-function content_disposition(download_filename?: string): string {
-  if (download_filename === undefined) return "inline";
+function content_disposition(
+  delivery_profile: DeliveryProfile,
+  download_filename?: string,
+): string {
+  if (delivery_profile === "inline") return "inline";
+  if (download_filename === undefined) return "attachment";
   const fallback = download_filename
     .replaceAll(/["\\\r\n]/g, "_")
     .replaceAll(/[^\x20-\x7e]/g, "_");

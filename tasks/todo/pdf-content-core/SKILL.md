@@ -7,9 +7,9 @@ tags: [backend, content, pdf, interfaces]
 relates: [content-endpoint-bindings, kvdex-content-persistence, pdf-content-http]
 ---
 
-Todo, chain position 2 of 5. Blocked by `content-endpoint-bindings`.
+Todo and ready, chain position 2 of 5. `content-endpoint-bindings` is complete.
 
-Next: implement a transport-independent PDF handler after generic user-configured
-endpoint contracts are accepted. PDF declares supported delivery profiles but
+Next: implement a transport-independent PDF handler over the accepted generic
+user-configured endpoint contracts. PDF declares supported delivery profiles but
 does not generate or interpret locators. See [[001.draft]] and the superseding
 [[002.decision]]. Generic binary content and browser UI remain outside this task.

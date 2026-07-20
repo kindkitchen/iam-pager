@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed `content-endpoint-bindings`. Owner and public page summaries now
+  retain canonical locator/path compatibility fields while exposing the full
+  canonical/alternate set as safe app-relative links; management, wrapped-view,
+  and exploration projections show configured alternates without creating extra
+  page rows. Direct delivery carries the exact resolved binding, rejects
+  content/profile incoherence, and selects inline versus attachment disposition
+  from that binding rather than a suffix or filename hint. The legacy
+  raw-Deno-KV path projects its existing canonical inline endpoint until the
+  planned Kvdex replacement. Focused service, HTTP, presenter, component,
+  path-safety, and disposition coverage was added, and `pdf-content-core` is now
+  the ready next task. All 479 tests, check, and the production build pass.
+
 - Refactored the process-local `PageService` and current `md-page` flow onto the
   immutable-asset/page-aggregate capabilities without changing HTTP or JSON
   behavior. Validated content is staged before page visibility; content changes
