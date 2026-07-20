@@ -1,3 +1,4 @@
+import { ownership_database_schema_version } from "../storage/schema-versions.ts";
 import type {
   NamespaceRepository,
   ReserveRequest,
@@ -5,7 +6,7 @@ import type {
 } from "./interfaces.ts";
 import { namespace_key, type NamespaceReservation } from "./model.ts";
 
-const storage_schema_version = 1;
+const storage_schema_version = ownership_database_schema_version;
 // Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const reservation_prefix: Deno.KvKey = [
   "iam-pager",

@@ -97,6 +97,23 @@ filters; and explicit selection uses the visible rows' current revisions for
 bounded bulk access or deletion. Every accepted bulk item gets a visible
 outcome, while conflicts refresh the affected row.
 
+## DS-PDF — Publish one PDF page with preview and download endpoints
+
+This planned slice separates a logical page, immutable content asset, and
+endpoint bindings before adding PDF. A PDF page has one canonical management and
+exploration identity while its same stored bytes are reachable through
+independently configured inline browser-preview and attachment endpoints. Every
+locator is ordinary publisher intent validated by the locator boundary; PDF does
+not generate or reserve a special path shape. Creation, access, endpoint-set
+change, replacement, duplication, and deletion preserve the complete endpoint
+set without partial visibility.
+
+The slice is delivered in interface-first stages: shared endpoint/content
+contracts with a memory reference, the PDF content core, a conforming Kvdex-
+backed Deno KV adapter, strict bounded HTTP upload and delivery, then the
+secondary site projection. Generic binary fallback and external storage remain
+later.
+
 ## DS-EXTERNAL — Evaluate external storage
 
 After first-party publishing is stable, one external provider can test whether a

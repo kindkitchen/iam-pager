@@ -12,7 +12,9 @@ For a known locator, the app can:
 - distinguish successful delivery from invalid, missing, private, and
   temporarily unavailable outcomes;
 - handle content without allowing it to interfere with management sessions or
-  platform routes.
+  platform routes;
+- apply the stored endpoint delivery behavior, such as inline or attachment,
+  without inferring it from a URL suffix at response time.
 
 Direct retrieval is part of the public HTTP/API surface, not merely a link into
 the site UI.
@@ -31,6 +33,26 @@ The app can:
 An authenticated creator publishes inside a reserved namespace. Even a guest may
 publish with stricter limits, but without namespace reservation or overwrite
 protection.
+
+## CP-PDF — PDF content and delivery endpoints
+
+The planned PDF capability will:
+
+- validate a bounded PDF input through a transport-independent content handler;
+- store one immutable PDF content asset independently from its locator bindings;
+- bind one logical page to user-configured endpoints, including inline and
+  attachment profiles that can resolve the same exact bytes;
+- validate each supplied locator through the ordinary locator interfaces and
+  keep endpoint persistence behind interfaces, without PDF-specific path
+  generation;
+- apply access, revision, rename, duplication, and deletion to the logical page
+  and all its endpoints coherently;
+- keep alternate delivery endpoints out of creator lists and public exploration;
+- expose browser-native PDF viewing through the site when supported, with direct
+  preview and download fallbacks.
+
+This capability is planned, not implemented. Generic raw-binary content, PDF.js,
+text extraction, thumbnails, and external storage are outside its first slice.
 
 ## CP-VIEW — Site-mediated viewing
 

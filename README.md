@@ -71,8 +71,9 @@ This experience remains to be specified after first-party publishing works.
 
 ## What is a page?
 
-A page is an endpoint associated with content. URLs and content are related but
-separate aspects of that endpoint.
+A page is one logical managed/explored item associated with content. URLs and
+content are separate: a page has one canonical locator and may expose additional
+delivery endpoints for the same stored asset without becoming multiple pages.
 
 ### Page URL
 
@@ -86,8 +87,10 @@ ownership guarantee.
 ### Page content
 
 Content can have different formats. It may be HTML, text, a PDF, an image, or
-another supported type. Depending on the format, a direct URL may display the
-content or download it.
+another supported type. Depending on the endpoint profile, a direct URL may
+display the content or download it. PDF is the next planned type: one stored PDF
+may have user-configured browser-native inline and attachment endpoints at
+independently chosen valid locators.
 
 ## Current implementation
 
@@ -206,6 +209,56 @@ frequency, guest expiry, exploration text indexing/relevance, and backend
 migration are not implemented; these endpoints are not ready for untrusted
 public traffic.
 
+## Explicit pre-deploy and schema upgrades
+
+`deno task pre-deploy` is the explicit deployment gate; application startup and
+requests never run schema upgrades. Deno 2.9 task-object dependencies run check,
+test, and build branches in parallel, then invoke
+`pre-deploy::upgrade-db-schema` only if all three succeed. The schema task is
+not file-cacheable and always decides from current database state. `--jobs` or
+`DENO_JOBS` may bound dependency concurrency.
+
+The interface-first forward runner preflights immutable plans and all durable
+states before writing metadata, claims one exact adjacent transition, executes
+its retained idempotent helper, and completes only the matching claim. A pending
+step survives failure and is resumed by stable ID; gaps, removed helpers,
+downgrades, newer database versions, corrupt state, and unknown claims fail
+closed. There is no automatic schema diff, down migration, rollback log, or
+startup hook. A claim is not a process mutex: overlapping runners may invoke the
+same pending helper, so every helper must also make concurrent data writes safe
+with conditional adapter operations.
+
+Deno KV stores versioned coordination records for independent `ownership`,
+`sessions`, and `pages` schemas. Existing raw-KV databases and fresh databases
+without framework metadata both have explicit baseline version 1. The current
+targets are also version 1, so the first durable invocation only installs
+metadata and reports `no_change`; later invocations inspect it and report the
+same without rewriting application data. Memory storage opens no database and
+returns an empty successful report. The command validates the same linked
+ownership/session/page settings, uses the ownership KV path or attached default,
+prints only bounded schema diagnostics, and closes its owned connection.
+
+## Next direction: PDF pages
+
+The next chain first separates logical pages, immutable content assets, and
+delivery endpoint bindings. One asset may back multiple locators while the page
+keeps one ID, revision, access policy, management row, and exploration row. For
+PDF, one configured endpoint can use `application/pdf` with inline disposition
+and another configured endpoint can serve the same bytes as an attachment. The
+publisher supplies both valid locators and each delivery profile. A path ending
+in `.pdf` is only an example and has no special routing, generation, or delivery
+semantics; behavior is stored on the endpoint binding.
+
+The implementation order is pure endpoint/content contracts with a memory
+reference, PDF content logic, a conforming Kvdex-backed Deno KV page/content
+adapter, strict bounded upload/direct delivery, and finally the site projection.
+Kvdex remains inside the adapter. Its segmented blob writes do not by themselves
+preserve the repository's atomic visibility guarantees, so immutable assets must
+be fully staged before page endpoints can reference them. Existing raw Deno KV
+records require explicit compatibility or migration before that adapter becomes
+the durable default. Generic raw-binary publishing, PDF.js, thumbnails, text
+extraction, and external storage remain later work.
+
 ## Local development
 
 Run `deno task dev`, open `http://localhost:5173`, browse or search current
@@ -302,12 +355,19 @@ injected into direct page responses.
 
 ## Production startup and deployment
 
-Build first, then start the generated server with a production environment file:
+Run the explicit gate against the deployment's storage configuration, then start
+the generated server with the same production environment file:
 
 ```sh
-deno task build
+deno task --env-file=.env.production.local pre-deploy
 deno task --env-file=.env.production.local start
 ```
+
+The gate already performs the production build. The named
+`pre-deploy::upgrade-db-schema` task retains the same check/test/build
+dependencies even when invoked directly, so it cannot bypass verification. An
+all-memory profile reports zero schemas, while a durable profile opens the
+configured ownership KV and checks all three current schema targets.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
@@ -388,20 +448,23 @@ no application expiry or deletion path, and backup/recovery follows the selected
 KV service or deployment operator. Without the content opt-in, pages still
 disappear on restart.
 
-For Deno Deploy, use `deno task build` as the build command and
-`_fresh/server.js` as the application entrypoint. Apply the appropriate storage
-profile above to each production or preview context. Configure the original-mode
-Google variables for every deployment context that must warm successfully. The
-callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
-used by that context. Dynamic preview contexts using local mock authentication
-can set `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact
-Google, but every matched host intentionally permits fake sign-in and must not
-be treated as a production environment. If original mode uses the pattern, every
-selected callback must still satisfy Google's redirect-URI registration rules.
-Original preview hosts that cannot be registered individually require a stable
-callback broker rather than a broader application regex. The SSR build
-deliberately leaves gauth and Effect as runtime imports so loading the selected
-preset cannot deadlock through circular bundle chunks.
+For Deno Deploy, use `deno task build` as the platform build command and
+`_fresh/server.js` as the application entrypoint. The explicit pre-deploy gate
+remains a separate operator action and must run in a deployment context that can
+open the same attached KV before that release is promoted; a local memory-mode
+run does not validate a remote database. Apply the appropriate storage profile
+above to each production or preview context. Configure the original-mode Google
+variables for every deployment context that must warm successfully. The callback
+must be an authorized HTTPS `/auth/google/callback` URL for the domain used by
+that context. Dynamic preview contexts using local mock authentication can set
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact Google, but
+every matched host intentionally permits fake sign-in and must not be treated as
+a production environment. If original mode uses the pattern, every selected
+callback must still satisfy Google's redirect-URI registration rules. Original
+preview hosts that cannot be registered individually require a stable callback
+broker rather than a broader application regex. The SSR build deliberately
+leaves gauth and Effect as runtime imports so loading the selected preset cannot
+deadlock through circular bundle chunks.
 
 ## Technical stack
 

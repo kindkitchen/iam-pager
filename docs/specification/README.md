@@ -14,6 +14,11 @@ Section markers use a short file prefix and a stable descriptive word, such as
 - Authentication reserves a namespace and protects its pages.
 - Content can have different formats and sizes; external storage is a later
   extension of that need.
+- A logical page may expose more than one delivery endpoint for the same stored
+  content, while retaining one management and exploration identity.
+- PDF is the next selected content expansion: user-configured inline and
+  attachment endpoints may serve the same bytes at independently chosen valid
+  locators.
 - Even a guest may publish, but with stricter limits and without a reserved
   namespace or overwrite protection.
 

@@ -61,6 +61,44 @@ indexing, relevance ranking, and view-count sorting are not part of this MVP
 slice. The `PublicPageExplorer` boundary permits a later index without changing
 locators, site-view links, or visitor-safe result summaries.
 
+### OQ-PDF-DIRECTION — PDF content and alternate delivery endpoints
+
+PDF is the next selected content expansion; generic raw-binary publication is
+not. One immutable PDF content asset backs one logical page. Publishers may bind
+that asset to multiple ordinary locators and configure each endpoint's delivery
+profile independently, including inline `application/pdf` browser viewing and
+attachment delivery with a safe filename over the same exact bytes.
+
+A page, its content asset, and its endpoint bindings are separate concepts.
+Alternate endpoints are not separate managed or explored pages. Delivery mode is
+stored with the endpoint binding and mapped by the delivery boundary. Neither
+the page service nor HTTP generates a locator, interprets `.pdf`, or infers
+behavior from any path shape. PDF.js, generated preview images, and text
+extraction are later adapters or capabilities.
+
+### OQ-SCHEMA-UPGRADES — Explicit forward-only database evolution
+
+Database schema evolution runs only through the explicit pre-deploy command; the
+application does not mutate schema during startup or a normal request. Code
+declares a target version and adjacent forward steps for each stable schema ID.
+The runner preflights every plan and durable state, applies only missing steps,
+and returns a no-change success after the target is reached.
+
+There is no automatic schema-diff inference, rollback framework, or migration
+mutex with a stale-lock timeout. Every transformation is explicitly authored,
+repeat-idempotent, and safe under concurrent invocation: a second process can
+observe and resume the same atomic pending claim before the first process has
+exited. Conditional data writes make that overlap safe, while exact claim
+completion lets only one process advance the durable version. A one-way helper
+may be removed only after every supported environment can no longer start below
+its source version.
+
+The first state/coordination adapter is Deno KV behind agnostic interfaces. Its
+initial `ownership`, `sessions`, and `pages` plans define missing framework
+metadata as baseline version 1 for both fresh and existing raw-KV databases. All
+current targets are version 1, so installing the framework does not inspect or
+rewrite application records.
+
 ### OQ-API — API surface
 
 The concrete page API includes `POST`/`GET /api/pages`,
@@ -75,12 +113,34 @@ remains the locator URL. External bearer credentials are later; see
 
 ### OQ-CONTENT — Supported content
 
-Choose the first media types and size bands. For each type, decide whether the
-direct response displays it, downloads it, or can do either. Active HTML, SVG,
-and scripts need an explicit isolation choice before they are served.
+`md-page` remains the implemented textual type and PDF is selected as the first
+binary type. The PDF slice must settle its exact byte limit and minimum
+structural validation before code accepts files. Its media type is fixed to
+`application/pdf`; filename extension is not trusted as validation. Inline and
+attachment behavior are both required and are endpoint properties over one
+asset.
 
-The initial set can be narrow, but it should test both textual and binary
-content so the app does not become accidentally text-only.
+Active HTML, SVG, scripts, generic raw binary, and broader media-type inference
+remain unselected. Each later type still needs an explicit size band and
+display, download, or isolation policy.
+
+### OQ-ENDPOINT-CONFIG — User-configured endpoint set
+
+`example` and `example.pdf` are only illustrations of two ordinary locators a
+publisher might choose. No suffix is reserved, generated, or interpreted. Before
+endpoint contracts are frozen, decide and specify the maximum endpoint count,
+canonical endpoint designation, allowed delivery profiles per content type,
+revision-bound add/change/remove semantics, namespace authority for every
+locator, and whole-set collision behavior. An invalid or conflicting endpoint
+set must fail atomically rather than partially publishing locators.
+
+### OQ-PDF-TRANSPORT — PDF upload and range delivery
+
+The current JSON API is not an appropriate binary transport. The PDF HTTP task
+must settle a strict bounded multipart or dedicated upload contract without
+leaking base64 into the content/application interfaces. Browser-native viewers
+can consume a bounded full `200` response; byte-range support must either be
+implemented and tested or explicitly deferred with the first PDF size limit.
 
 ### OQ-LIMITS — Publishing limits
 
@@ -136,4 +196,21 @@ private, forbidden, and malformed visitor lookups.
 Different formats and large files are part of the product direction, but trying
 to support everything immediately would obscure the core publishing and direct-
 delivery flow. Start with an explicit subset and keep external storage for
-later.
+later. PDF is intentionally a specific first binary type; it must not create an
+accidental generic-file contract.
+
+### OQ-KVDEX — Kvdex atomicity and migration
+
+Kvdex 3.6.7 is selected for the planned Deno KV page/content adapter because it
+provides typed collections and segmented `Uint8Array` storage. It remains an
+adapter dependency and must not enter domain or application interfaces.
+
+Its encoded collections cannot participate in Kvdex atomic builders, and blobs
+above Deno KV's 800 KiB atomic mutation limit require Kvdex batched writes that
+are not one atomic visibility commit. The adapter must therefore stage immutable
+unreferenced assets to completion before atomically publishing page/endpoint
+references. Built-in index deletion also cannot replace the repository's
+existing atomic rename/delete guarantees without proof. The current raw Deno KV
+keyspace is not a Kvdex keyspace, so switching implementations requires explicit
+compatibility or migration; silently presenting an empty database is not
+acceptable.

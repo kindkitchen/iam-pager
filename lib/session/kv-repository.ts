@@ -1,3 +1,4 @@
+import { session_database_schema_version } from "../storage/schema-versions.ts";
 import type {
   RepositoryAuthenticationAttemptConsume,
   RepositoryAuthenticationAttemptConsumeResult,
@@ -11,7 +12,7 @@ import type {
 } from "./interfaces.ts";
 import type { SessionAuthenticationAttempt, SessionRecord } from "./model.ts";
 
-const storage_schema_version = 1;
+const storage_schema_version = session_database_schema_version;
 const max_update_attempts = 16;
 // Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const record_prefix: Deno.KvKey = ["iam-pager", "sessions", "by-id"];

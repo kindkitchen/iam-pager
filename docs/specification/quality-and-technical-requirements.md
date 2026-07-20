@@ -25,6 +25,11 @@ stable domain boundary is practical:
   implemented separately for each interface;
 - content bindings do not assume that all content always comes from one storage
   implementation;
+- a logical page, immutable content asset, and delivery endpoint are separate
+  contracts, so one asset can back several endpoint behaviors without duplicate
+  page identity;
+- publishers supply endpoint locators and delivery profiles through stable
+  contracts; no content type generates or interprets a special path shape;
 - authentication, search, and external provider choices do not define page,
   namespace, or access behavior.
 
@@ -42,6 +47,12 @@ collection/item/direct routes remain thin adapters over those interfaces. Public
 exploration extends that boundary through `PublicPageExplorer`: callers supply
 optional name queries and an opaque continuation, while the selected repository
 decides whether the MVP scan or a future index satisfies it.
+
+The planned PDF work must evolve this boundary before adding transport code. One
+logical page keeps one management/exploration representation while endpoint
+resolution selects an inline or attachment delivery profile and then reads its
+shared content asset. Fresh, `Request`, `Response`, multipart parsing, browser
+preview, Deno KV, and Kvdex types must remain outside these contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -72,7 +83,7 @@ composition root selects `PageRepository` directly; the retained
 `IAM_PAGER_CONTENT_STORAGE_BACKEND` variable now controls this page repository
 for deployment continuity.
 
-`DenoKvPageRepository` uses a fresh schema-versioned keyspace with one
+`DenoKvPageRepository` currently uses a fresh schema-versioned keyspace with one
 authoritative envelope by stable page ID, case-normalized locator and ordered
 owner indexes, and immutable content generations split into bounded chunks.
 Content writes finish their chunks before an atomic visibility commit updates
@@ -90,6 +101,18 @@ conditions clean unreferenced new chunks best-effort. Neither ownership nor
 session settings alone imply that pages survive a restart; only the explicit
 page-storage opt-in selects durable page persistence.
 
+The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
+implementation detail over Deno KV. It must satisfy the unchanged repository
+contracts and shared conformance before becoming the selected durable adapter.
+Kvdex encoded collections segment `Uint8Array`, but cannot join Kvdex atomic
+builders; values beyond Deno KV's 800 KiB atomic mutation limit require batched,
+non-atomic segment commits. Large immutable assets must therefore be staged
+while unreferenced and become reachable only after all segments succeed and an
+atomic metadata/endpoint commit publishes the reference. Critical locator and
+owner indexes may not use Kvdex shortcuts whose delete/update behavior weakens
+atomic rename, replacement, or deletion. Existing raw-KV records require an
+explicit compatibility or migration path before selection changes.
+
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is
 the responsibility of the configured KV service or deployment operator. Session
@@ -100,6 +123,63 @@ invisible to readers and harmless, but no sweeper reclaims them yet. These
 operational limits must remain visible until broader lifecycle and migration
 behavior is delivered.
 
+## QT-PREDEPLOY — Explicit pre-deploy and schema upgrades
+
+Deployment preparation is one explicit `deno task pre-deploy` task graph. It is
+not application startup behavior. The graph uses Deno task-object dependencies:
+`pre-deploy::check`, `pre-deploy::test`, and `pre-deploy::build` run in
+parallel; `pre-deploy::upgrade-db-schema` runs only after all three succeed; the
+commandless `pre-deploy` parent completes after the upgrade task. Dependencies
+are listed explicitly because Deno wildcard matching is a CLI operation, not
+dependency expansion. Operators may bound dependency parallelism with `--jobs`
+or `DENO_JOBS`.
+
+The schema-upgrade core is storage-agnostic and interface-first. A stable schema
+ID has one persisted current version, one declared target, and a contiguous set
+of adjacent forward-only steps. The runner snapshots and validates every plan,
+then reads and validates every initial durable state before its first metadata
+write. It atomically claims the exact next transition, invokes its idempotent
+transformation, and marks only that matching claim complete. An interrupted
+claim resumes the same stable step ID; a completed plan returns `no_change` on
+every later run. Missing helpers, gaps, duplicate IDs, downgrades, future
+durable versions, unknown pending transitions, corrupt state, and non-converging
+coordination fail closed. There are no down steps, rollback log, or startup
+hook.
+
+Deno KV is the first state/coordination implementation. Upgrade metadata uses an
+adapter-owned versioned keyspace and versionstamp checks for absent-state
+initialization, transition claim, and matching completion. One atomic claim
+selects the transition, but is deliberately not treated as a process lease: a
+second runner that observes a retained pending claim may invoke the same helper
+while the first process is still alive. Every helper must therefore be both
+repeat-idempotent and concurrency-safe, using conditional adapter writes where
+partial data changes could race. This permits immediate crash recovery without
+an unsafe stale-lock timeout; only one matching completion can advance state.
+Deno KV types remain in the concrete context/adapter rather than the runner
+contracts, and diagnostics contain only bounded IDs, versions, and outcomes.
+
+The current immutable registry has independent `ownership`, `sessions`, and
+`pages` schemas. Existing raw-KV databases predate upgrade metadata and are
+explicitly baseline version 1 for all three; an absent state record means that
+same baseline for either a fresh or existing database. Installing metadata does
+not scan or rewrite application records. Their current targets are also version
+1, so the first durable run initializes state and reports `no_change`; later
+runs only read and report `no_change`. A target bump must retain every adjacent
+helper from baseline through the new target.
+
+The schema command reuses ownership/session/page storage validation. Durable
+ownership selects the one shared Deno KV path (or attached default database) and
+all three schema plans; memory ownership means there is no durable database to
+open and the command succeeds with an empty memory-storage report. Invalid
+linked durable selections fail before opening a database. The script owns and
+closes its focused database connection, does not load Fresh or authentication,
+and converts unknown adapter/step failures to secret-free non-zero diagnostics.
+
+`pre-deploy::upgrade-db-schema` does not opt into Deno task file caching: its
+input includes external database state, which `files`, `output`, and `env`
+fingerprints cannot prove unchanged. Check/test/build caching may be evaluated
+separately, but explicit pre-deploy correctness cannot depend on a cache hit.
+
 ## QT-ROUTING — Routing and HTTP behavior
 
 - Namespace and page matching must follow `DA-LOCATOR` consistently during
@@ -108,8 +188,10 @@ behavior is delivered.
   arrive at the same time.
 - Page routes must not consume management, API, framework, or static-asset
   routes.
+- Canonical and alternate endpoint locators share the same collision space; an
+  endpoint set is created or moved completely or not at all.
 - Direct responses must use an intentional status, content type, length, cache
-  policy, and display or download disposition.
+  policy, and stored inline or download disposition.
 - Invalid and missing direct URLs must not masquerade as a successful home-page
   response.
 - Content updates must not expose a new payload with stale metadata or the
@@ -135,22 +217,32 @@ sanitization.
   in the site view.
 
 The first supported set can be small, but the design should not assume that all
-future pages are short text. The current `MdPage` form previews Markdown and CSS
-locally inside a sandboxed iframe, without a preview HTTP request. Its Page
-workspace is collapsible without resetting the selected source or layout;
-Markdown and CSS are mutually exclusive source panes. Markdown/CSS and Raw/Steps
-use attached tabs because they replace interchangeable content immediately below
-them. Tabs expose selected/control/panel semantics with roving focus and arrow,
-Home, and End navigation. Split/full-width remains a detached segmented control
-because it rearranges the same content rather than replacing it.
-`Split with preview` places source and preview side by side where space permits,
-while `Full width` places the preview below, and the preview can enter browser
-fullscreen. Markdown has switchable raw and guided section editors backed by the
-same source string. The guided adapter must losslessly derive sections from
-untouched source without approximating a full Markdown parser: safe focused
-forms may stay one physical line, unfamiliar Markdown remains a raw one-line
-section, and complete or unterminated fenced code blocks are grouped as one
-multi-line section.
+future pages are short text. PDF is the selected next type. Its handler receives
+bounded bytes independently from HTTP, verifies the explicit minimum PDF shape,
+fixes media type to `application/pdf`, and never trusts a filename extension to
+establish type. One asset supports independently configured inline and
+attachment endpoints at ordinary valid locators. Browser-native direct viewing
+and a site wrapper around that URL are the first preview adapters; PDF.js,
+thumbnails, text extraction, generic binary, and unbounded streaming are later.
+The wrapper must retain direct-preview and download fallbacks, and the first
+slice must explicitly decide whether HTTP byte ranges are implemented or
+deferred under a bounded size.
+
+The current `MdPage` form previews Markdown and CSS locally inside a sandboxed
+iframe, without a preview HTTP request. Its Page workspace is collapsible
+without resetting the selected source or layout; Markdown and CSS are mutually
+exclusive source panes. Markdown/CSS and Raw/Steps use attached tabs because
+they replace interchangeable content immediately below them. Tabs expose
+selected/control/panel semantics with roving focus and arrow, Home, and End
+navigation. Split/full-width remains a detached segmented control because it
+rearranges the same content rather than replacing it. `Split with preview`
+places source and preview side by side where space permits, while `Full width`
+places the preview below, and the preview can enter browser fullscreen. Markdown
+has switchable raw and guided section editors backed by the same source string.
+The guided adapter must losslessly derive sections from untouched source without
+approximating a full Markdown parser: safe focused forms may stay one physical
+line, unfamiliar Markdown remains a raw one-line section, and complete or
+unterminated fenced code blocks are grouped as one multi-line section.
 
 Collapsed sections are content-only previews rendered in isolated frames with
 the current page CSS; activating one toggles its focused controls and closes the
@@ -328,6 +420,17 @@ Access successes retain content and tags, increment once, and use one shared
 bulk-operation timestamp. Results preserve input order and collapse missing,
 foreign, and unauthorized pages to the same item-level `not_found` outcome.
 
+The planned PDF API must not base64-encode bytes into the existing JSON content
+command. A strict bounded multipart or dedicated upload decoder belongs at the
+HTTP edge and produces the transport-independent PDF input. Its metadata carries
+the publisher-supplied endpoint locator/profile set; no route appends `.pdf` or
+otherwise manufactures an endpoint. Managed replacement remains CSRF- and
+exact-revision-bound; inspection returns safe PDF metadata and replacement
+capability, never the full byte payload in JSON. Create, inspect, and public
+representations return the complete canonical/preview/download link model
+without exposing storage IDs. The current JSON `md-page` contract remains
+compatible.
+
 ## QT-SEARCH — Search and privacy
 
 - Private pages and their content must not appear in public search.
@@ -379,7 +482,15 @@ Tests should cover the behavior that defines the product:
 - the same identity, index, concurrency, and binary/large-content repository
   contract against memory and Deno KV;
 - canonical bounded tag mutation and tag/name/access filter cursor isolation;
-- exclusion of private and guest pages from exploration, including tag queries.
+- exclusion of private and guest pages from exploration, including tag queries;
+- one PDF asset resolving through inline and attachment endpoints with identical
+  bytes and endpoint-specific headers;
+- all-or-nothing endpoint-set create/rename, page-wide access, coherent content
+  replacement, deletion, and single-row management/exploration;
+- staged Kvdex multi-segment assets never becoming reachable while incomplete,
+  plus compatibility or migration from the existing raw Deno KV keyspace;
+- strict bounded PDF upload, malformed/non-PDF rejection, safe filenames, and a
+  browser preview/download acceptance flow.
 
 The page-management and exploration suites cover these domain, repository,
 service, presenter, component, composition, HTTP, and direct-delivery
