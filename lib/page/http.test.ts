@@ -136,12 +136,16 @@ async function create_managed_page(
   adapter: PageHttpAdapter,
   page_name = "notes",
   access = "private",
+  tags?: string[],
 ) {
   return await adapter.collection(
     request("/api/pages", {
       method: "POST",
       headers: creator_headers(),
-      body: create_body("Mine", page_name, access),
+      body: {
+        ...create_body("Mine", page_name, access),
+        ...(tags === undefined ? {} : { tags }),
+      },
     }),
     context(owner_session),
   );
@@ -536,6 +540,459 @@ Deno.test("page HTTP DELETE is revision-bound, bodyless, and final", async () =>
   );
   assertEquals(repeated.status, 404);
   assertEquals((await repeated.json()).error, "not_found");
+});
+
+Deno.test("page HTTP create and PATCH carry bounded canonical tags", async () => {
+  const { adapter } = await make_fixture();
+  const created = await create_managed_page(adapter, "tagged", "public", [
+    " Recipes ",
+    "kitchen",
+    "recipes",
+  ]);
+  assertEquals(created.status, 201);
+  const created_body = await created.json();
+  assertEquals(created_body.page.tags, ["kitchen", "recipes"]);
+
+  const malformed = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: creator_headers(),
+      body: { ...create_body("Mine", "typed"), tags: [7] },
+    }),
+    context(owner_session),
+  );
+  assertEquals(malformed.status, 400);
+  assertEquals((await malformed.json()).error, "invalid_request");
+
+  const invalid = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: creator_headers(),
+      body: { ...create_body("Mine", "invalid"), tags: ["###"] },
+    }),
+    context(owner_session),
+  );
+  assertEquals(invalid.status, 422);
+  assertEquals((await invalid.json()).error, "invalid_tags");
+
+  const trial = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      body: { ...create_body(), tags: ["free"] },
+    }),
+    context(guest_session),
+  );
+  assertEquals(trial.status, 422);
+  assertEquals((await trial.json()).error, "invalid_tags");
+
+  const replaced = await adapter.item(
+    request("/api/pages/page-1", {
+      method: "PATCH",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: { tags: ["Baking"] },
+    }),
+    context(owner_session),
+  );
+  assertEquals(replaced.status, 200);
+  assertEquals((await replaced.json()).page.tags, ["baking"]);
+
+  const cleared = await adapter.item(
+    request("/api/pages/page-1", {
+      method: "PATCH",
+      headers: creator_headers('"page-page-1-r2"'),
+      body: { tags: [] },
+    }),
+    context(owner_session),
+  );
+  assertEquals(cleared.status, 200);
+  assertEquals((await cleared.json()).page.tags, []);
+});
+
+Deno.test("page HTTP list accepts name, access, and tag filters strictly", async () => {
+  const { adapter } = await make_fixture();
+  await create_managed_page(adapter, "soup-recipe", "public", ["kitchen"]);
+  await create_managed_page(adapter, "draft-notes", "private", ["desk"]);
+
+  const filtered = await adapter.collection(
+    request("/api/pages?name=SOUP&access=public&tag=Kitchen"),
+    context(owner_session),
+  );
+  assertEquals(filtered.status, 200);
+  const filtered_body = await filtered.json();
+  assertEquals(filtered_body.pages.length, 1);
+  assertEquals(filtered_body.pages[0].locator.page_name, "soup-recipe");
+  assertEquals(filtered_body.pages[0].tags, ["kitchen"]);
+
+  const empty = await adapter.collection(
+    request("/api/pages?access=public&tag=desk"),
+    context(owner_session),
+  );
+  assertEquals((await empty.json()).pages.length, 0);
+
+  for (
+    const query of [
+      "access=friends",
+      "tag=%23%23%23",
+      `name=${"x".repeat(101)}`,
+    ]
+  ) {
+    const response = await adapter.collection(
+      request(`/api/pages?${query}`),
+      context(owner_session),
+    );
+    assertEquals(response.status, 400, query);
+    assertEquals((await response.json()).error, "invalid_filter");
+  }
+});
+
+Deno.test("page HTTP rename is authenticated, revision-bound, and conflict-safe", async () => {
+  const { adapter } = await make_fixture();
+  await create_managed_page(adapter, "original", "public", ["kept"]);
+  await create_managed_page(adapter, "occupied", "public");
+
+  const missing_csrf = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { page_name: "renamed" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(missing_csrf.status, 403);
+
+  const guest = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      body: { page_name: "renamed" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(guest.status, 401);
+
+  const missing_precondition = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers(),
+      body: { page_name: "renamed" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(missing_precondition.status, 428);
+
+  const conflict = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: { page_name: "occupied" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(conflict.status, 409);
+  assertEquals((await conflict.json()).error, "page_exists");
+
+  const invalid_name = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: { page_name: "nested/../escape" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(invalid_name.status, 422);
+  assertEquals((await invalid_name.json()).error, "invalid_page_name");
+
+  const renamed = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: { page_name: "renamed" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(renamed.status, 200);
+  assertEquals(renamed.headers.get("etag"), '"page-page-1-r2"');
+  const renamed_body = await renamed.json();
+  assertEquals(renamed_body.outcome, "renamed");
+  assertEquals(renamed_body.page.path, "/Mine/renamed");
+  assertEquals(renamed_body.page.tags, ["kept"]);
+  assertEquals(renamed_body.page.content.input.md, "# Page");
+
+  const unchanged = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r2"'),
+      body: { page_name: "renamed" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(unchanged.status, 200);
+  assertEquals((await unchanged.json()).outcome, "unchanged");
+
+  const to_default = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r2"'),
+      body: {},
+    }),
+    context(owner_session),
+  );
+  assertEquals(to_default.status, 200);
+  const default_body = await to_default.json();
+  assertEquals(default_body.page.locator, { namespace: "Mine" });
+  assertEquals(default_body.page.path, "/Mine");
+
+  const foreign = await adapter.item_action(
+    request("/api/pages/page-1/rename", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": other_session.csrf_token,
+        "if-match": '"page-page-1-r3"',
+      },
+      body: { page_name: "stolen" },
+    }),
+    context(other_session),
+  );
+  assertEquals(foreign.status, 404);
+  assertEquals((await foreign.json()).error, "not_found");
+
+  const unknown_action = await adapter.item_action(
+    request("/api/pages/page-1/promote", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r3"'),
+      body: {},
+    }),
+    context(owner_session),
+  );
+  assertEquals(unknown_action.status, 404);
+
+  const wrong_method = await adapter.item_action(
+    request("/api/pages/page-1/rename", { method: "GET" }),
+    context(owner_session),
+  );
+  assertEquals(wrong_method.status, 405);
+  assertEquals(wrong_method.headers.get("allow"), "POST");
+});
+
+Deno.test("page HTTP duplicate copies the source into a generated locator", async () => {
+  const { adapter } = await make_fixture();
+  await create_managed_page(adapter, "source", "private", ["copied"]);
+
+  const with_body = await adapter.item_action(
+    request("/api/pages/page-1/duplicate", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: {},
+    }),
+    context(owner_session),
+  );
+  assertEquals(with_body.status, 400);
+
+  const stale = await adapter.item_action(
+    request("/api/pages/page-1/duplicate", {
+      method: "POST",
+      headers: { "x-csrf-token": csrf_token, "if-match": '"page-page-1-r9"' },
+    }),
+    context(owner_session),
+  );
+  assertEquals(stale.status, 412);
+
+  const duplicated = await adapter.item_action(
+    request("/api/pages/page-1/duplicate", {
+      method: "POST",
+      headers: { "x-csrf-token": csrf_token, "if-match": '"page-page-1-r1"' },
+    }),
+    context(owner_session),
+  );
+  assertEquals(duplicated.status, 201);
+  assertEquals(duplicated.headers.get("location"), "/api/pages/page-2");
+  assertEquals(duplicated.headers.get("etag"), '"page-page-2-r1"');
+  const body = await duplicated.json();
+  assertEquals(body.outcome, "created");
+  assertEquals(body.page.page_id, "page-2");
+  assertEquals(body.page.locator.namespace, "Mine");
+  assert(typeof body.page.locator.page_name === "string");
+  assert(body.page.locator.page_name !== "source");
+  assertEquals(body.page.access, "private");
+  assertEquals(body.page.tags, ["copied"]);
+  assertEquals(body.page.revision, 1);
+  assertEquals(body.page.content.input.md, "# Page");
+
+  const source = await adapter.item(
+    request("/api/pages/page-1"),
+    context(owner_session),
+  );
+  assertEquals((await source.json()).page.revision, 1);
+});
+
+Deno.test("page HTTP bulk access validates fully, then applies per page", async () => {
+  const { adapter } = await make_fixture();
+  await create_managed_page(adapter, "one", "private", ["kept"]);
+  await create_managed_page(adapter, "two", "private");
+
+  const guest = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      body: {
+        access: "public",
+        selection: [{ page_id: "page-1", expected_revision: 1 }],
+      },
+    }),
+    context(guest_session),
+  );
+  assertEquals(guest.status, 401);
+
+  const missing_csrf = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      body: {
+        access: "public",
+        selection: [{ page_id: "page-1", expected_revision: 1 }],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(missing_csrf.status, 403);
+
+  const malformed = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        access: "public",
+        selection: [{ page_id: "page-1", expected_revision: "1" }],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(malformed.status, 400);
+  assertEquals((await malformed.json()).error, "invalid_request");
+
+  const duplicate_selection = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        access: "public",
+        selection: [
+          { page_id: "page-1", expected_revision: 1 },
+          { page_id: "page-1", expected_revision: 1 },
+        ],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(duplicate_selection.status, 422);
+  assertEquals((await duplicate_selection.json()).error, "invalid_selection");
+
+  const invalid_access = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        access: "friends",
+        selection: [{ page_id: "page-1", expected_revision: 1 }],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(invalid_access.status, 422);
+  assertEquals((await invalid_access.json()).error, "invalid_access");
+
+  const applied = await adapter.bulk(
+    request("/api/pages/bulk/access", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        access: "public",
+        selection: [
+          { page_id: "page-1", expected_revision: 1 },
+          { page_id: "page-2", expected_revision: 9 },
+          { page_id: "missing", expected_revision: 1 },
+        ],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(applied.status, 200);
+  const applied_body = await applied.json();
+  assertEquals(applied_body.ok, true);
+  assertEquals(applied_body.results.length, 3);
+  assertEquals(applied_body.results[0].ok, true);
+  assertEquals(applied_body.results[0].page.access, "public");
+  assertEquals(applied_body.results[0].page.tags, ["kept"]);
+  assertEquals(applied_body.results[0].page.etag, '"page-page-1-r2"');
+  assertEquals(applied_body.results[1], {
+    page_id: "page-2",
+    ok: false,
+    error: "revision_conflict",
+  });
+  assertEquals(applied_body.results[2], {
+    page_id: "missing",
+    ok: false,
+    error: "not_found",
+  });
+
+  const unknown = await adapter.bulk(
+    request("/api/pages/bulk/publish", {
+      method: "POST",
+      headers: creator_headers(),
+      body: { selection: [{ page_id: "page-1", expected_revision: 2 }] },
+    }),
+    context(owner_session),
+  );
+  assertEquals(unknown.status, 404);
+
+  const wrong_method = await adapter.bulk(
+    request("/api/pages/bulk/access", { method: "GET" }),
+    context(owner_session),
+  );
+  assertEquals(wrong_method.status, 405);
+  assertEquals(wrong_method.headers.get("allow"), "POST");
+});
+
+Deno.test("page HTTP bulk delete reports ordered, independent outcomes", async () => {
+  const { adapter } = await make_fixture();
+  await create_managed_page(adapter, "one", "public");
+  await create_managed_page(adapter, "two", "public");
+
+  const deleted = await adapter.bulk(
+    request("/api/pages/bulk/delete", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        selection: [
+          { page_id: "page-2", expected_revision: 1 },
+          { page_id: "page-1", expected_revision: 9 },
+        ],
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(deleted.status, 200);
+  const deleted_body = await deleted.json();
+  assertEquals(deleted_body.results, [
+    { page_id: "page-2", ok: true },
+    { page_id: "page-1", ok: false, error: "revision_conflict" },
+  ]);
+
+  const repeated = await adapter.bulk(
+    request("/api/pages/bulk/delete", {
+      method: "POST",
+      headers: creator_headers(),
+      body: { selection: [{ page_id: "page-2", expected_revision: 1 }] },
+    }),
+    context(owner_session),
+  );
+  assertEquals((await repeated.json()).results, [
+    { page_id: "page-2", ok: false, error: "not_found" },
+  ]);
+
+  const survivor = await adapter.item(
+    request("/api/pages/page-1"),
+    context(owner_session),
+  );
+  assertEquals(survivor.status, 200);
 });
 
 Deno.test("page HTTP rejects unsupported methods with no-store Allow responses", async () => {

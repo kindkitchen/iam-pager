@@ -301,11 +301,13 @@ oversized bodies return `400`/`413`; unsupported media types return `415`; taken
 names return `409`; invalid locator names return `422`. Responses use
 `no-store`.
 
-The composed page-management HTTP adapter serves `POST`/`GET /api/pages` and
-`GET`/`PATCH`/`DELETE /api/pages/:page_id`. Creation uses nested
-locator/access/content input and session-derived trial-versus-managed semantics;
-authenticated mutation requires the shared constant-time CSRF header check, and
-a stale creator header on a guest session cannot downgrade into trial
+The composed page-management HTTP adapter serves `POST`/`GET /api/pages`,
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`, revision-bound
+`POST /api/pages/:page_id/(rename|duplicate)` actions, and
+`POST /api/pages/bulk/(access|delete)` commands. Creation uses nested
+locator/access/tags/content input and session-derived trial-versus-managed
+semantics; authenticated mutation requires the shared constant-time CSRF header
+check, and a stale creator header on a guest session cannot downgrade into trial
 publication. Authenticated list/inspect output excludes owner IDs, source from
 lists, and stored derivations. PATCH and DELETE require one canonical strong
 page/revision ETag, mapping missing, malformed, and stale preconditions to
@@ -313,16 +315,18 @@ page/revision ETag, mapping missing, malformed, and stale preconditions to
 limits, and cursors are bounded and strict. All management/error responses are
 no-store. The exact public contract is documented in
 [`docs/api/pages.md`](../api/pages.md); the superseded flat endpoint and its
-locator-only application/storage path have been removed.
+locator-only application/storage path have been removed. Managed list queries
+accept AND-combined name/access/tag filters, PATCH can replace or clear tags,
+and the public site GET form projects exact-tag exploration.
 
-Bulk access and deletion remain HTTP-independent. Their service boundary accepts
-only 1-100 distinct, syntactically valid page ID/positive-revision pairs and
-validates the complete selection before mutation. Accepted items execute in
-selection order with current owner/namespace authority and repository revision
-conditions; one item failure does not roll back another. Access successes retain
-content and tags, increment once, and use one shared bulk-operation timestamp.
-Results preserve input order and collapse missing, foreign, and unauthorized
-pages to the same item-level `not_found` outcome.
+Bulk access and deletion retain their HTTP-independent service boundary behind
+strict routes. They accept only 1-100 distinct, syntactically valid page
+ID/positive-revision pairs and validate the complete selection before mutation.
+Accepted items execute in selection order with current owner/namespace authority
+and repository revision conditions; one item failure does not roll back another.
+Access successes retain content and tags, increment once, and use one shared
+bulk-operation timestamp. Results preserve input order and collapse missing,
+foreign, and unauthorized pages to the same item-level `not_found` outcome.
 
 ## QT-SEARCH — Search and privacy
 

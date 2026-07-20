@@ -33,10 +33,9 @@ creator listing; private and missing pages receive the same real 404.
 
 ## EX-EXPLORE — Explorer finds public pages
 
-The site exposes a bounded browse list of public creator-backed pages. Its
-current form narrows by a case-insensitive namespace substring, a page-name
-substring, or both. The underlying explorer also accepts one exact canonical
-tag; all supplied fields use AND semantics. Results preserve the creator's
+The site exposes a bounded browse list of public creator-backed pages. Its form
+narrows by a case-insensitive namespace substring, a page-name substring, one
+exact canonical tag, or an AND-combination. Results preserve the creator's
 locator casing and open the thin site view, from which direct content, the
 creator's default page when present, and other public pages remain available.
 Opaque continuation keeps the active search fields attached to the next result
@@ -47,8 +46,8 @@ storage implementations, not by the web component. A current public-to-private
 change removes a page from subsequent browse and search results immediately.
 Guest pages remain reachable only by known direct or site-view locators.
 
-Tag filtering is implemented in the HTTP-independent explorer but not yet in the
-site form. Text-content extraction and indexing remain later scope.
+The site form exposes tag filtering and matching rows show canonical tags.
+Text-content extraction and indexing remain later scope.
 
 ## EX-PUBLISH — Publisher creates a page
 
@@ -90,10 +89,10 @@ including tags to a fresh ID. Bounded raw bulk commands accept 1-100 distinct,
 explicit page/revision selections for one access target or deletion, then return
 an ordered success, stale, or non-disclosing missing result for each item;
 accepted items are independent rather than transactionally all-or-nothing.
-Memory and Deno KV enforce each mutation atomically. The current API and site
-management panel still expose only create, list, inspect, update, and delete
-without tag or filter fields; rename, duplicate, tag/filter, and bulk transport
-and UI remain later scope.
+Memory and Deno KV enforce each mutation atomically. The current API exposes
+create/update tags, managed filters, rename, duplicate, and both bulk commands
+through the same strict session/CSRF/revision boundary as earlier management.
+The site management panel still exposes only its earlier individual controls.
 
 ## EX-EXTERNAL — Creator connects external storage later
 

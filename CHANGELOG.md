@@ -2,6 +2,16 @@
 
 ## 2026-07-19
 
+- Exposed the expanded page-management contracts through strict HTTP routes:
+  managed create/update/list now carry bounded canonical tags and
+  name/access/tag filters; revision-bound rename and bodyless duplicate actions
+  return current representations and ETags; bulk access/delete accept bounded
+  page/revision selections and return ordered per-page outcomes. Public site
+  exploration now accepts one exact tag, preserves it through continuation, and
+  shows result tags. Added route-independent adapter/presenter/component
+  coverage and documented all request, response, CSRF, revision, and error
+  shapes.
+
 - Added bounded HTTP-independent bulk management contracts. A creator can submit
   1-100 distinct page ID/revision pairs for one access target or deletion; the
   service validates the complete selection before mutation, preserves result

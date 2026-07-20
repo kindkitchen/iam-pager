@@ -25,13 +25,13 @@ The creator can create, inspect, update, make public or private, and delete
 pages. Visitors can directly open public pages; private pages remain limited to
 the creator session.
 
-The API-first core of this slice is composed: Fresh exposes collection and item
-management routes over the selected page repository, and direct delivery uses
-the same page service with session-derived authority. The site now also projects
-that boundary as a creator management panel - bounded listing with continuation,
-inspection, content editing, revision-bound access changes, and confirmed
-deletion - without adding management rules to the web layer. The expanded
-operations of DS-MANAGE remain later work.
+The API-first core of this slice is composed: Fresh exposes collection, item,
+action, and bulk management routes over the selected page repository, and direct
+delivery uses the same page service with session-derived authority. The site now
+also projects that boundary as a creator management panel - bounded listing with
+continuation, inspection, content editing, revision-bound access changes, and
+confirmed deletion - without adding management rules to the web layer. DS-MANAGE
+now extends the API; its creator-panel controls remain later work.
 
 ## DS-VIEW — Present a page through the site
 
@@ -54,15 +54,15 @@ share a real 404 response.
 The first exploration slice is composed on the site: visitors can browse public
 managed pages or search by case-insensitive namespace and page-name substrings,
 independently or with AND semantics. Results are deterministic, bounded, and
-continued by an opaque cursor bound to both query fields; each opens the DS-VIEW
-wrapper and its direct/default/other-page links.
+continued by an opaque cursor bound to the complete query scope; each opens the
+DS-VIEW wrapper and its direct/default/other-page links.
 
 `PublicPageExplorer` keeps this behavior outside Fresh. Memory and Deno KV scan
 their current locator state behind the same repository contract and conformance
 suite, excluding private and guest pages before any result is returned. The
-HTTP-independent explorer now also accepts one exact canonical tag, AND-combined
-with either name query and bound into continuation cursors. The current web form
-does not expose that field. Text-content search, indexing, relevance, and
+explorer also accepts one exact canonical tag, AND-combined with either name
+query and bound into continuation cursors. The web form exposes all three fields
+and shows canonical result tags. Text-content search, indexing, relevance, and
 view-count sorting remain later work.
 
 ## DS-MANAGE — Expand authenticated management
@@ -85,8 +85,11 @@ The raw service also exposes bounded bulk access and deletion interfaces: each
 command prevalidates 1-100 distinct page ID/revision pairs, applies accepted
 items independently under current ownership and exact revisions, and preserves
 selection order in one result per page. A failed item does not roll back another
-item; malformed selections cannot partially mutate. These expanded operations
-are not yet exposed by the page API or creator panel.
+item; malformed selections cannot partially mutate. Strict Fresh routes now
+expose managed tags and filters, revision-bound rename/duplicate actions, and
+bulk access/delete with browser-session authentication, synchronizer CSRF, and
+source revisions. The creator panel still exposes only its earlier individual
+controls.
 
 ## DS-EXTERNAL — Evaluate external storage
 

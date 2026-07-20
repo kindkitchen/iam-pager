@@ -10,6 +10,7 @@ export default define.page(async function Home({ state, url }) {
   const public_exploration = await services.public_exploration.present({
     namespace_query: url.searchParams.get("namespace") ?? undefined,
     page_name_query: url.searchParams.get("page") ?? undefined,
+    tag: url.searchParams.get("tag") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
   });
   return (

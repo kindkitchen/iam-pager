@@ -89,31 +89,33 @@ The HTTP-independent management core now implements trial publishing and managed
 create, bounded list, source inspection, revision-bound content/access update,
 deletion, and owner-only private delivery over the `PageRepository` interface.
 Its memory and Deno KV adapters are complete and pass the same repository
-conformance. Fresh collection and item routes now expose the strict bounded
-create/list/inspect/update/delete adapter with synchronizer CSRF, owner-safe
-presenters, pagination, and strong revision ETags. The composed catch-all route
-uses the same service and session-derived actor for public or owner-private
-delivery, while deployment storage selection targets `PageRepository`. The site
-renders a creator management panel over these same contracts: a server presenter
-lists the first page of managed rows, and the island continues through
-`/api/pages` for pagination, inspection, editor-based content updates, access
-toggling, and deletion, always revision-bound via the published strong ETags.
-The DS-MANAGE core now adds explicit `ManagedPageRenamer` and
-`ManagedPageDuplicator` contracts plus bounded tag mutation and filtering.
-Rename is revision-bound, keeps stable identity and metadata, atomically moves
-locator and owner indexes, and reports a managed destination conflict; duplicate
-copies one exact source revision, including tags, under a bounded generated
-available name and fresh ID. Managed create/update normalize at most ten tags
-into a lowercase sorted unique set, while list supports AND-combined page-name
-substring, exact access, and exact tag filters. Public exploration accepts the
-same exact tag without disclosing private or guest pages. Memory and Deno KV
-pass common mutation/filter/cursor conformance, and old durable records without
-tags read as untagged. `ManagedPageBulkAccessChanger` and
-`ManagedPageBulkDeleter` now accept a prevalidated bounded set of distinct
-page/revision pairs and return one ordered, independently revision-bound,
-non-disclosing result per page. Partial item failure does not undo successful
-items, while invalid selections fail before any mutation. HTTP endpoints and
-creator controls for these expanded operations are still pending.
+conformance. Fresh collection, item, action, and bulk routes now expose the
+strict bounded management adapter with synchronizer CSRF, owner-safe presenters,
+pagination, and strong revision ETags. The composed catch-all route uses the
+same service and session-derived actor for public or owner-private delivery,
+while deployment storage selection targets `PageRepository`. The site renders a
+creator management panel over these same contracts: a server presenter lists the
+first page of managed rows, and the island continues through `/api/pages` for
+pagination, inspection, editor-based content updates, access toggling, and
+deletion, always revision-bound via the published strong ETags. The DS-MANAGE
+core now adds explicit `ManagedPageRenamer` and `ManagedPageDuplicator`
+contracts plus bounded tag mutation and filtering. Rename is revision-bound,
+keeps stable identity and metadata, atomically moves locator and owner indexes,
+and reports a managed destination conflict; duplicate copies one exact source
+revision, including tags, under a bounded generated available name and fresh ID.
+Managed create/update normalize at most ten tags into a lowercase sorted unique
+set, while list supports AND-combined page-name substring, exact access, and
+exact tag filters. Public exploration accepts the same exact tag without
+disclosing private or guest pages. Memory and Deno KV pass common
+mutation/filter/cursor conformance, and old durable records without tags read as
+untagged. `ManagedPageBulkAccessChanger` and `ManagedPageBulkDeleter` now accept
+a prevalidated bounded set of distinct page/revision pairs and return one
+ordered, independently revision-bound, non-disclosing result per page. Partial
+item failure does not undo successful items, while invalid selections fail
+before any mutation. Strict HTTP routes now expose tags and managed filters,
+revision-bound rename/duplicate actions, and bulk access/delete with session
+authentication, synchronizer CSRF, and exact source revisions. Expanded
+creator-panel controls are still pending.
 
 ## CP-EXPLORE — Public exploration
 
@@ -133,12 +135,11 @@ summaries expose no page ID, revision, access field, or owner identity.
 Eligibility is read from current page state, so private pages and guest trials
 never enter browsing or search and a public-to-private change disappears
 immediately. The site projects the model as a bounded GET search form and result
-list.
+list, including one exact tag field and canonical tags on matching rows.
 
-Tag filtering is available in the HTTP-independent explorer; its web search
-control remains pending. Text-content extraction, indexing, relevance, and
-view-count sorting remain later work and can be added without changing page URLs
-or the visitor-facing contract.
+Text-content extraction, indexing, relevance, and view-count sorting remain
+later work and can be added without changing page URLs or the visitor-facing
+contract.
 
 ## CP-EXTERNAL — External content storage
 

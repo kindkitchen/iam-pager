@@ -7,6 +7,7 @@ Deno.test("public exploration component renders GET search and safe result links
   const exploration: PublicExploration = {
     namespace_query: "Alice",
     page_name_query: "notes",
+    tag: "news",
     is_search: true,
     pages: [{
       namespace: "Alice",
@@ -16,9 +17,10 @@ Deno.test("public exploration component renders GET search and safe result links
       site_path: "/site/Alice/Notes",
       content_type: "md-page",
       size_bytes: 42,
+      tags: ["news", "release"],
       updated_at: new Date("2026-07-19T02:00:00.000Z"),
     }],
-    next_path: "/site?namespace=Alice&page=notes&cursor=next",
+    next_path: "/site?namespace=Alice&page=notes&tag=news&cursor=next",
     error: null,
   };
 
@@ -30,6 +32,8 @@ Deno.test("public exploration component renders GET search and safe result links
   assertStringIncludes(html, 'method="GET"');
   assertStringIncludes(html, 'name="namespace" value="Alice"');
   assertStringIncludes(html, 'name="page" value="notes"');
+  assertStringIncludes(html, 'name="tag" value="news"');
+  assertStringIncludes(html, "tags: news, release");
   assertStringIncludes(html, 'href="/site/Alice/Notes"');
   assertStringIncludes(html, 'href="/Alice/Notes"');
   assertStringIncludes(html, "Private and guest pages never appear here");
@@ -43,6 +47,7 @@ Deno.test("public exploration component renders a continuation error without row
       exploration={{
         namespace_query: "",
         page_name_query: "",
+        tag: "",
         is_search: false,
         pages: [],
         next_path: null,

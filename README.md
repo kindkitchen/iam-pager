@@ -153,10 +153,11 @@ The first publishing slice currently provides:
   enter creator listings. The durable adapter uses coherent ID/locator/owner
   indexes and immutable binary-safe content chunks in a fresh keyspace. The
   composition root selects one page repository and exposes this service plus its
-  strict HTTP adapter to thin Fresh collection, item, direct-delivery, and
-  wrapped-view routes. The current publishing form sends the nested explicit
-  public-create request and creator CSRF token without losing draft state on API
-  errors; see [the page API contract](docs/api/pages.md);
+  strict HTTP adapter to thin Fresh collection, item, action, bulk,
+  direct-delivery, and wrapped-view routes. The current publishing form sends
+  the nested explicit public-create request and creator CSRF token without
+  losing draft state on API errors; see
+  [the page API contract](docs/api/pages.md);
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with soft in-field four-word random locator helpers, a collapsible
@@ -176,11 +177,13 @@ The first publishing slice currently provides:
   filter with AND semantics. Results are deterministically cursor-paginated and
   open the public wrapper or direct content; memory and Deno KV satisfy the same
   exclusion and cursor conformance, so private and guest pages never cross the
-  contract. The current web form exposes the name fields only; tag controls and
-  text-content search remain later work;
-- `GET`/`POST /api/pages` and `GET`/`PATCH`/`DELETE /api/pages/:page_id` for
-  trial creation and authenticated page management, including pagination,
-  owner-safe source inspection, CSRF, and revision ETags;
+  contract. The web form exposes both name fields and one exact tag;
+  text-content search remains later work;
+- `GET`/`POST /api/pages`, `GET`/`PATCH`/`DELETE /api/pages/:page_id`,
+  revision-bound rename/duplicate actions, and per-page-result bulk
+  access/delete commands for trial creation and authenticated page management,
+  including tags, name/access/tag filters, pagination, owner-safe source
+  inspection, CSRF, and revision ETags;
 - authenticated `GET /api/namespaces` and CSRF-protected `POST /api/namespaces`
   for listing and reserving creator namespaces;
 - raw delivery at every other valid locator, with explicit status, media type,
@@ -194,10 +197,11 @@ sessions and pages separately opt into that same database; either durable store
 is rejected unless ownership is durable. Pages in unreserved namespaces remain
 replaceable by anyone. Rename, duplicate, bounded tags, managed name/access/tag
 filtering, public tag exploration, and explicit per-page-result bulk access and
-deletion now exist in the HTTP-independent core but are not yet exposed through
-the API or site. Total page capacity, publishing frequency, guest expiry,
-exploration text indexing/relevance, and backend migration are not implemented;
-these endpoints are not ready for untrusted public traffic.
+deletion are exposed by the page API and public site search; the creator panel
+still exposes only the earlier individual controls. Total page capacity,
+publishing frequency, guest expiry, exploration text indexing/relevance, and
+backend migration are not implemented; these endpoints are not ready for
+untrusted public traffic.
 
 ## Local development
 
@@ -221,8 +225,8 @@ claim. The creator management panel lists, inspects, edits, changes access, and
 deletes their pages over the revision-bound management API. Core rename,
 generated-name duplicate, bounded tag mutation, managed name/access/tag
 filtering, public tag exploration, and bounded per-page-result bulk
-access/deletion contracts are implemented, but their API and site controls
-remain future work.
+access/deletion contracts are implemented and exposed by the API or public
+search. Expanded creator-panel controls remain future work.
 
 Every other entry point defaults to the production `__Host-iam_pager_session`
 cookie with `Secure`; do not set local session-cookie mode in a deployed

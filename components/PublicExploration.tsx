@@ -1,5 +1,6 @@
 import type { PublicExploration } from "../lib/ui/public-exploration.ts";
 import { max_public_exploration_query_length } from "../lib/page/interfaces.ts";
+import { max_page_tag_length } from "../lib/page/model.ts";
 
 export interface PublicExplorationProps {
   readonly exploration: PublicExploration;
@@ -22,8 +23,8 @@ export function PublicExplorationPanel(
             : "Explore public pages"}
         </h2>
         <p>
-          Browse creator-backed public pages or narrow them by namespace and
-          page name. Private and guest pages never appear here.
+          Browse creator-backed public pages or narrow them by namespace, page
+          name, and exact tag. Private and guest pages never appear here.
         </p>
       </div>
 
@@ -48,6 +49,16 @@ export function PublicExplorationPanel(
             autocomplete="off"
           />
         </label>
+        <label>
+          Exact tag
+          <input
+            type="search"
+            name="tag"
+            value={exploration.tag}
+            maxLength={max_page_tag_length}
+            autocomplete="off"
+          />
+        </label>
         <div class="public-exploration-form-actions">
           <button type="submit">Explore</button>
           {exploration.is_search && <a href="/site">Clear search</a>}
@@ -58,7 +69,7 @@ export function PublicExplorationPanel(
         ? (
           <p class="error-message" role="alert">
             {exploration.error === "invalid_query"
-              ? "Search values are too long. Shorten them and try again."
+              ? "Search values or tag are invalid. Check them and try again."
               : "That result continuation is invalid. Start the search again."}
           </p>
         )
@@ -87,6 +98,7 @@ export function PublicExplorationPanel(
                   <time dateTime={page.updated_at.toISOString()}>
                     {page.updated_at.toISOString().slice(0, 10)}
                   </time>
+                  {page.tags.length > 0 && ` · tags: ${page.tags.join(", ")}`}
                 </p>
                 <nav aria-label={`${page.label} links`}>
                   <a href={page.site_path}>Open site view</a>

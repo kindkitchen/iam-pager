@@ -102,8 +102,8 @@ atomically replacing its case-insensitive locator and owner-list position inside
 the same namespace. Another managed page is a conflict; an older trial may be
 retired as it is during managed creation. Duplication leaves the source
 unchanged and creates revision 1 under a bounded server-generated available name
-and fresh ID from the exact expected source revision. HTTP and site projections
-remain pending.
+and fresh ID from the exact expected source revision. Strict HTTP actions now
+project both operations; creator-panel controls remain pending.
 
 Authenticated storage should be durable enough for normal management use, but
 the app should not promise that content can never disappear under any

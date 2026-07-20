@@ -55,21 +55,20 @@ have no page-name value and therefore match only when that query is absent.
 Private and guest pages are excluded from current storage state before results
 cross the public contract.
 
-Tag filtering is now implemented in the HTTP-independent explorer and bound into
-its cursor scope; the site control remains pending. Text-content extraction and
+Tag filtering is implemented in the HTTP-independent explorer, bound into its
+cursor scope, and exposed by the site GET form. Text-content extraction and
 indexing, relevance ranking, and view-count sorting are not part of this MVP
 slice. The `PublicPageExplorer` boundary permits a later index without changing
 locators, site-view links, or visitor-safe result summaries.
 
 ### OQ-API — API surface
 
-The first concrete page API is settled as `POST`/`GET /api/pages` and
-`GET`/`PATCH`/`DELETE /api/pages/:page_id`, with strict nested JSON, browser
-session authentication, synchronizer-token CSRF for authenticated mutations,
-opaque pagination, and strong revision ETags. Direct retrieval remains the
-locator URL. Revision-bound rename and generated-name duplicate now exist in the
-HTTP-independent core, but their HTTP shapes and all other expanded management
-operations remain later scope. External bearer credentials are also later; see
+The concrete page API includes `POST`/`GET /api/pages`,
+`GET`/`PATCH`/`DELETE /api/pages/:page_id`, revision-bound rename/duplicate
+actions, and bounded bulk access/delete commands, with strict nested JSON,
+browser session authentication, synchronizer-token CSRF for authenticated
+mutations, opaque pagination, and exact source revisions. Direct retrieval
+remains the locator URL. External bearer credentials are later; see
 [`docs/api/pages.md`](../api/pages.md).
 
 ## OQ-OPEN — MVP decisions still needed

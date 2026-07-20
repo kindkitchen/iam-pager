@@ -82,6 +82,7 @@ Deno.test("composition root exposes public exploration over the shared page serv
     actor: { kind: "user", user_id: "owner-1" },
     locator: { namespace: "Alice", page_name: "Notes" },
     access: "public",
+    tags: ["News"],
     content: { content_type: "md-page", input: { md: "# Public" } },
   });
   const private_page = await services.pages.create_managed({
@@ -102,6 +103,7 @@ Deno.test("composition root exposes public exploration over the shared page serv
 
   const exploration = await services.public_exploration.present({
     page_name_query: "notes",
+    tag: "news",
   });
   assertEquals(
     exploration.pages.map((page) => page.site_path),
