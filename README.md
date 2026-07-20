@@ -161,6 +161,16 @@ The first publishing slice currently provides:
   the nested explicit public-create request and creator CSRF token without
   losing draft state on API errors; see
   [the page API contract](docs/api/pages.md);
+- the next page/content persistence foundation, not yet selected by the current
+  service: immutable `ContentAsset` identities are created and read through
+  focused capabilities, while a separate `PageAggregate` stores one asset
+  reference and a complete canonical/alternate endpoint set. Atomic capability
+  interfaces cover trial and managed creation, combined revision-bound content,
+  endpoint, access, and tag mutation, immutable-asset-sharing duplication, and
+  deletion. The process-local reference implementation passes a shared
+  backend-neutral conformance suite for staging, collision, takeover,
+  concurrency, all-or-none endpoint movement, coherent asset switches, and
+  retained shared assets;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - the site shell and mobile-first guest/creator publishing form at `/` and
   `/site`, with soft in-field four-word random locator helpers, a collapsible
@@ -288,23 +298,29 @@ publisher supplies both valid locators and each delivery profile. A path ending
 in `.pdf` is only an example and has no special routing, generation, or delivery
 semantics; behavior is stored on the endpoint binding.
 
-The first contract step is implemented: endpoint intent has one explicit
+The first two contract steps are implemented. Endpoint intent has one explicit
 canonical binding plus at most seven alternates, all at unique valid locators in
 one case-insensitive namespace. The pure planner applies the content type's
 declared delivery-profile support, preserves publisher spelling, and gives
-alternate input order no meaning; `md-page` declares inline-only delivery. This
-does not yet change the stored one-locator page aggregate or public API.
+alternate input order no meaning; `md-page` declares inline-only delivery.
+Immutable `ContentAsset` identity/read/create capabilities now sit beside a
+`PageAggregate` whose content reference and complete endpoint set change through
+focused atomic persistence capabilities. The process-local reference passes the
+shared backend-neutral conformance suite, including staged-asset requirements,
+all-or-none endpoint claims and moves, concurrent winners, coherent asset
+switches, safe immutable-asset sharing, and endpoint-wide deletion.
 
-Next, immutable content identity and atomic page/endpoint persistence move
-behind interfaces with a memory reference and shared conformance suite, followed
-by PDF content logic, a conforming Kvdex-backed Deno KV page/content adapter,
-strict bounded upload/direct delivery, and finally the site projection. Kvdex
-remains inside the adapter. Its segmented blob writes do not by themselves
-preserve the repository's atomic visibility guarantees, so immutable assets must
-be fully staged before page endpoints can reference them. Existing raw Deno KV
-records require explicit compatibility or migration before that adapter becomes
-the durable default. Generic raw-binary publishing, PDF.js, thumbnails, text
-extraction, and external storage remain later work.
+Next, `PageService` and the current one-endpoint `md-page` flow move onto these
+contracts without changing their JSON/API behavior. PDF content logic, a
+conforming Kvdex-backed Deno KV page/content adapter, strict bounded
+upload/direct delivery, and the site projection follow. The new memory
+foundation is not yet the composed application repository. Kvdex remains inside
+the durable adapter. Its segmented blob writes do not by themselves preserve
+atomic visibility, so immutable assets must be fully staged before page
+endpoints can reference them. Existing raw Deno KV records require explicit
+compatibility or migration before that adapter becomes the durable default.
+Generic raw-binary publishing, PDF.js, thumbnails, text extraction, and external
+storage remain later work.
 
 ## Local development
 

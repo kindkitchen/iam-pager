@@ -1,4 +1,21 @@
+import type { ContentAsset, ContentAssetId } from "./asset.ts";
 import type { DeliveryPayload, DeliveryProfile } from "./model.ts";
+
+export type CreateContentAssetResult =
+  | { readonly ok: true; readonly asset: ContentAsset }
+  | { readonly ok: false; readonly reason: "content_asset_id_conflict" };
+
+/** Creates immutable assets; an existing identity is never overwritten. */
+export interface ContentAssetCreator {
+  create_content_asset(asset: ContentAsset): Promise<CreateContentAssetResult>;
+}
+
+/** Internal asset access. Public delivery must first resolve an eligible page. */
+export interface ContentAssetReader {
+  find_content_asset_by_id(
+    content_asset_id: ContentAssetId,
+  ): Promise<ContentAsset | null>;
+}
 
 export type ContentResult<T> =
   | { ok: true; value: T }

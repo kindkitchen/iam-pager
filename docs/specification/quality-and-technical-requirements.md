@@ -48,17 +48,28 @@ exploration extends that boundary through `PublicPageExplorer`: callers supply
 optional name queries and an opaque continuation, while the selected repository
 decides whether the MVP scan or a future index satisfies it.
 
-The endpoint foundation now exposes a transport/storage-neutral
+The endpoint foundation exposes a transport/storage-neutral
 `PageEndpointPlanner` interface and default implementation. It accepts one
 explicit canonical binding plus up to seven alternates, validates every locator
 through a narrow capability, enforces one namespace and case-insensitive claim
 per binding, applies the selected content type's supported profile declaration,
 and returns detached, deterministically ordered intent. `md-page` declares
-inline-only delivery. This pure policy is covered independently while page
-aggregate persistence still has its current one-locator representation.
+inline-only delivery.
 
-The remaining PDF work must evolve that aggregate before adding transport code.
-One logical page keeps one management/exploration representation while endpoint
+The persistence foundation now adds immutable `ContentAsset` identity, creation,
+and read capabilities plus a separate `PageAggregate` with one asset reference
+and a complete endpoint set. Focused capabilities cover endpoint resolution,
+trial/managed creation, one revision-bound combined mutation, duplication, and
+deletion instead of making the web or content type depend on a single broad
+adapter interface. Asset creation is a staging operation; only a fully created
+asset can enter an atomic page/endpoint commit. The memory reference and shared
+backend-neutral conformance cover complete endpoint claims/moves,
+content-reference flips, immutable sharing, concurrency, and retention after
+page deletion. The current `PageService`, selected repositories, and API
+intentionally remain on their compatible one-endpoint `md-page` path until the
+next refactor step.
+
+That refactor will keep one management/exploration representation while endpoint
 resolution selects an inline or attachment delivery profile and then reads its
 shared content asset. Fresh, `Request`, `Response`, multipart parsing, browser
 preview, Deno KV, and Kvdex types remain outside these contracts.
@@ -110,17 +121,25 @@ conditions clean unreferenced new chunks best-effort. Neither ownership nor
 session settings alone imply that pages survive a restart; only the explicit
 page-storage opt-in selects durable page persistence.
 
+`MemoryPageAggregateRepository` is the reference for the new split model. Its
+synchronous check/set phases atomically update the logical page and every
+case-insensitive endpoint index, while immutable assets are cloned at boundaries
+and never overwritten or deleted by page operations. It is a contract reference,
+not yet the composed runtime store; the existing memory and raw-Deno-KV
+`PageRepository` adapters continue serving the current API during migration.
+
 The planned replacement page/content adapter uses pinned Kvdex 3.6.7 only as an
-implementation detail over Deno KV. It must satisfy the unchanged repository
-contracts and shared conformance before becoming the selected durable adapter.
-Kvdex encoded collections segment `Uint8Array`, but cannot join Kvdex atomic
-builders; values beyond Deno KV's 800 KiB atomic mutation limit require batched,
-non-atomic segment commits. Large immutable assets must therefore be staged
-while unreferenced and become reachable only after all segments succeed and an
-atomic metadata/endpoint commit publishes the reference. Critical locator and
-owner indexes may not use Kvdex shortcuts whose delete/update behavior weakens
-atomic rename, replacement, or deletion. Existing raw-KV records require an
-explicit compatibility or migration path before selection changes.
+implementation detail over Deno KV. It must satisfy the new aggregate
+conformance plus the preserved application behavior before becoming the selected
+durable adapter. Kvdex encoded collections segment `Uint8Array`, but cannot join
+Kvdex atomic builders; values beyond Deno KV's 800 KiB atomic mutation limit
+require batched, non-atomic segment commits. Large immutable assets must
+therefore be staged while unreferenced and become reachable only after all
+segments succeed and an atomic metadata/endpoint commit publishes the reference.
+Critical locator and owner indexes may not use Kvdex shortcuts whose
+delete/update behavior weakens atomic rename, replacement, or deletion. Existing
+raw-KV records require an explicit compatibility or migration path before
+selection changes.
 
 Deno KV ownership records have no application expiry or deletion workflow yet.
 Changing backend or database path performs no migration, and backup/recovery is

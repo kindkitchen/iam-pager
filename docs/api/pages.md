@@ -9,7 +9,10 @@
 > a complete user-configured set of 1–8 endpoints over the same asset. Exactly
 > one endpoint is explicitly canonical; each binding supplies an ordinary
 > same-namespace locator and a content-supported `inline` or `attachment`
-> profile. No filename suffix has special routing or delivery meaning.
+> profile. No filename suffix has special routing or delivery meaning. The
+> immutable-asset/atomic-endpoint memory contract now exists below the
+> application layer, but this HTTP contract remains on the composed compatible
+> one-endpoint `md-page` path until the service refactor.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the

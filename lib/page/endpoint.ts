@@ -22,6 +22,80 @@ export interface PageEndpointSet {
   readonly alternates: readonly PageEndpointBinding[];
 }
 
+/**
+ * First storage-level endpoint-set invariant violation. Locator policy remains
+ * the planner's responsibility; persistence enforces only coherent structure,
+ * namespace/identity uniqueness, and deterministic ordering.
+ */
+export function page_endpoint_set_violation(
+  endpoint_set: unknown,
+): string | null {
+  if (
+    typeof endpoint_set !== "object" || endpoint_set === null ||
+    Array.isArray(endpoint_set)
+  ) {
+    return "endpoint_set must be an object";
+  }
+  const candidate = endpoint_set as Record<string, unknown>;
+  if (!Array.isArray(candidate.alternates)) {
+    return "endpoint alternates must be an array";
+  }
+  const bindings = [candidate.canonical, ...candidate.alternates];
+  if (bindings.length < 1 || bindings.length > max_page_endpoints) {
+    return `endpoint set must contain 1-${max_page_endpoints} bindings`;
+  }
+
+  const claimed_keys = new Set<string>();
+  let namespace_key: string | null = null;
+  let previous_alternate_key: string | null = null;
+  for (const [index, value] of bindings.entries()) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return "endpoint binding must be an object";
+    }
+    const binding = value as Record<string, unknown>;
+    if (
+      typeof binding.locator !== "object" || binding.locator === null ||
+      Array.isArray(binding.locator)
+    ) {
+      return "endpoint locator must be an object";
+    }
+    const locator = binding.locator as Record<string, unknown>;
+    if (typeof locator.namespace !== "string" || locator.namespace === "") {
+      return "endpoint namespace must be non-empty";
+    }
+    if (
+      locator.page_name !== undefined &&
+      (typeof locator.page_name !== "string" || locator.page_name === "")
+    ) {
+      return "endpoint page_name must be non-empty when present";
+    }
+    if (!is_valid_delivery_profile(binding.delivery_profile)) {
+      return "endpoint delivery_profile must be valid";
+    }
+    const typed_locator = locator as unknown as Locator;
+    const current_namespace_key = typed_locator.namespace.toLowerCase();
+    namespace_key ??= current_namespace_key;
+    if (current_namespace_key !== namespace_key) {
+      return "endpoint namespaces must match case-insensitively";
+    }
+    const key = locator_key(typed_locator);
+    if (claimed_keys.has(key)) {
+      return "endpoint locators must be unique case-insensitively";
+    }
+    claimed_keys.add(key);
+    if (index > 0) {
+      if (
+        previous_alternate_key !== null &&
+        compare_strings(previous_alternate_key, key) >= 0
+      ) {
+        return "endpoint alternates must be ordered by locator identity";
+      }
+      previous_alternate_key = key;
+    }
+  }
+  return null;
+}
+
 /** Publisher intent before locator and content-profile policy are applied. */
 export interface PageEndpointSetIntent {
   readonly canonical: PageEndpointBinding;

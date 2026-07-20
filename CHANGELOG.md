@@ -2,6 +2,22 @@
 
 ## 2026-07-20
 
+- Implemented the immutable-asset/atomic-persistence foundation for
+  `content-endpoint-bindings`. Added opaque immutable `ContentAsset` records and
+  focused create/read capabilities; a separate logical `PageAggregate` with one
+  asset reference and a complete endpoint set; and granular resolve,
+  trial/managed create, combined revision update, duplicate, and delete
+  capabilities. The process-local reference stages assets before visibility,
+  publishes every endpoint claim all-or-none, supports managed takeover of
+  endpoint-occupying trials, atomically moves sets and flips shared asset
+  references, shares immutable assets on duplication, and removes endpoint
+  visibility without unsafe asset deletion. A 16-case backend-neutral
+  conformance suite covers isolation, conflicts, concurrent winners, revision
+  checks, takeover, replacement, sharing, and cleanup. The composed
+  `PageService` and JSON API intentionally retain their one-endpoint `md-page`
+  behavior for the next refactor step. All 473 tests, check, and the production
+  build pass.
+
 - Implemented the first `content-endpoint-bindings` contract step. The settled
   endpoint set has one explicit canonical binding and up to seven deterministic
   alternates, all at unique validated locators in one case-insensitive

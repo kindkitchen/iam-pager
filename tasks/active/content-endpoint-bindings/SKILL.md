@@ -7,13 +7,14 @@ tags: [backend, content, domain, interfaces]
 relates: [pdf-content-core, kvdex-content-persistence]
 ---
 
-Active, chain position 1 of 5. The endpoint-set policy and pure planning
-boundary are implemented: one explicit canonical binding plus up to seven
-ordered alternates, one case-insensitive namespace, unique validated ordinary
-locators, and content-declared `inline`/`attachment` support. `md-page` is
-inline-only and `.pdf` remains behavior-free.
+Active, chain position 1 of 5. Endpoint-set planning plus the split persistence
+foundation are implemented. Immutable content assets are staged behind focused
+create/read capabilities; a logical page aggregate references one asset and one
+complete canonical/alternate endpoint set. Granular atomic mutation contracts,
+the process-local reference, and shared conformance cover complete claims,
+takeover, moves, coherent asset switches, immutable sharing, and deletion.
 
-Next: introduce immutable content asset identity/access and atomic page/endpoint
-aggregate interfaces, then implement the memory reference and shared conformance
-suite while preserving current one-endpoint `md-page` API behavior. See
-[[003.decision]] and [[006.decision]].
+The composed service, old repositories, and JSON API deliberately still expose
+one canonical inline `md-page` endpoint. Next: refactor `PageService` and current
+projections onto the split capabilities without behavior drift, then expose safe
+explicit endpoint links. See [[006.decision]] and [[007.decision]].

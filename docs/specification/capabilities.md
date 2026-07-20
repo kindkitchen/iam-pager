@@ -51,8 +51,12 @@ The planned PDF capability will:
 - expose browser-native PDF viewing through the site when supported, with direct
   preview and download fallbacks.
 
-This capability is planned, not implemented. Generic raw-binary content, PDF.js,
-text extraction, thumbnails, and external storage are outside its first slice.
+PDF handling remains planned. Its generic prerequisites now include the endpoint
+planner plus immutable-asset and atomic page/endpoint capability contracts, a
+process-local reference, and shared persistence conformance. Those contracts are
+not yet composed into `PageService` or the public API. Generic raw-binary
+content, PDF.js, text extraction, thumbnails, and external storage are outside
+its first slice.
 
 ## CP-VIEW — Site-mediated viewing
 
