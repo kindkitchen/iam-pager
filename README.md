@@ -209,24 +209,36 @@ frequency, guest expiry, exploration text indexing/relevance, and backend
 migration are not implemented; these endpoints are not ready for untrusted
 public traffic.
 
-## Active direction: explicit pre-deploy
+## Explicit pre-deploy and schema upgrades
 
-The next operational slice adds one explicit `deno task pre-deploy` graph. Deno
-2.9 task-object dependencies will run check, test, and build branches in
-parallel and invoke `pre-deploy::upgrade-db-schema` only after they all succeed.
-The schema task always inspects durable state; it is not file-cacheable and
-repeated runs must become successful no-ops once every registered upgrade is
-complete.
+`deno task pre-deploy` is the explicit deployment gate; application startup and
+requests never run schema upgrades. Deno 2.9 task-object dependencies run check,
+test, and build branches in parallel, then invoke
+`pre-deploy::upgrade-db-schema` only if all three succeed. The schema task is
+not file-cacheable and always decides from current database state. `--jobs` or
+`DENO_JOBS` may bound dependency concurrency.
 
-Schema evolution remains outside application startup. A transport-independent,
-forward-only runner compares each declared schema target with a persisted
-version, resumes a stable idempotent step after interruption, and has no
-rollback path. The first adapter stores upgrade state in Deno KV and uses atomic
-claims so parallel invocations cannot apply one transition unsafely. Individual
-one-way transform helpers remain explicit until every supported environment has
-advanced past them.
+The interface-first forward runner preflights immutable plans and all durable
+states before writing metadata, claims one exact adjacent transition, executes
+its retained idempotent helper, and completes only the matching claim. A pending
+step survives failure and is resumed by stable ID; gaps, removed helpers,
+downgrades, newer database versions, corrupt state, and unknown claims fail
+closed. There is no automatic schema diff, down migration, rollback log, or
+startup hook. A claim is not a process mutex: overlapping runners may invoke the
+same pending helper, so every helper must also make concurrent data writes safe
+with conditional adapter operations.
 
-## Backlog direction: PDF pages
+Deno KV stores versioned coordination records for independent `ownership`,
+`sessions`, and `pages` schemas. Existing raw-KV databases and fresh databases
+without framework metadata both have explicit baseline version 1. The current
+targets are also version 1, so the first durable invocation only installs
+metadata and reports `no_change`; later invocations inspect it and report the
+same without rewriting application data. Memory storage opens no database and
+returns an empty successful report. The command validates the same linked
+ownership/session/page settings, uses the ownership KV path or attached default,
+prints only bounded schema diagnostics, and closes its owned connection.
+
+## Next direction: PDF pages
 
 The next chain first separates logical pages, immutable content assets, and
 delivery endpoint bindings. One asset may back multiple locators while the page
@@ -343,12 +355,19 @@ injected into direct page responses.
 
 ## Production startup and deployment
 
-Build first, then start the generated server with a production environment file:
+Run the explicit gate against the deployment's storage configuration, then start
+the generated server with the same production environment file:
 
 ```sh
-deno task build
+deno task --env-file=.env.production.local pre-deploy
 deno task --env-file=.env.production.local start
 ```
+
+The gate already performs the production build. The named
+`pre-deploy::upgrade-db-schema` task retains the same check/test/build
+dependencies even when invoked directly, so it cannot bypass verification. An
+all-memory profile reports zero schemas, while a durable profile opens the
+configured ownership KV and checks all three current schema targets.
 
 `PORT` is optional. When set, it must be an integer from 0 through 65535; when
 omitted, `Deno.serve` retains its port-8000 default. A deployed instance
@@ -429,20 +448,23 @@ no application expiry or deletion path, and backup/recovery follows the selected
 KV service or deployment operator. Without the content opt-in, pages still
 disappear on restart.
 
-For Deno Deploy, use `deno task build` as the build command and
-`_fresh/server.js` as the application entrypoint. Apply the appropriate storage
-profile above to each production or preview context. Configure the original-mode
-Google variables for every deployment context that must warm successfully. The
-callback must be an authorized HTTPS `/auth/google/callback` URL for the domain
-used by that context. Dynamic preview contexts using local mock authentication
-can set `IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact
-Google, but every matched host intentionally permits fake sign-in and must not
-be treated as a production environment. If original mode uses the pattern, every
-selected callback must still satisfy Google's redirect-URI registration rules.
-Original preview hosts that cannot be registered individually require a stable
-callback broker rather than a broader application regex. The SSR build
-deliberately leaves gauth and Effect as runtime imports so loading the selected
-preset cannot deadlock through circular bundle chunks.
+For Deno Deploy, use `deno task build` as the platform build command and
+`_fresh/server.js` as the application entrypoint. The explicit pre-deploy gate
+remains a separate operator action and must run in a deployment context that can
+open the same attached KV before that release is promoted; a local memory-mode
+run does not validate a remote database. Apply the appropriate storage profile
+above to each production or preview context. Configure the original-mode Google
+variables for every deployment context that must warm successfully. The callback
+must be an authorized HTTPS `/auth/google/callback` URL for the domain used by
+that context. Dynamic preview contexts using local mock authentication can set
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN`; they do not contact Google, but
+every matched host intentionally permits fake sign-in and must not be treated as
+a production environment. If original mode uses the pattern, every selected
+callback must still satisfy Google's redirect-URI registration rules. Original
+preview hosts that cannot be registered individually require a stable callback
+broker rather than a broader application regex. The SSR build deliberately
+leaves gauth and Effect as runtime imports so loading the selected preset cannot
+deadlock through circular bundle chunks.
 
 ## Technical stack
 

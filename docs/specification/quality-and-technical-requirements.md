@@ -136,22 +136,46 @@ or `DENO_JOBS`.
 
 The schema-upgrade core is storage-agnostic and interface-first. A stable schema
 ID has one persisted current version, one declared target, and a contiguous set
-of forward-only steps. The runner validates the complete plan before writes,
-atomically claims the expected transition, invokes its idempotent
-transformation, and marks completion. An interrupted claim resumes the same
-step; a completed plan returns an empty/no-change report on every later run.
-Missing steps, duplicate versions, downgrades, unknown pending transitions, and
-concurrent conflicts fail closed. No rollback machinery is provided.
+of adjacent forward-only steps. The runner snapshots and validates every plan,
+then reads and validates every initial durable state before its first metadata
+write. It atomically claims the exact next transition, invokes its idempotent
+transformation, and marks only that matching claim complete. An interrupted
+claim resumes the same stable step ID; a completed plan returns `no_change` on
+every later run. Missing helpers, gaps, duplicate IDs, downgrades, future
+durable versions, unknown pending transitions, corrupt state, and non-converging
+coordination fail closed. There are no down steps, rollback log, or startup
+hook.
 
-Deno KV is the first implementation of schema state and coordination. It uses
-versionstamp checks so only one runner can claim a transition and stores no
-secrets or transformed data in diagnostics. Upgrade functions may use a supplied
-Deno KV context, but Deno types stay outside the runner interfaces. The initial
-work establishes a baseline for existing databases and tests fresh, already-
-current, multi-step, interrupted, repeated, and concurrent runs across
-repository instances.
+Deno KV is the first state/coordination implementation. Upgrade metadata uses an
+adapter-owned versioned keyspace and versionstamp checks for absent-state
+initialization, transition claim, and matching completion. One atomic claim
+selects the transition, but is deliberately not treated as a process lease: a
+second runner that observes a retained pending claim may invoke the same helper
+while the first process is still alive. Every helper must therefore be both
+repeat-idempotent and concurrency-safe, using conditional adapter writes where
+partial data changes could race. This permits immediate crash recovery without
+an unsafe stale-lock timeout; only one matching completion can advance state.
+Deno KV types remain in the concrete context/adapter rather than the runner
+contracts, and diagnostics contain only bounded IDs, versions, and outcomes.
 
-`pre-deploy::upgrade-db-schema` must not opt into Deno task file caching: its
+The current immutable registry has independent `ownership`, `sessions`, and
+`pages` schemas. Existing raw-KV databases predate upgrade metadata and are
+explicitly baseline version 1 for all three; an absent state record means that
+same baseline for either a fresh or existing database. Installing metadata does
+not scan or rewrite application records. Their current targets are also version
+1, so the first durable run initializes state and reports `no_change`; later
+runs only read and report `no_change`. A target bump must retain every adjacent
+helper from baseline through the new target.
+
+The schema command reuses ownership/session/page storage validation. Durable
+ownership selects the one shared Deno KV path (or attached default database) and
+all three schema plans; memory ownership means there is no durable database to
+open and the command succeeds with an empty memory-storage report. Invalid
+linked durable selections fail before opening a database. The script owns and
+closes its focused database connection, does not load Fresh or authentication,
+and converts unknown adapter/step failures to secret-free non-zero diagnostics.
+
+`pre-deploy::upgrade-db-schema` does not opt into Deno task file caching: its
 input includes external database state, which `files`, `output`, and `env`
 fingerprints cannot prove unchanged. Check/test/build caching may be evaluated
 separately, but explicit pre-deploy correctness cannot depend on a cache hit.

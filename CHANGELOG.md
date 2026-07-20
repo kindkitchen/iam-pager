@@ -2,6 +2,18 @@
 
 ## 2026-07-20
 
+- Completed `explicit-pre-deploy`. `deno task pre-deploy` now runs check, all
+  tests, and the production build as parallel dependencies before the uncached
+  schema command. Added an interface-first, immutable forward-upgrade runner,
+  bounded outcomes/errors, exact resumable claims, Deno KV versionstamp state
+  coordination and conformance coverage, focused CLI composition, and shared
+  `ownership`/`sessions`/`pages` version targets. Missing metadata explicitly
+  installs the raw-KV version-1 baseline without rewriting application data;
+  memory profiles open no database. Interruption, repeated no-op, multi-step,
+  future/corrupt state, cross-instance persistence, and concurrency behavior are
+  covered, with all 454 tests, check, build, repeated schema tasks, and the full
+  pre-deploy gate passing.
+
 - Activated `explicit-pre-deploy`: the planned `deno.json` dependency graph runs
   check/test/build in parallel before a forward-only schema upgrade task. The
   planned interface-backed runner detects persisted-version gaps, resumes

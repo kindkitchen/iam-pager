@@ -80,16 +80,24 @@ extraction are later adapters or capabilities.
 
 Database schema evolution runs only through the explicit pre-deploy command; the
 application does not mutate schema during startup or a normal request. Code
-declares a target version and contiguous forward steps for each stable schema
-ID. The runner compares that declaration with persisted database state, applies
-only missing steps, and returns a no-change success after the target is reached.
+declares a target version and adjacent forward steps for each stable schema ID.
+The runner preflights every plan and durable state, applies only missing steps,
+and returns a no-change success after the target is reached.
 
-There is no automatic schema-diff inference and no rollback framework. Every
-transformation is explicitly authored and idempotent, because interruption may
-require the same claimed step to resume. A one-way helper may be removed only
-after every supported environment can no longer start below its source version.
-The first state/coordination adapter is Deno KV behind the same agnostic
-interfaces.
+There is no automatic schema-diff inference, rollback framework, or migration
+mutex with a stale-lock timeout. Every transformation is explicitly authored,
+repeat-idempotent, and safe under concurrent invocation: a second process can
+observe and resume the same atomic pending claim before the first process has
+exited. Conditional data writes make that overlap safe, while exact claim
+completion lets only one process advance the durable version. A one-way helper
+may be removed only after every supported environment can no longer start below
+its source version.
+
+The first state/coordination adapter is Deno KV behind agnostic interfaces. Its
+initial `ownership`, `sessions`, and `pages` plans define missing framework
+metadata as baseline version 1 for both fresh and existing raw-KV databases. All
+current targets are version 1, so installing the framework does not inspect or
+rewrite application records.
 
 ### OQ-API — API surface
 

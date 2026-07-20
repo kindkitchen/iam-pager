@@ -1,3 +1,4 @@
+import { ownership_database_schema_version } from "../storage/schema-versions.ts";
 import type { IdentityRepository, UserIdGenerator } from "./interfaces.ts";
 import {
   clone_identity,
@@ -16,7 +17,7 @@ import {
   is_authentication_strategy_id,
 } from "./model.ts";
 
-const storage_schema_version = 1;
+const storage_schema_version = ownership_database_schema_version;
 const max_profile_update_attempts = 16;
 // Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const user_prefix: Deno.KvKey = ["iam-pager", "identities", "users"];

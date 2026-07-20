@@ -1,4 +1,5 @@
 import { type Locator } from "../locator/model.ts";
+import { page_database_schema_version } from "../storage/schema-versions.ts";
 import {
   compare_page_sort_keys,
   decode_managed_page_list_cursor,
@@ -43,7 +44,7 @@ import {
   type PageRecord,
 } from "./model.ts";
 
-const storage_schema_version = 1;
+const storage_schema_version = page_database_schema_version;
 const max_attempts = 16;
 const by_id_prefix: Deno.KvKey = ["iam-pager", "pages", "by-id"];
 const by_locator_prefix: Deno.KvKey = [
