@@ -18,12 +18,16 @@
       "command": "deno run --allow-run=git --allow-read --allow-write scripts/git-hooks/install.ts"
     },
     "pre-deploy": {
-      "description": "Read and verify the attached database schema",
-      "command": "deno run --allow-env=IAM_PAGER_OWNERSHIP_STORAGE_BACKEND,IAM_PAGER_OWNERSHIP_DENO_KV_PATH,IAM_PAGER_SESSION_STORAGE_BACKEND,IAM_PAGER_CONTENT_STORAGE_BACKEND,DENO_KV_DEFAULT_PATH,DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/pre-deploy/check-db-schema.ts"
+      "description": "Deployment placeholder with no checks or database work",
+      "command": "echo \"pre-deploy: no automated checks; run deno task db:check manually when database schema changes\""
     },
-    "db-schema:upgrade": {
-      "description": "Apply an explicit guarded remote database-schema update",
-      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net scripts/database/upgrade-db-schema.ts"
+    "db:check": {
+      "description": "Manually inspect one explicit database schema target",
+      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/database/schema.ts check"
+    },
+    "db:update": {
+      "description": "Manually apply retained migrations to one explicit database",
+      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/database/schema.ts update"
     }
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },

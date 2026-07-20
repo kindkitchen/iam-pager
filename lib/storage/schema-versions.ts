@@ -1,6 +1,6 @@
 /**
- * Current durable targets. Existing raw-KV installations predate upgrade-state
- * metadata and are documented as version 1 for each schema.
+ * Current durable targets. Existing raw-KV installations predate the manual
+ * release manifest and use record format 1 for each schema.
  */
 export const ownership_database_schema_version = 1;
 export const session_database_schema_version = 1;

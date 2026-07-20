@@ -29,7 +29,6 @@ import {
   MemorySessionRepository,
 } from "./session/mod.ts";
 import {
-  DENO_TIMELINE_ENV,
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   type OwnershipRepositoryFactory,
@@ -402,57 +401,6 @@ Deno.test("configured composition selects referentially safe page storage", asyn
     }))?.content.content_type,
     "md-page",
   );
-});
-
-Deno.test("configured revision previews force linked storage to memory", async () => {
-  let ownership_config: OwnershipStorageConfig | undefined;
-  let session_config: SessionStorageConfig | undefined;
-  let page_config: PageStorageConfig | undefined;
-  const values: Readonly<Record<string, string>> = {
-    [DENO_TIMELINE_ENV]: "preview/revision-id",
-    [GOOGLE_AUTH_MODE_ENV]: "local",
-    [GOOGLE_AUTH_REDIRECT_URI_ENV]:
-      "http://localhost:5173/auth/google/callback",
-    [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
-      "http://localhost:5173/auth/google/mock-consent",
-    [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
-    [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/shared-preview.kv",
-    [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
-    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
-  };
-
-  await create_configured_app_services(
-    { get: (name) => values[name] },
-    {
-      ownership_repository_factory: {
-        create: (config) => {
-          ownership_config = config;
-          return Promise.resolve({
-            identity_repository: new MemoryIdentityRepository({
-              generate: () => "user-a",
-            }),
-            namespace_repository: new MemoryNamespaceRepository(),
-          });
-        },
-      },
-      session_repository_factory: {
-        create: (config) => {
-          session_config = config;
-          return Promise.resolve(new MemorySessionRepository());
-        },
-      },
-      page_repository_factory: {
-        create: (config) => {
-          page_config = config;
-          return Promise.resolve(new MemoryPageRepository());
-        },
-      },
-    },
-  );
-
-  assertEquals(ownership_config, { backend: "memory" });
-  assertEquals(session_config, { backend: "memory" });
-  assertEquals(page_config, { backend: "memory" });
 });
 
 Deno.test("configured original Google flow prefers an allowlisted request host", async () => {

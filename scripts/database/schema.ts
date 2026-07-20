@@ -1,10 +1,10 @@
 import {
   ConsoleDatabaseSchemaOutput,
-  run_remote_database_schema_write_cli,
-} from "@/lib/schema-upgrade/mod.ts";
+  run_database_schema_cli,
+} from "@/lib/database-schema/mod.ts";
 
 if (import.meta.main) {
-  Deno.exitCode = await run_remote_database_schema_write_cli(
+  Deno.exitCode = await run_database_schema_cli(
     Deno.args,
     Deno.env,
     new ConsoleDatabaseSchemaOutput(),
