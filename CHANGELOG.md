@@ -2,6 +2,20 @@
 
 ## 2026-07-20
 
+- Prototyped the site navigation split. Added a raw-code breadcrumb model and
+  presenter (`lib/ui/site-breadcrumb.ts`) rendered by a `SiteBreadcrumb`
+  component, with trails on the home and public-page views and a new
+  `/site/manage` route that hosts the creator page manager as its own navigable
+  page. The breadcrumb is derived from a logical location rather than the URL,
+  so the web stays one projection of the logic. Existing behavior is unchanged;
+  all 558 tests, tracked-source checks, and the production build pass.
+- Began the PDF publishing site projection. Added a web-independent content-type
+  boundary (`lib/ui/page-content-type.ts`): a pure Markdown/PDF selector model
+  and a PDF upload request preparer that maps editable intent onto the accepted
+  two-part multipart create contract, plus an advisory draft check. Verified by
+  round-tripping the prepared request through the real multipart decoder; no UI,
+  storage, or HTTP ownership was added. All 553 tests and tracked-source
+  formatting/lint/type checks pass.
 - Completed PDF HTTP publication and delivery. The Fresh-independent page
   adapter now accepts exact two-part, stream-bounded multipart create and
   revision-bound replacement requests without base64, requires a
