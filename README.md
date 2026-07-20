@@ -288,10 +288,18 @@ publisher supplies both valid locators and each delivery profile. A path ending
 in `.pdf` is only an example and has no special routing, generation, or delivery
 semantics; behavior is stored on the endpoint binding.
 
-The implementation order is pure endpoint/content contracts with a memory
-reference, PDF content logic, a conforming Kvdex-backed Deno KV page/content
-adapter, strict bounded upload/direct delivery, and finally the site projection.
-Kvdex remains inside the adapter. Its segmented blob writes do not by themselves
+The first contract step is implemented: endpoint intent has one explicit
+canonical binding plus at most seven alternates, all at unique valid locators in
+one case-insensitive namespace. The pure planner applies the content type's
+declared delivery-profile support, preserves publisher spelling, and gives
+alternate input order no meaning; `md-page` declares inline-only delivery. This
+does not yet change the stored one-locator page aggregate or public API.
+
+Next, immutable content identity and atomic page/endpoint persistence move
+behind interfaces with a memory reference and shared conformance suite, followed
+by PDF content logic, a conforming Kvdex-backed Deno KV page/content adapter,
+strict bounded upload/direct delivery, and finally the site projection. Kvdex
+remains inside the adapter. Its segmented blob writes do not by themselves
 preserve the repository's atomic visibility guarantees, so immutable assets must
 be fully staged before page endpoints can reference them. Existing raw Deno KV
 records require explicit compatibility or migration before that adapter becomes

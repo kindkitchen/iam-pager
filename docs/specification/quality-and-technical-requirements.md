@@ -48,11 +48,20 @@ exploration extends that boundary through `PublicPageExplorer`: callers supply
 optional name queries and an opaque continuation, while the selected repository
 decides whether the MVP scan or a future index satisfies it.
 
-The planned PDF work must evolve this boundary before adding transport code. One
-logical page keeps one management/exploration representation while endpoint
+The endpoint foundation now exposes a transport/storage-neutral
+`PageEndpointPlanner` interface and default implementation. It accepts one
+explicit canonical binding plus up to seven alternates, validates every locator
+through a narrow capability, enforces one namespace and case-insensitive claim
+per binding, applies the selected content type's supported profile declaration,
+and returns detached, deterministically ordered intent. `md-page` declares
+inline-only delivery. This pure policy is covered independently while page
+aggregate persistence still has its current one-locator representation.
+
+The remaining PDF work must evolve that aggregate before adding transport code.
+One logical page keeps one management/exploration representation while endpoint
 resolution selects an inline or attachment delivery profile and then reads its
 shared content asset. Fresh, `Request`, `Response`, multipart parsing, browser
-preview, Deno KV, and Kvdex types must remain outside these contracts.
+preview, Deno KV, and Kvdex types remain outside these contracts.
 
 ## QT-STORAGE — Repository persistence
 
@@ -195,8 +204,9 @@ durable review target.
   arrive at the same time.
 - Page routes must not consume management, API, framework, or static-asset
   routes.
-- Canonical and alternate endpoint locators share the same collision space; an
-  endpoint set is created or moved completely or not at all.
+- A complete endpoint plan contains 1–8 bindings, exactly one structurally
+  canonical, all in one case-insensitive namespace and all unique in the shared
+  locator collision space; set replacement commits completely or not at all.
 - Direct responses must use an intentional status, content type, length, cache
   policy, and stored inline or download disposition.
 - Invalid and missing direct URLs must not masquerade as a successful home-page
@@ -224,15 +234,17 @@ sanitization.
   in the site view.
 
 The first supported set can be small, but the design should not assume that all
-future pages are short text. PDF is the selected next type. Its handler receives
-bounded bytes independently from HTTP, verifies the explicit minimum PDF shape,
-fixes media type to `application/pdf`, and never trusts a filename extension to
-establish type. One asset supports independently configured inline and
-attachment endpoints at ordinary valid locators. Browser-native direct viewing
-and a site wrapper around that URL are the first preview adapters; PDF.js,
-thumbnails, text extraction, generic binary, and unbounded streaming are later.
-The wrapper must retain direct-preview and download fallbacks, and the first
-slice must explicitly decide whether HTTP byte ranges are implemented or
+future pages are short text. Content handlers declare a non-empty subset of the
+fixed `inline` and `attachment` endpoint profiles; the implemented `md-page`
+handler permits only `inline`. PDF is the selected next type. Its handler
+receives bounded bytes independently from HTTP, verifies the explicit minimum
+PDF shape, fixes media type to `application/pdf`, and never trusts a filename
+extension to establish type. One asset supports independently configured inline
+and attachment endpoints at ordinary valid locators. Browser-native direct
+viewing and a site wrapper around that URL are the first preview adapters;
+PDF.js, thumbnails, text extraction, generic binary, and unbounded streaming are
+later. The wrapper must retain direct-preview and download fallbacks, and the
+first slice must explicitly decide whether HTTP byte ranges are implemented or
 deferred under a bounded size.
 
 The current `MdPage` form previews Markdown and CSS locally inside a sandboxed

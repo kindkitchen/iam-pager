@@ -3,6 +3,10 @@ import { MdPageHandler } from "./md-page.ts";
 
 const handler = new MdPageHandler();
 
+Deno.test("md-page declares inline-only endpoint delivery", () => {
+  assertEquals(handler.supported_delivery_profiles, ["inline"]);
+});
+
 Deno.test("validate rejects non-object input", () => {
   for (const input of [null, undefined, 42, "md", []]) {
     const result = handler.validate(input);

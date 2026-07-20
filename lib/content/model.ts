@@ -1,3 +1,12 @@
+/** Endpoint-selected delivery behavior; path shape never implies a profile. */
+export type DeliveryProfile = "inline" | "attachment";
+
+export function is_valid_delivery_profile(
+  value: unknown,
+): value is DeliveryProfile {
+  return value === "inline" || value === "attachment";
+}
+
 /** Delivery metadata for stored content (DA-CONTENT). */
 export interface ContentMeta {
   media_type: string;

@@ -1,4 +1,4 @@
-import type { DeliveryPayload } from "./model.ts";
+import type { DeliveryPayload, DeliveryProfile } from "./model.ts";
 
 export type ContentResult<T> =
   | { ok: true; value: T }
@@ -14,6 +14,8 @@ export type ContentResult<T> =
  */
 export interface ContentTypeHandler<Input, Data> {
   readonly content_type: string;
+  /** Non-empty endpoint profiles this content type can safely deliver. */
+  readonly supported_delivery_profiles: readonly DeliveryProfile[];
   /** Check untrusted input and narrow it to the type's input shape. */
   validate(input: unknown): ContentResult<Input>;
   /** Derive the stored data from valid input (e.g. md -> md + html). */

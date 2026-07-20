@@ -2,6 +2,16 @@
 
 ## 2026-07-20
 
+- Implemented the first `content-endpoint-bindings` contract step. The settled
+  endpoint set has one explicit canonical binding and up to seven deterministic
+  alternates, all at unique validated locators in one case-insensitive
+  namespace; content types declare supported `inline`/`attachment` profiles and
+  `md-page` remains inline-only. Added the transport/storage-neutral planner
+  interface, pure default implementation, and focused coverage for bounds,
+  casing, namespace, collisions, profile compatibility, input isolation, and
+  path-suffix behavior. The stored page aggregate and public API remain
+  unchanged for the next immutable-asset/atomic-persistence step.
+
 - Reduced database release handling to an explicit developer workflow. The
   retained `pre-deploy` task now only echoes a pointer and always succeeds;
   deploy and runtime no longer inspect schemas or rewrite timeline storage.

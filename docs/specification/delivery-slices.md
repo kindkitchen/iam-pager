@@ -108,11 +108,15 @@ not generate or reserve a special path shape. Creation, access, endpoint-set
 change, replacement, duplication, and deletion preserve the complete endpoint
 set without partial visibility.
 
-The slice is delivered in interface-first stages: shared endpoint/content
-contracts with a memory reference, the PDF content core, a conforming Kvdex-
-backed Deno KV adapter, strict bounded HTTP upload and delivery, then the
-secondary site projection. Generic binary fallback and external storage remain
-later.
+The first interface-first stage has settled and implemented pure endpoint-set
+planning: one explicit canonical binding plus at most seven alternates, all in
+one case-insensitive namespace, with unique validated locators and only profiles
+declared by the content type. `md-page` is inline-only; PDF will declare inline
+and attachment. The next stage separates immutable content identity and atomic
+page/endpoint persistence behind interfaces, then supplies the memory reference
+and shared conformance suite before the PDF content core, conforming
+Kvdex-backed Deno KV adapter, strict bounded HTTP upload/delivery, and secondary
+site projection. Generic binary fallback and external storage remain later.
 
 ## DS-EXTERNAL — Evaluate external storage
 
