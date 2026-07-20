@@ -2,6 +2,19 @@
 
 ## 2026-07-20
 
+- Replaced the unselected Kvdex immutable-asset prototype with an
+  interface-backed KV gateway adapter and removed Kvdex code, imports, and lock
+  roots. The replacement snapshots input, encodes once with `v8-1`, stages under
+  random adapter-owned v1 payload keys, and verifies length, SHA-256, decoding,
+  and domain coherence before native-CAS manifest publication. Reads repeat all
+  checks; known races clean staging, while ambiguous commit exceptions retain
+  possibly referenced payloads. Added strict-manifest, isolation, concurrent
+  winner, cross-instance 1 MiB/16 MiB PDF, interrupted-batch/retry, corruption,
+  verification-cleanup, ambiguous-outcome, and legacy-keyspace coverage.
+  Deployment selection and legacy page records remain unchanged. All 511 tests,
+  tracked-source formatting/lint/type checks, frozen dependency resolution, and
+  the production build pass.
+
 - Completed the kv-toolbox gateway and codec checkpoint. Exactly pinned
   `@kitsonk/kv-toolbox` 0.31.0 behind project-owned record, native-atomic, and
   binary-staging interfaces; selected identity, namespace, session, legacy-page,

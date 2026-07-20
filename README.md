@@ -178,23 +178,25 @@ The first publishing slice currently provides:
   Owner/public summaries expose a complete safe canonical/alternate link set,
   the site renders configured alternates without creating extra page rows, and
   direct HTTP disposition follows the resolved binding profile rather than a
-  suffix or filename hint. The initial unselected Kvdex prototype is now
-  rejected: `@kitsonk/kv-toolbox` 0.31.0 is exactly pinned behind one
-  project-owned KV gateway. The selected identity, namespace, session, legacy
-  page, and manual-schema adapters now consume that interface instead of a raw
-  handle; its production implementation alone owns the wrapper. Ordinary calls
+  suffix or filename hint. The rejected, unselected Kvdex prototype and its
+  dependency have now been removed. `@kitsonk/kv-toolbox` 0.31.0 is exactly
+  pinned behind one project-owned KV gateway consumed by the selected identity,
+  namespace, session, legacy-page, and manual-schema adapters. Ordinary calls
   delegate to the toolbox, while invariant-bearing commits explicitly delegate
   to `toolbox.db.atomic()` because toolbox batches can span commits. Binary
   staging accepts only detached non-empty bytes under an unused unreachable key,
   reads back and verifies every segmented write, rejects incomplete metadata or
-  chunks, and cleans known failed batches best-effort. A versioned `v8-1`
-  content-data codec preserves the superseded prototype's current Markdown/PDF
-  payload format without retaining a Kvdex encoding dependency in the new seam.
-  The random staging identity, SHA-256/codec verification, and separate native
-  manifest compare-and-set remain the asset protocol. Page/endpoint persistence,
-  prototype replacement, and raw-keyspace compatibility remain incomplete, so
-  the raw-Deno-KV repository stays on its legacy service path and deployment
-  selection is unchanged;
+  chunks, and cleans known failed batches best-effort. The gateway-backed
+  immutable-asset repository snapshots caller input, uses the versioned `v8-1`
+  codec, stages each encoded payload under a random identity, and verifies
+  length, SHA-256, decoding, and domain coherence before publishing one strict
+  manifest with native compare-and-set. Every read repeats those checks; known
+  CAS losses remove staging, while ambiguous commit exceptions retain possibly
+  referenced payloads. Cross-instance, contention, corruption, interrupted
+  batch, and accepted 16 MiB PDF coverage pass in the adapter-owned v1 keyspace.
+  Page/endpoint aggregate persistence and raw-keyspace compatibility remain
+  incomplete, so the raw-Deno-KV repository stays on its legacy service path and
+  deployment selection is unchanged;
 - `MdPage` content, derived from sanitized Markdown with optional CSS;
 - a transport-independent `pdf` handler, registered with the page service, that
   accepts detached immutable PDF bytes up to 16 MiB, fixes `application/pdf`,

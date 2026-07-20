@@ -131,10 +131,14 @@ implementation alone owns the wrapper and exposes an explicit native-atomic
 capability backed by `toolbox.db.atomic()`. Verified binary staging covers
 detached 1 MiB and 16 MiB values, reconstruction, later-batch failure
 cleanup/retry, malformed or truncated state, and removal. The explicit `v8-1`
-codec remains compatible with the prototype payload fixture. Next the unselected
-asset prototype moves onto this foundation while retaining random staging,
-SHA-256/codec checks, and native manifest publication; toolbox batches never
-provide page visibility. Native-atomic page/endpoint persistence, aggregate
+codec remains compatible with the prototype payload fixture. The rejected
+unselected asset prototype and Kvdex dependency are now removed: its replacement
+snapshots input, stages encoded payloads under random identities, verifies
+length/SHA-256/codec/domain coherence, and publishes one strict manifest with
+native CAS. Reads reverify all integrity fields; known races clean staging and
+ambiguous commit exceptions retain possibly referenced payloads. Cross-instance,
+contention, corruption, interrupted-batch/retry, legacy-keyspace, and accepted
+16 MiB PDF coverage pass. Native-atomic page/endpoint persistence, aggregate
 conformance, source-preserving raw-keyspace migration, strict bounded HTTP
 upload/delivery, and the secondary PDF site projection follow. Generic binary
 fallback and external storage remain later.

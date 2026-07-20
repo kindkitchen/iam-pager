@@ -255,7 +255,7 @@ and segmented binary operations delegate to the toolbox; invariant-bearing
 commits use the separately named native atomic capability. Package types and
 physical blob suffixes remain inside that implementation; domain, application,
 HTTP, and site contracts do not depend on them. The earlier unselected Kvdex
-prototype is rejected and will be removed after behavioral parity.
+prototype and dependency have been removed after behavioral parity.
 
 Blob segmentation does not itself provide application visibility. A later
 segment batch can fail after an earlier successful commit, so the gateway treats
@@ -263,12 +263,13 @@ the toolbox's write result as provisional: it reconstructs and compares the
 complete detached value before success and removes known failed staging
 best-effort. Missing chunks, truncation, malformed metadata, empty input, and
 reuse of a complete staging key fail closed; 1 MiB and 16 MiB contract cases
-exercise this model. Each encoded immutable payload will be staged under a
-random identity, checked again for expected length, SHA-256, and `v8-1`
-decoding, and only then exposed by a separate manifest published with native
-Deno KV compare-and-set. An ambiguous manifest exception retains the payload
-rather than risk deleting data referenced by a commit that succeeded. Every
-asset read repeats integrity checks.
+exercise this model. The immutable-asset adapter snapshots input and stages each
+encoded payload under a random identity, checks expected length, SHA-256, and
+`v8-1` decoding, then exposes it through a strict manifest published with native
+Deno KV compare-and-set. Known CAS loss removes staging. An ambiguous manifest
+exception retains the payload rather than risk deleting data referenced by a
+commit that succeeded. Every asset read repeats manifest, blob, length, hash,
+codec, and domain checks.
 
 `KvToolbox.atomic()` may split work across commits and returns multiple commit
 results, so it cannot provide all-or-none page, endpoint, owner, revision,

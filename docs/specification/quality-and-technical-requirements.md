@@ -162,11 +162,16 @@ wrappers, interrupted later batches, retry, corruption, removal, and handle
 closure. The versioned `v8-1` content-data codec is byte-compatible with the
 retained prototype fixture and round-trips current Markdown/PDF data.
 
-The earlier Kvdex asset prototype was never selected and is superseded. Its
-remaining useful behavior is the next replacement acceptance baseline: random
-unreachable payload identities, SHA-256/codec verification, one separately
-published immutable manifest, retention after an ambiguous manifest exception,
-and corruption rejection on every asset read.
+The earlier Kvdex asset prototype was never selected and has been removed with
+its dependency. Its gateway-backed replacement snapshots caller-owned values,
+encodes once with `v8-1`, stages under a random unreachable identity, and checks
+length, SHA-256, decoding, and domain coherence before publishing one strict
+schema-v1 manifest with native compare-and-set. Known CAS losses remove staging
+best-effort; an ambiguous manifest exception retains the payload because a
+successful commit may reference it. Every read repeats manifest, blob, length,
+hash, codec, and domain checks. Cross-instance, contention, corruption,
+interrupted-batch/retry, legacy-keyspace, and accepted 16 MiB PDF tests cover
+the replacement.
 
 Toolbox blob writes may span multiple commits, and `KvToolbox.atomic()` may
 split an operation. They therefore cannot publish application visibility. The

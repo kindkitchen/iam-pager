@@ -7,22 +7,25 @@ tags: [backend, storage, deno-kv, kv-toolbox, migration, pdf]
 relates: [kvdex-content-persistence, content-endpoint-bindings, pdf-content-core, pdf-content-http]
 ---
 
-Top priority, active, chain position 3 of 5. The Kvdex direction is rejected;
-`@kitsonk/kv-toolbox` 0.31.0 is the required Deno KV utility. Domain,
-application, HTTP, and site contracts remain unchanged.
+Top priority, active, chain position 3 of 5. The rejected Kvdex prototype and
+dependency are removed; `@kitsonk/kv-toolbox` 0.31.0 remains the required Deno
+KV utility behind project-owned interfaces. Domain, application, HTTP, site,
+deployment selection, schema versions, and production records are unchanged.
 
-Phase 1 is complete; see [[008.summary]]. The exact dependency is pinned behind
-one project-owned gateway. Selected identity, namespace, session, legacy page,
-and manual-schema adapters consume its record interface. Ordinary and segmented
-binary operations delegate to `KvToolbox`; invariant-bearing commits use the
-explicit native capability backed by `toolbox.db.atomic()`. Verified staging
-fails closed on later-batch interruption or malformed/truncated state, including
-at the 16 MiB PDF bound. The versioned `v8-1` codec matches the retained
-prototype fixture. All 509 tests, check, and build pass.
+Phases 1 and 2 are complete; see [[008.summary]] and [[009.summary]]. Selected
+record adapters use the gateway, segmented staging verifies reconstructed bytes,
+and native invariant commits use `toolbox.db.atomic()`. The new immutable-asset
+adapter snapshots input, encodes with `v8-1`, stages under random v1 payload
+identities, verifies blob/length/SHA-256/codec/domain coherence, and publishes a
+strict manifest with native CAS. Known losses clean staging; ambiguous commit
+exceptions retain possibly referenced payloads. All 511 tests, tracked-source
+checks, frozen dependency resolution, and build pass; unrelated untracked `.pi`
+content remains untouched.
 
-Next replace the unselected Kvdex immutable-asset prototype with a gateway-backed
-manifest adapter while preserving random staging, length/SHA-256/codec checks,
-native CAS, ambiguous-outcome retention, and legacy-keyspace isolation. Remove
-Kvdex only after equivalent fault coverage passes, then implement/migrate the
-aggregate through [[004.plan]] as refined by [[006.decision]]. The raw Deno KV
-page adapter stays selected until conformance, migration, and cutover gates pass.
+Next execute Phase 3 of [[004.plan]] as refined by [[006.decision]]: name the
+aggregate repository capability and implement manifest-backed durable page,
+endpoint-claim, owner, and public records with one native atomic visibility
+commit. Run shared aggregate conformance plus durable restart, corruption,
+contention, eight-endpoint, and transaction-headroom coverage before migration
+or cutover. The raw Deno KV page adapter stays selected until all later gates
+pass.

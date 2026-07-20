@@ -4,5 +4,5 @@ export * from "./page-storage.ts";
 export * from "./kv-gateway.ts";
 export * from "./kv-toolbox-gateway.ts";
 export * from "./content-data-codec.ts";
-export * from "./kvdex-content-asset-repository.ts";
+export * from "./kv-content-asset-repository.ts";
 export * from "./schema-versions.ts";
