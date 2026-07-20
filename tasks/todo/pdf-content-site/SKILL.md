@@ -7,11 +7,11 @@ tags: [frontend, pdf, publishing, management]
 relates: [pdf-content-http, pdf-content-core, kv-toolbox-content-persistence]
 ---
 
-Todo, chain position 5 of 5. Blocked by the accepted PDF HTTP contract and,
-indirectly, the active durable-persistence correction.
+Todo, chain position 5 of 5. Durable v2 persistence is complete; this remains
+blocked only by the accepted and implemented PDF HTTP contract.
 
 The site will project PDF upload, metadata, user-configured ordinary endpoint
 locators/profiles, native preview, replacement, and download actions through
 web-independent presenters. It must not import kv-toolbox, inspect storage keys,
-or own persistence/HTTP behavior. See [[001.draft]] and [[002.decision]]. PDF.js
-and generic binary UI remain later.
+or own persistence/HTTP behavior. See [[001.draft]], [[002.decision]], and
+[[004.log]]. PDF.js and generic binary UI remain later.

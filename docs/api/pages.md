@@ -19,8 +19,9 @@
 > exposes the complete endpoint link set and direct delivery obeys the resolved
 > binding profile. PDF management inspection exposes only bounded filename/
 > media-type/size/version/replace metadata, never complete bytes. Binary upload
-> fields are not exposed yet; the retained raw-Deno-KV repository rejects
-> non-compatible endpoint sets pending its replacement.
+> fields are not exposed yet. Explicit `deno-kv-v2` composition supports the
+> full aggregate contract; retained `deno-kv` fallback rejects non-compatible
+> endpoint sets without truncating them.
 
 All responses from this API use `Cache-Control: no-store`. JSON errors have the
 shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the

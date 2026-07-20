@@ -1,4 +1,9 @@
-import { assertEquals, assertInstanceOf, assertThrows } from "@std/assert";
+import {
+  assertEquals,
+  assertInstanceOf,
+  assertRejects,
+  assertThrows,
+} from "@std/assert";
 import { DenoKvPageRepository, MemoryPageRepository } from "../page/mod.ts";
 import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 import {
@@ -7,6 +12,8 @@ import {
   type PageStorageEnvironmentSource,
   parse_page_storage_config,
 } from "./page-storage.ts";
+import { KvPageAggregateRepository } from "./kv-page-aggregate-repository.ts";
+import { migrate_pages_v1_to_v2 } from "./pages-v1-to-v2-migration.ts";
 import type { OwnershipStorageConfig } from "./ownership-storage.ts";
 
 function environment(
@@ -35,21 +42,23 @@ Deno.test("page storage configuration defaults explicitly to memory", () => {
   }
 });
 
-Deno.test("durable pages inherit the configured ownership KV path", () => {
-  assertEquals(
-    parse_page_storage_config(
-      environment({ [PAGE_STORAGE_BACKEND_ENV]: "deno-kv" }),
-      { backend: "deno-kv" },
-    ),
-    { backend: "deno-kv" },
-  );
-  assertEquals(
-    parse_page_storage_config(
-      environment({ [PAGE_STORAGE_BACKEND_ENV]: "deno-kv" }),
-      { backend: "deno-kv", path: "/data/ownership.kv" },
-    ),
-    { backend: "deno-kv", path: "/data/ownership.kv" },
-  );
+Deno.test("durable page profiles inherit the configured ownership KV path", () => {
+  for (const backend of ["deno-kv", "deno-kv-v2"] as const) {
+    assertEquals(
+      parse_page_storage_config(
+        environment({ [PAGE_STORAGE_BACKEND_ENV]: backend }),
+        { backend: "deno-kv" },
+      ),
+      { backend },
+    );
+    assertEquals(
+      parse_page_storage_config(
+        environment({ [PAGE_STORAGE_BACKEND_ENV]: backend }),
+        { backend: "deno-kv", path: "/data/ownership.kv" },
+      ),
+      { backend, path: "/data/ownership.kv" },
+    );
+  }
 });
 
 Deno.test("page storage configuration rejects invalid or dangling durability", () => {
@@ -61,21 +70,39 @@ Deno.test("page storage configuration rejects invalid or dangling durability", (
           { backend: "deno-kv" },
         ),
       TypeError,
-      `${PAGE_STORAGE_BACKEND_ENV} must be memory or deno-kv`,
+      `${PAGE_STORAGE_BACKEND_ENV} must be memory, deno-kv, or deno-kv-v2`,
     );
   }
-  assertThrows(
-    () =>
-      parse_page_storage_config(
-        environment({ [PAGE_STORAGE_BACKEND_ENV]: "deno-kv" }),
-        { backend: "memory" },
-      ),
-    TypeError,
-    "requires durable ownership",
-  );
+  for (const backend of ["deno-kv", "deno-kv-v2"] as const) {
+    assertThrows(
+      () =>
+        parse_page_storage_config(
+          environment({ [PAGE_STORAGE_BACKEND_ENV]: backend }),
+          { backend: "memory" },
+        ),
+      TypeError,
+      "requires durable ownership",
+    );
+  }
 });
 
-Deno.test("page repository factory switches implementations and preserves pages", async () => {
+Deno.test("v2 page selection refuses missing readiness and closes its gateway", async () => {
+  const kv = await Deno.openKv(":memory:");
+  const factory = new DefaultPageRepositoryFactory({
+    kv_opener: {
+      open: () => Promise.resolve(new KvToolboxGateway(kv)),
+    },
+  });
+
+  await assertRejects(
+    () => factory.create({ backend: "deno-kv-v2" }),
+    Error,
+    "pages-v1-to-v2 migration has not been verified",
+  );
+  await assertRejects(() => kv.get(["closed"]), Error);
+});
+
+Deno.test("page repository factory preserves v1 fallback and gates v2 aggregate selection", async () => {
   const kv = await Deno.openKv(":memory:");
   let opened_path: string | undefined;
   const factory = new DefaultPageRepositoryFactory({
@@ -111,16 +138,34 @@ Deno.test("page repository factory switches implementations and preserves pages"
     });
     assertEquals(stored.ok, true);
 
-    const recomposed = await factory.create({
+    const fallback = await factory.create({
       backend: "deno-kv",
       path: "/data/ownership.kv",
     });
-    const page = await recomposed.find_by_locator({
+    assertInstanceOf(fallback, DenoKvPageRepository);
+    const page = await fallback.find_by_locator({
       namespace: "durable",
       page_name: "page",
     });
     assertEquals(page?.page_id, "page-1");
     assertEquals(page?.locator, { namespace: "Durable", page_name: "Page" });
+
+    await migrate_pages_v1_to_v2(new KvToolboxGateway(kv));
+    const aggregate = await factory.create({
+      backend: "deno-kv-v2",
+      path: "/data/ownership.kv",
+    });
+    assertInstanceOf(aggregate, KvPageAggregateRepository);
+    assertEquals(opened_path, "/data/ownership.kv");
+    const endpoint = await aggregate.resolve_page_endpoint({
+      namespace: "durable",
+      page_name: "page",
+    });
+    assertEquals(endpoint?.page.page_id, "page-1");
+    assertEquals(endpoint?.endpoint, {
+      locator: { namespace: "Durable", page_name: "Page" },
+      delivery_profile: "inline",
+    });
   } finally {
     kv.close();
   }

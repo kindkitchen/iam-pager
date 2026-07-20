@@ -144,8 +144,9 @@ The Deno KV adapter preserves the existing manifest key/format. Current
 the retained `pages-v1-to-v2` migration. Confirmed initialization or an existing
 version-1 pages manifest validates and copies legacy page records into adjacent
 v2 asset/aggregate keyspaces before publishing the manifest. Operators must
-quiesce v1 page writers through migration verification and controlled cutover;
-the migration never rewrites or deletes v1 records.
+quiesce v1 page writers through migration verification, explicit `deno-kv-v2`
+selection, and smoke testing; the migration never rewrites or deletes v1
+records.
 
 Runtime storage now follows environment selectors without a Deno Deploy timeline
 override. Shared revision-preview databases therefore remain an operator risk:
@@ -281,7 +282,8 @@ native-atomic capability backed by `toolbox.db.atomic()` for those explicit
 adapter-owned record commits. Batched atomic remains opt-in; no repository can
 accidentally select it by receiving the concrete wrapper. The durable aggregate
 adapter now passes unchanged conformance and commits its worst supported
-multi-trial, eight-endpoint mutation with 87 of 100 native checks. Deployment
-still selects the legacy raw Deno KV page repository until a manual,
-repeat-safe, source-preserving schema-v1 migration prevents an existing database
-from being presented as empty and the composition cutover is explicit.
+multi-trial, eight-endpoint mutation with 87 of 100 native checks. Explicit
+`deno-kv-v2` deployment selection runs the source-bound readiness probe before
+exposing that adapter; missing, changed, corrupt, conflicting, or incomplete
+migration state fails closed. `deno-kv` remains the isolated schema-v1 fallback
+profile and does not merge later v1 writes into v2.

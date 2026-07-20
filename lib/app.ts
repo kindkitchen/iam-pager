@@ -24,6 +24,7 @@ import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
   MemoryPageRepository,
+  type PageAggregateRepository,
   type PageDeliverer,
   PageHttpAdapter,
   type PageHttpApplication,
@@ -100,7 +101,7 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 /** Everything the web layer needs; routes stay thin adapters over this. */
 export interface AppServices {
   engine: LocatorEngine;
-  page_repository: PageRepository;
+  page_repository: PageAggregateRepository | PageRepository;
   pages:
     & PageHttpApplication
     & PageDeliverer
@@ -130,8 +131,8 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Referentially linked repositories are supplied as one composition unit. */
   readonly ownership_repositories?: OwnershipRepositories;
-  /** Page persistence stays behind `PageRepository`; memory is default. */
-  readonly page_repository?: PageRepository;
+  /** Page persistence stays behind the aggregate or compatibility interface. */
+  readonly page_repository?: PageAggregateRepository | PageRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
   /** Provider implementations are supplied at the composition boundary. */
