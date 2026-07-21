@@ -63,7 +63,7 @@ Each repository defaults to memory. Current durable selectors are:
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
-IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
+IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
 ```
 
 All Deno KV adapters use the ownership database path or attached default

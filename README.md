@@ -129,7 +129,7 @@ set:
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
-IAM_PAGER_CONTENT_STORAGE_BACKEND=deno-kv
+IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
 ```
 
 For a self-hosted database, also set the shared path:

@@ -7,7 +7,7 @@ import {
   type OwnershipStorageConfig,
 } from "./ownership-storage.ts";
 
-export const PAGE_STORAGE_BACKEND_ENV = "IAM_PAGER_CONTENT_STORAGE_BACKEND";
+export const PAGE_STORAGE_BACKEND_ENV = "IAM_PAGER_PAGE_STORAGE_BACKEND";
 
 export interface PageStorageEnvironmentSource {
   get(name: string): string | undefined;
