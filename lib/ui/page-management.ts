@@ -13,6 +13,9 @@ import {
   type PageEndpointLinks,
 } from "../page/endpoint.ts";
 import { format_page_etag, parse_page_etag } from "../page/etag.ts";
+import type { DeliveryProfile } from "../content/model.ts";
+import type { NamespaceReservationManager } from "../namespace/interfaces.ts";
+import { sort_reservations } from "../namespace/model.ts";
 import {
   type ManagedPageLister,
   type ManagedPageRevisionSelection,
@@ -56,6 +59,7 @@ export type PageManagementPanel =
     readonly kind: "creator";
     /** Synchronizer token management mutations must send back to the API. */
     readonly csrf_token: string;
+    readonly owned_namespaces: readonly string[];
     readonly pages: readonly PageManagementSummary[];
     readonly next_cursor: string | null;
   };
@@ -69,6 +73,7 @@ export const page_management_page_size = 20;
 
 export interface CreatorPageManagementPresenterOptions {
   readonly pages: ManagedPageLister;
+  readonly namespaces: Pick<NamespaceReservationManager, "list_owned">;
   /** Override only in tests; HTTP bounds stay 1-100. */
   readonly page_size?: number;
 }
@@ -82,25 +87,33 @@ export interface CreatorPageManagementPresenterOptions {
 export class CreatorPageManagementPresenter
   implements PageManagementPanelPresenter {
   readonly #pages: ManagedPageLister;
+  readonly #namespaces: Pick<NamespaceReservationManager, "list_owned">;
   readonly #page_size: number;
 
   constructor(options: CreatorPageManagementPresenterOptions) {
     this.#pages = options.pages;
+    this.#namespaces = options.namespaces;
     this.#page_size = options.page_size ?? page_management_page_size;
   }
 
   async present(session: Session): Promise<PageManagementPanel> {
     if (session.kind !== "authenticated") return { kind: "hidden" };
-    const result = await this.#pages.list_managed({
-      actor: { kind: "user", user_id: session.user_id },
-      limit: this.#page_size,
-    });
+    const [result, owned] = await Promise.all([
+      this.#pages.list_managed({
+        actor: { kind: "user", user_id: session.user_id },
+        limit: this.#page_size,
+      }),
+      this.#namespaces.list_owned(session.user_id),
+    ]);
     if (!result.ok) {
       throw new Error(`managed page listing failed: ${result.reason}`);
     }
     return {
       kind: "creator",
       csrf_token: session.csrf_token,
+      owned_namespaces: sort_reservations(owned).map((reservation) =>
+        reservation.namespace
+      ),
       pages: result.pages.map(present_management_summary),
       next_cursor: result.next_cursor,
     };
@@ -199,15 +212,36 @@ export interface ManagedMdPageDraft {
   readonly css: string;
 }
 
+/** Editable reference state; profile is explicit and never inferred from path. */
+export interface ManagedEndpointDraft {
+  readonly namespace: string;
+  readonly page_name: string;
+  readonly delivery_profile: DeliveryProfile;
+}
+
+export interface ManagedEndpointSetDraft {
+  readonly primary: ManagedEndpointDraft;
+  readonly aliases: readonly ManagedEndpointDraft[];
+}
+
 export interface ManagedPageFilters {
   readonly name?: string;
   readonly access?: PageAccess;
   readonly tag?: string;
 }
 
+interface ManagedEndpointBindingBody {
+  readonly locator: Locator;
+  readonly delivery_profile: DeliveryProfile;
+}
+
 interface ManagedUpdateBody {
   readonly access?: PageAccess;
   readonly tags?: readonly string[];
+  readonly endpoint_set?: {
+    readonly canonical: ManagedEndpointBindingBody;
+    readonly alternates: readonly ManagedEndpointBindingBody[];
+  };
   readonly content?: {
     readonly content_type: "md-page";
     readonly input: { readonly md: string; readonly css?: string };
@@ -303,14 +337,17 @@ export function prepare_managed_update_request(
     readonly access?: PageAccess;
     readonly tags?: readonly string[];
     readonly content?: ManagedMdPageDraft;
+    readonly endpoints?: ManagedEndpointSetDraft;
   },
   csrf_token: string,
 ): PreparedManagedRequest {
   if (
     patch.access === undefined && patch.tags === undefined &&
-    patch.content === undefined
+    patch.content === undefined && patch.endpoints === undefined
   ) {
-    throw new Error("managed update requires access, tags, or content");
+    throw new Error(
+      "managed update requires access, tags, content, or endpoints",
+    );
   }
   return {
     url: target.management_url,
@@ -319,6 +356,12 @@ export function prepare_managed_update_request(
     body: {
       ...(patch.access === undefined ? {} : { access: patch.access }),
       ...(patch.tags === undefined ? {} : { tags: [...patch.tags] }),
+      ...(patch.endpoints === undefined ? {} : {
+        endpoint_set: {
+          canonical: endpoint_binding_from_draft(patch.endpoints.primary),
+          alternates: patch.endpoints.aliases.map(endpoint_binding_from_draft),
+        },
+      }),
       ...(patch.content === undefined ? {} : {
         content: {
           content_type: "md-page" as const,
@@ -341,8 +384,8 @@ export interface ManagedPdfReplacementDraft {
 
 /**
  * Maps one selected file onto the exact revision-bound PDF replacement
- * contract. The complete current endpoint set is repeated without deriving
- * aliases or delivery behavior from paths.
+ * contract. Endpoint metadata is deliberately omitted so content-only
+ * replacement preserves every current reference server-side.
  */
 export function prepare_managed_pdf_replace_request(
   page: PageManagementSummary,
@@ -352,10 +395,6 @@ export function prepare_managed_pdf_replace_request(
   const violation = managed_pdf_replacement_violation(draft);
   if (violation !== null) throw new Error(violation);
   const metadata = {
-    endpoint_set: {
-      canonical: endpoint_binding_from_link(page.endpoints.canonical),
-      alternates: page.endpoints.alternates.map(endpoint_binding_from_link),
-    },
     ...(draft.tags === undefined ? {} : { tags: [...draft.tags] }),
   };
   const form_data = new FormData();
@@ -605,27 +644,25 @@ export function managed_pdf_metadata(
 }
 
 export interface ManagedPdfDeliveryLinks {
-  readonly preview: PageEndpointLink;
+  readonly previews: readonly PageEndpointLink[];
   readonly downloads: readonly PageEndpointLink[];
 }
 
-/** Derives creator PDF actions from server-returned endpoint profiles only. */
+/** Derives all creator PDF actions from returned profiles, regardless of rank. */
 export function managed_pdf_delivery_links(
   page: PageManagementSummary,
 ): ManagedPdfDeliveryLinks | null {
-  if (
-    page.content_type !== "pdf" ||
-    page.endpoints.canonical.delivery_profile !== "inline"
-  ) {
-    return null;
-  }
-  const downloads = page.endpoints.alternates.filter((endpoint) =>
-    endpoint.delivery_profile === "attachment"
-  );
-  if (downloads.length === 0) return null;
+  if (page.content_type !== "pdf") return null;
+  const endpoints = [page.endpoints.canonical, ...page.endpoints.alternates];
   return {
-    preview: structuredClone(page.endpoints.canonical),
-    downloads: structuredClone(downloads),
+    previews: structuredClone(
+      endpoints.filter((endpoint) => endpoint.delivery_profile === "inline"),
+    ),
+    downloads: structuredClone(
+      endpoints.filter((endpoint) =>
+        endpoint.delivery_profile === "attachment"
+      ),
+    ),
   };
 }
 
@@ -640,10 +677,17 @@ export function format_size_bytes(size_bytes: number): string {
   return `${format_scaled(kib / 1024)} MiB`;
 }
 
-function endpoint_binding_from_link(link: PageEndpointLink) {
+function endpoint_binding_from_draft(
+  draft: ManagedEndpointDraft,
+): ManagedEndpointBindingBody {
+  const namespace = draft.namespace.trim();
+  const page_name = draft.page_name.trim();
   return {
-    locator: structuredClone(link.locator),
-    delivery_profile: link.delivery_profile,
+    locator: {
+      namespace,
+      ...(page_name === "" ? {} : { page_name }),
+    },
+    delivery_profile: draft.delivery_profile,
   };
 }
 

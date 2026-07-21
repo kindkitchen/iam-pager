@@ -5,6 +5,7 @@
  */
 export type SiteLocation =
   | { readonly kind: "home" }
+  | { readonly kind: "explore" }
   | { readonly kind: "manage" }
   | { readonly kind: "public_page"; readonly title: string };
 
@@ -34,6 +35,13 @@ export class SiteLocationBreadcrumbPresenter
     switch (location.kind) {
       case "home":
         return { steps: [{ label: "Home" }] };
+      case "explore":
+        return {
+          steps: [
+            { label: "Home", href: site_home_href },
+            { label: "Explore" },
+          ],
+        };
       case "manage":
         return {
           steps: [

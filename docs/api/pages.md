@@ -44,8 +44,11 @@ Managed summaries contain:
 }
 ```
 
-`locator` and `path` identify the canonical endpoint. `endpoints` is the
-complete one-to-eight-binding set in deterministic order. Paths are
+`locator` and `path` identify the structurally canonical endpoint: the preferred
+reference used for management, exploration, and sorting, not content identity or
+an implied profile. `endpoints` is the complete non-empty locator-reference set
+in deterministic order. References may cross namespaces; managed creation and
+mutation require the actor to own every namespace. Paths are
 application-relative values formatted by the locator boundary. Tags are
 lowercase sorted unique values; trial pages have none.
 
@@ -59,7 +62,18 @@ replaceability. PDF bytes and storage IDs are never returned.
 
 ```json
 {
-  "locator": { "namespace": "Alice", "page_name": "notes" },
+  "endpoint_set": {
+    "canonical": {
+      "locator": { "namespace": "Alice", "page_name": "notes" },
+      "delivery_profile": "inline"
+    },
+    "alternates": [
+      {
+        "locator": { "namespace": "Notes", "page_name": "alice" },
+        "delivery_profile": "inline"
+      }
+    ]
+  },
   "access": "private",
   "tags": ["notes", "work"],
   "content": {
@@ -69,9 +83,14 @@ replaceability. PDF bytes and storage IDs are never returned.
 }
 ```
 
-`page_name` and `tags` are optional. A guest may create or replace only a
-public, untagged trial in an unreserved namespace. An authenticated request
-always attempts managed creation, requires CSRF, and must target an owned
+`endpoint_set` always has one canonical/preferred binding and optional
+`alternates`; therefore every content creation has at least one explicit valid
+locator and delivery profile. `page_name`, `alternates`, and `tags` are
+optional. The legacy `locator` field remains accepted instead of `endpoint_set`
+and means one `inline` canonical binding, but new callers should use the
+explicit shape. A guest may create or replace only a public, untagged trial when
+every referenced namespace is unreserved. An authenticated request always
+attempts managed creation, requires CSRF, and must own every referenced
 namespace; it never falls back to trial publication.
 
 Create returns `201`; trial replacement returns `200`. Success includes
@@ -108,22 +127,26 @@ Metadata is strict UTF-8 JSON:
 }
 ```
 
-The complete set has 2–8 unique same-namespace locators, a canonical inline
-binding, and at least one attachment alternate. No suffix is generated or
-interpreted. Declared file type/extension does not replace PDF validation.
-Authority, status, location, ETag, and conflict behavior match Markdown create.
+The complete set follows the same rules as Markdown: one or more unique valid
+locators, each with a PDF-supported `inline` or `attachment` profile. The shown
+pair is optional; a single attachment or inline locator is valid. References may
+cross namespaces subject to authority. No suffix is generated or interpreted.
+Declared file type/extension does not replace PDF validation. Authority, status,
+location, ETag, and conflict behavior match Markdown create.
 
 Typical failures: `400` malformed shape, `401` stale creator intent, `403` CSRF
 or forbidden authority, `409` ownership/page/endpoint conflict, `413` oversized,
-`415` unsupported media, `422` invalid locator/access/tag/content/endpoint, and
-`503` identity generation exhaustion.
+`415` unsupported media, `422` invalid locator/access/tag/content/endpoint,
+`507` selected-storage endpoint capacity, and `503` identity generation
+exhaustion.
 
 ## List — `GET /api/pages`
 
 Requires authentication. Optional query fields:
 
-- `namespace`: exact owned namespace;
-- `name`: case-insensitive page-name substring, at most 100 characters;
+- `namespace`: exact owned preferred-locator namespace;
+- `name`: case-insensitive preferred page-name substring, at most 100
+  characters;
 - `access`: `public` or `private`;
 - `tag`: exact canonical tag;
 - `limit`: canonical decimal `1`–`100`, default `50`;
@@ -141,8 +164,11 @@ strong page/revision `ETag`.
 ## Update — `PATCH /api/pages/:page_id`
 
 Requires owner session, CSRF, and exactly one strong `If-Match` from a previous
-managed representation. JSON PATCH accepts `access`, `tags`, `content`, or a
-combination; omitted fields remain unchanged and an empty tag array clears tags.
+managed representation. JSON PATCH accepts `access`, `tags`, `content`,
+`endpoint_set`, or a combination; omitted fields remain unchanged and an empty
+tag array clears tags. `endpoint_set` is always a complete replacement, while a
+content-only update preserves every locator reference and revalidates its
+profiles against the replacement format.
 
 ```json
 { "access": "public", "tags": ["published"] }
@@ -158,13 +184,14 @@ combination; omitted fields remain unchanged and an empty tag array clears tags.
 ```
 
 PDF replacement uses the same exact two-part multipart boundary and always
-includes a new file. Metadata requires the complete `endpoint_set` and may
-include `access` and `tags`; omitted metadata is preserved. Content and endpoint
+includes a new file. Metadata may include the complete `endpoint_set`, `access`,
+and `tags`; each omitted field is preserved. Content and optional endpoint
 changes commit once at the supplied revision.
 
 Success returns the complete inspection and next ETag. Missing preconditions
 return `428`, malformed validators `400`, a stale/different-page validator
-`412`, missing/foreign pages `404`, conflicts `409`, and invalid input `422`.
+`412`, missing/foreign pages `404`, conflicts `409`, invalid input `422`, and a
+selected-storage endpoint-capacity failure `507`.
 
 ## Delete — `DELETE /api/pages/:page_id`
 
@@ -182,21 +209,34 @@ contains `page_name`; `{}` makes the page its namespace default.
 ```
 
 Success returns `200`, `outcome` (`renamed`, `replaced_trial`, or `unchanged`),
-the inspection, and ETag. Identity, content, access, tags, and creation time
-stay stable. Another managed destination returns `409`; invalid names `422`;
-stale source `412`.
+the inspection, and ETag. Rename changes only the preferred locator's page name;
+additional references, identity, content, access, tags, and creation time stay
+stable. Another managed destination returns `409`; invalid names `422`; stale
+source `412`.
 
 ## Duplicate — `POST /api/pages/:page_id/duplicate`
 
-Requires owner session, CSRF, exact `If-Match`, and no body. For a one-inline-
-endpoint page, the service chooses a bounded available name and copies the exact
-source revision to a fresh page ID at revision 1 while sharing immutable content
-safely. Pages with richer endpoint sets require explicit destination endpoint
-intent through the application capability and are not duplicated by this
-bodyless HTTP command.
+Requires owner session, CSRF, and exact `If-Match`. A bodyless request keeps the
+convenience behavior for a one-inline-endpoint page: the service chooses a
+bounded available name. Any source can instead provide a fresh complete
+destination set:
 
-Success returns `201`, `outcome`, inspection, ETag, and management `Location`.
-Stale/missing sources and bounded name/ID exhaustion are typed failures.
+```json
+{
+  "endpoint_set": {
+    "canonical": {
+      "locator": { "namespace": "Alice", "page_name": "copy" },
+      "delivery_profile": "inline"
+    },
+    "alternates": []
+  }
+}
+```
+
+Both forms copy the exact source revision to a fresh page ID at revision 1 while
+sharing immutable content safely. Success returns `201`, `outcome`, inspection,
+ETag, and management `Location`. Stale/missing sources, destination authority,
+selected-storage capacity, and bounded name/ID exhaustion are typed failures.
 
 ## Bulk commands
 
@@ -222,10 +262,12 @@ Accepted items execute independently in order and return one success,
 
 ## Public exploration
 
-`/` and `/site` accept optional `namespace` and `page` substring fields, one
-exact `tag`, and opaque `cursor`. Public results contain no page ID, revision,
-access field, or owner identity. Private and trial pages are excluded by the
-page repository capability.
+`/site/explore` accepts optional `namespace` and `page` substring fields over
+the preferred locator, one exact `tag`, and opaque `cursor`. Legacy
+query-bearing `/` and `/site` URLs redirect to that canonical page. Each logical
+content item appears once even when references span namespaces. Public results
+contain no page ID, revision, access field, or owner identity. Private and trial
+pages are excluded by the page repository capability.
 
 ## Direct delivery
 
@@ -234,9 +276,11 @@ and known trial locators are directly readable. A private page is readable only
 by its creator's current session; everyone else receives the ordinary missing
 response.
 
-After authority checks, the stored endpoint profile selects `inline` or
-`attachment`. PDF responses use `application/pdf`, `nosniff`, `no-store`, exact
-length, one strong ETag per page revision, and `Accept-Ranges: bytes`. They
-support a complete `200`, matching `304`, one satisfiable `206`, and bodyless
-`416`; `If-Range` mismatch falls back to the complete current response. Inline
-and attachment endpoints return byte-identical content and validators.
+After authority checks, the stored endpoint profile selects delivery behavior.
+The current HTTP transport implements `inline` and `attachment` and returns
+`501` rather than guessing for a future profile it does not implement. PDF
+responses use `application/pdf`, `nosniff`, `no-store`, exact length, one strong
+ETag per page revision, and `Accept-Ranges: bytes`. They support a complete
+`200`, matching `304`, one satisfiable `206`, and bodyless `416`; `If-Range`
+mismatch falls back to the complete current response. Inline and attachment
+endpoints return byte-identical content and validators.

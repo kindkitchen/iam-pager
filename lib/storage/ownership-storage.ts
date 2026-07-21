@@ -16,13 +16,15 @@ export const OWNERSHIP_DENO_KV_PATH_ENV = "IAM_PAGER_OWNERSHIP_DENO_KV_PATH";
 
 const max_kv_path_length = 4096;
 
-export interface OwnershipStorageEnvironmentSource {
+export interface StorageEnvironmentSource {
   get(name: string): string | undefined;
 }
 
-export type OwnershipStorageConfig =
+export type StorageConfig =
   | { readonly backend: "memory" }
   | { readonly backend: "deno-kv"; readonly path?: string };
+
+export type OwnershipStorageConfig = StorageConfig;
 
 export interface OwnershipRepositories {
   readonly identity_repository: IdentityRepository;
@@ -92,7 +94,7 @@ export class DefaultOwnershipRepositoryFactory
  * configuration deliberately preserves both in-memory implementations.
  */
 export function parse_ownership_storage_config(
-  environment: OwnershipStorageEnvironmentSource,
+  environment: StorageEnvironmentSource,
 ): OwnershipStorageConfig {
   const backend = environment.get(OWNERSHIP_STORAGE_BACKEND_ENV);
   const path = environment.get(OWNERSHIP_DENO_KV_PATH_ENV);
@@ -122,4 +124,29 @@ export function parse_ownership_storage_config(
     );
   }
   return { backend: "deno-kv", path };
+}
+
+/** A durable dependent store must share the durable ownership database. */
+export function parse_dependent_storage_config(
+  environment: StorageEnvironmentSource,
+  backend_environment_name: string,
+  ownership_config: OwnershipStorageConfig,
+): StorageConfig {
+  const backend = environment.get(backend_environment_name);
+  if (backend === undefined || backend === "memory") {
+    return { backend: "memory" };
+  }
+  if (backend !== "deno-kv") {
+    throw new TypeError(
+      `${backend_environment_name} must be memory or deno-kv`,
+    );
+  }
+  if (ownership_config.backend !== "deno-kv") {
+    throw new TypeError(
+      `${backend_environment_name}=deno-kv requires durable ownership through ${OWNERSHIP_STORAGE_BACKEND_ENV}=deno-kv`,
+    );
+  }
+  return ownership_config.path === undefined
+    ? { backend: "deno-kv" }
+    : { backend: "deno-kv", path: ownership_config.path };
 }

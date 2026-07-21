@@ -120,7 +120,10 @@ type EndpointPreparationResult =
   | { ok: true; endpoint_set: PageEndpointSet }
   | {
     ok: false;
-    reason: PageEndpointCommandFailureReason | "unknown_content_type";
+    reason:
+      | PageEndpointCommandFailureReason
+      | "endpoint_capacity_exceeded"
+      | "unknown_content_type";
   };
 
 type MaterializedPage = PageAggregate & { readonly content: PageContent };
@@ -136,7 +139,11 @@ type MaterializedPageUpdateResult =
   | { ok: true; page: MaterializedPage }
   | {
     ok: false;
-    reason: "not_found" | "revision_conflict" | "endpoint_conflict";
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "endpoint_conflict"
+      | "endpoint_capacity_exceeded";
   };
 
 type MaterializedPageListResult =
@@ -235,11 +242,11 @@ export class PageService
     if (request.access === "private") {
       return { ok: false, reason: "private_requires_managed_page" };
     }
-    const authority = await this.#namespace_authority.resolve(
+    const authorities = await this.#endpoint_authorities(
       request.actor,
-      endpoints.endpoint_set.canonical.locator.namespace,
+      endpoints.endpoint_set,
     );
-    if (authority.kind !== "unreserved") {
+    if (authorities.some((authority) => authority !== "unreserved")) {
       return { ok: false, reason: "namespace_reserved" };
     }
     const prepared = this.#prepare_content(request.content);
@@ -266,6 +273,7 @@ export class PageService
       }
       if (
         result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded" ||
         result.reason === "revision_exhausted"
       ) {
         return { ok: false, reason: result.reason };
@@ -288,15 +296,12 @@ export class PageService
     }
     const tags = normalize_page_tags(request.tags ?? []);
     if (tags === null) return { ok: false, reason: "invalid_tags" };
-    const authority = await this.#namespace_authority.resolve(
+    const authority_failure = await this.#managed_endpoint_authority_failure(
       request.actor,
-      endpoints.endpoint_set.canonical.locator.namespace,
+      endpoints.endpoint_set,
     );
-    if (authority.kind === "unreserved") {
-      return { ok: false, reason: "namespace_not_reserved" };
-    }
-    if (authority.kind === "reserved_by_other") {
-      return { ok: false, reason: "namespace_reserved" };
+    if (authority_failure !== null) {
+      return { ok: false, reason: authority_failure };
     }
     const prepared = this.#prepare_content(request.content);
     if (!prepared.ok) return prepared;
@@ -321,6 +326,9 @@ export class PageService
       }
       if (result.reason === "managed_conflict") {
         return { ok: false, reason: "page_exists" };
+      }
+      if (result.reason === "endpoint_capacity_exceeded") {
+        return { ok: false, reason: "endpoint_capacity_exceeded" };
       }
     }
     return { ok: false, reason: "page_id_generation_exhausted" };
@@ -363,15 +371,17 @@ export class PageService
     ) {
       return { ok: false, reason: "invalid_filter" };
     }
-    const listed = await this.#list_managed_records({
-      owner_user_id: request.actor.user_id,
-      ...(namespace === undefined ? {} : { namespace }),
-      ...(page_name_query === undefined ? {} : { page_name_query }),
-      ...(request.access === undefined ? {} : { access: request.access }),
-      ...(tag === undefined ? {} : { tag }),
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const listed = await this.#materialize_list(
+      this.#repository.list_managed_page_aggregates({
+        owner_user_id: request.actor.user_id,
+        ...(namespace === undefined ? {} : { namespace }),
+        ...(page_name_query === undefined ? {} : { page_name_query }),
+        ...(request.access === undefined ? {} : { access: request.access }),
+        ...(tag === undefined ? {} : { tag }),
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!listed.ok) return listed;
     return {
       ok: true,
@@ -389,7 +399,7 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
-    return this.#inspection(page);
+    return { ok: true, page: this.#inspection(page) };
   }
 
   async update_managed(
@@ -422,12 +432,7 @@ export class PageService
     if (page.revision === Number.MAX_SAFE_INTEGER) {
       return { ok: false, reason: "revision_exhausted" };
     }
-    // The successful response is an inspection representation. Refuse before
-    // mutation when retained content has no handler, rather than committing an
-    // access-only change and only then discovering that source cannot render.
-    if (!this.#handlers.has(page.content.content_type)) {
-      return { ok: false, reason: "unknown_content_type" };
-    }
+    this.#require_handler(page.content.content_type);
     let content: PageContent | undefined;
     if (request.patch.content !== undefined) {
       const prepared = this.#prepare_content(request.patch.content);
@@ -443,11 +448,15 @@ export class PageService
         content?.content_type ?? page.content.content_type,
       );
       if (!planned.ok) return planned;
-      if (
-        planned.endpoint_set.canonical.locator.namespace.toLowerCase() !==
-          current_endpoint_set.canonical.locator.namespace.toLowerCase()
-      ) {
-        return { ok: false, reason: "namespace_mismatch" };
+      if (has_endpoints) {
+        const authority_failure = await this
+          .#managed_endpoint_authority_failure(
+            request.actor,
+            planned.endpoint_set,
+          );
+        if (authority_failure !== null) {
+          return { ok: false, reason: authority_failure };
+        }
       }
       if (
         !page_endpoint_sets_equal(planned.endpoint_set, current_endpoint_set)
@@ -459,7 +468,7 @@ export class PageService
       has_endpoints && endpoint_set === undefined && !has_access && !has_tags &&
       !has_content
     ) {
-      return this.#inspection(page);
+      return { ok: true, page: this.#inspection(page) };
     }
 
     const replaced = await this.#replace_managed_record({
@@ -478,7 +487,7 @@ export class PageService
       }
       return { ok: false, reason: replaced.reason };
     }
-    return this.#inspection(replaced.page);
+    return { ok: true, page: this.#inspection(replaced.page) };
   }
 
   async bulk_change_managed_access(
@@ -532,7 +541,10 @@ export class PageService
         now,
       });
       if (!replaced.ok) {
-        if (replaced.reason === "endpoint_conflict") {
+        if (
+          replaced.reason === "endpoint_conflict" ||
+          replaced.reason === "endpoint_capacity_exceeded"
+        ) {
           throw new Error(
             "page service persistence: access-only update changed endpoints",
           );
@@ -569,7 +581,6 @@ export class PageService
       return { ok: false, reason: "revision_conflict" };
     }
     const current_inspection = this.#inspection(existing);
-    if (!current_inspection.ok) return current_inspection;
     const current_locator = existing.endpoint_set.canonical.locator;
     const locator: Locator = request.page_name === undefined
       ? { namespace: current_locator.namespace }
@@ -578,7 +589,7 @@ export class PageService
       return {
         ok: true,
         outcome: "unchanged",
-        page: current_inspection.page,
+        page: current_inspection,
       };
     }
     const current_endpoint_set = this.#endpoint_set(existing);
@@ -593,9 +604,10 @@ export class PageService
       if (planned.reason === "duplicate_locator") {
         return { ok: false, reason: "page_exists" };
       }
-      return planned.reason === "invalid_locator"
-        ? { ok: false, reason: "invalid_page_name" }
-        : { ok: false, reason: "unknown_content_type" };
+      if (planned.reason === "invalid_locator") {
+        return { ok: false, reason: "invalid_page_name" };
+      }
+      throw new Error(`stored page endpoint invariant: ${planned.reason}`);
     }
     if (existing.revision === Number.MAX_SAFE_INTEGER) {
       return { ok: false, reason: "revision_exhausted" };
@@ -613,10 +625,11 @@ export class PageService
       }
       return { ok: false, reason: renamed.reason };
     }
-    const inspection = this.#inspection(renamed.page);
-    return inspection.ok
-      ? { ok: true, outcome: renamed.outcome, page: inspection.page }
-      : inspection;
+    return {
+      ok: true,
+      outcome: renamed.outcome,
+      page: this.#inspection(renamed.page),
+    };
   }
 
   async duplicate_managed(
@@ -634,8 +647,7 @@ export class PageService
     if (source.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
-    const source_inspection = this.#inspection(source);
-    if (!source_inspection.ok) return source_inspection;
+    const handler = this.#require_handler(source.content.content_type);
     const source_locator = source.endpoint_set.canonical.locator;
 
     if (request.endpoint_set !== undefined) {
@@ -643,12 +655,18 @@ export class PageService
         request.endpoint_set,
         source.content.content_type,
       );
-      if (!planned.ok) return planned;
-      if (
-        planned.endpoint_set.canonical.locator.namespace.toLowerCase() !==
-          source_locator.namespace.toLowerCase()
-      ) {
-        return { ok: false, reason: "namespace_mismatch" };
+      if (!planned.ok) {
+        if (planned.reason === "unknown_content_type") {
+          throw new Error("stored page content type has no handler");
+        }
+        return { ok: false, reason: planned.reason };
+      }
+      const authority_failure = await this.#managed_endpoint_authority_failure(
+        request.actor,
+        planned.endpoint_set,
+      );
+      if (authority_failure !== null) {
+        return { ok: false, reason: authority_failure };
       }
       const now = this.#operation_time();
       for (
@@ -665,10 +683,11 @@ export class PageService
           now,
         });
         if (duplicated.ok) {
-          const inspection = this.#inspection(duplicated.page);
-          return inspection.ok
-            ? { ok: true, outcome: duplicated.outcome, page: inspection.page }
-            : inspection;
+          return {
+            ok: true,
+            outcome: duplicated.outcome,
+            page: this.#inspection(duplicated.page),
+          };
         }
         if (
           duplicated.reason === "not_found" ||
@@ -679,12 +698,14 @@ export class PageService
         if (duplicated.reason === "locator_conflict") {
           return { ok: false, reason: "page_exists" };
         }
+        if (duplicated.reason === "endpoint_capacity_exceeded") {
+          return { ok: false, reason: "endpoint_capacity_exceeded" };
+        }
       }
       return { ok: false, reason: "page_id_generation_exhausted" };
     }
 
     const source_endpoint_set = this.#endpoint_set(source);
-    const handler = this.#handlers.get(source.content.content_type)!;
     if (
       source_endpoint_set.alternates.length !== 0 ||
       source_endpoint_set.canonical.delivery_profile !== "inline" ||
@@ -733,14 +754,11 @@ export class PageService
           now,
         });
         if (duplicated.ok) {
-          const inspection = this.#inspection(duplicated.page);
-          return inspection.ok
-            ? {
-              ok: true,
-              outcome: duplicated.outcome,
-              page: inspection.page,
-            }
-            : inspection;
+          return {
+            ok: true,
+            outcome: duplicated.outcome,
+            page: this.#inspection(duplicated.page),
+          };
         }
         if (duplicated.reason === "not_found") {
           return { ok: false, reason: "not_found" };
@@ -751,6 +769,9 @@ export class PageService
         if (duplicated.reason === "locator_conflict") {
           name_conflict = true;
           break;
+        }
+        if (duplicated.reason === "endpoint_capacity_exceeded") {
+          return { ok: false, reason: "endpoint_capacity_exceeded" };
         }
       }
       if (!name_conflict) {
@@ -772,7 +793,7 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
-    return await this.#delete_managed_record({
+    return await this.#repository.delete_managed_page_aggregate({
       page_id: page.page_id,
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
@@ -801,7 +822,7 @@ export class PageService
         });
         continue;
       }
-      const deleted = await this.#delete_managed_record({
+      const deleted = await this.#repository.delete_managed_page_aggregate({
         page_id: page.page_id,
         owner_user_id: request.actor.user_id,
         expected_revision: selected.expected_revision,
@@ -828,10 +849,11 @@ export class PageService
       return { ok: false, reason: "not_found" };
     }
     const handler = this.#handlers.get(page.content.content_type);
+    if (handler === undefined) return { ok: false, reason: "not_found" };
     return {
       ok: true,
       page: this.#public_summary(page),
-      payload: handler === undefined ? null : handler.render(page.content.data),
+      payload: handler.render(page.content.data),
     };
   }
 
@@ -847,11 +869,13 @@ export class PageService
           : "invalid_namespace",
       };
     }
-    const listed = await this.#list_public_records({
-      namespace: validation.locator.namespace,
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const listed = await this.#materialize_list(
+      this.#repository.list_public_page_aggregates({
+        namespace: validation.locator.namespace,
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!listed.ok) return listed;
     return {
       ok: true,
@@ -873,13 +897,15 @@ export class PageService
     if (namespace_query === null || page_name_query === null || tag === null) {
       return { ok: false, reason: "invalid_query" };
     }
-    const explored = await this.#explore_public_records({
-      ...(namespace_query === undefined ? {} : { namespace_query }),
-      ...(page_name_query === undefined ? {} : { page_name_query }),
-      ...(tag === undefined ? {} : { tag }),
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const explored = await this.#materialize_list(
+      this.#repository.explore_public_page_aggregates({
+        ...(namespace_query === undefined ? {} : { namespace_query }),
+        ...(page_name_query === undefined ? {} : { page_name_query }),
+        ...(tag === undefined ? {} : { tag }),
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!explored.ok) return explored;
     return {
       ok: true,
@@ -897,7 +923,7 @@ export class PageService
     const page = resolved.page;
     const handler = this.#handlers.get(page.content.content_type);
     if (handler === undefined) {
-      return { ok: false as const, reason: "unknown_content_type" as const };
+      return { ok: false as const, reason: "corrupt" as const };
     }
     if (
       !handler.supported_delivery_profiles.includes(
@@ -932,6 +958,7 @@ export class PageService
       | "managed_conflict"
       | "endpoint_conflict"
       | "page_id_conflict"
+      | "endpoint_capacity_exceeded"
       | "revision_exhausted"
     >
   > {
@@ -949,6 +976,7 @@ export class PageService
       if (
         result.reason === "managed_conflict" ||
         result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded" ||
         result.reason === "revision_exhausted" ||
         result.reason === "page_id_conflict"
       ) {
@@ -974,7 +1002,7 @@ export class PageService
   }): Promise<
     MaterializedPageMutationResult<
       "created" | "replaced_trial",
-      "managed_conflict" | "page_id_conflict"
+      "managed_conflict" | "page_id_conflict" | "endpoint_capacity_exceeded"
     >
   > {
     const content_asset_id = await this.#stage_content_asset(
@@ -991,8 +1019,11 @@ export class PageService
       now: request.now,
     });
     if (!result.ok) {
-      if (result.reason === "managed_conflict") {
-        return { ok: false, reason: "managed_conflict" };
+      if (
+        result.reason === "managed_conflict" ||
+        result.reason === "endpoint_capacity_exceeded"
+      ) {
+        return { ok: false, reason: result.reason };
       }
       return { ok: false, reason: "page_id_conflict" };
     }
@@ -1003,53 +1034,19 @@ export class PageService
     };
   }
 
-  async #list_managed_records(
-    request: Parameters<
-      PageAggregateRepository["list_managed_page_aggregates"]
-    >[0],
+  async #materialize_list(
+    pending: Promise<
+      | { ok: true; pages: PageAggregate[]; next_cursor: string | null }
+      | { ok: false; reason: "invalid_cursor" }
+    >,
   ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.list_managed_page_aggregates(request);
+    const result = await pending;
     if (!result.ok) return result;
     return {
-      ok: true,
+      ...result,
       pages: await Promise.all(
         result.pages.map((page) => this.#materialize_aggregate(page)),
       ),
-      next_cursor: result.next_cursor,
-    };
-  }
-
-  async #list_public_records(
-    request: Parameters<
-      PageAggregateRepository["list_public_page_aggregates"]
-    >[0],
-  ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.list_public_page_aggregates(request);
-    if (!result.ok) return result;
-    return {
-      ok: true,
-      pages: await Promise.all(
-        result.pages.map((page) => this.#materialize_aggregate(page)),
-      ),
-      next_cursor: result.next_cursor,
-    };
-  }
-
-  async #explore_public_records(
-    request: Parameters<
-      PageAggregateRepository["explore_public_page_aggregates"]
-    >[0],
-  ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.explore_public_page_aggregates(
-      request,
-    );
-    if (!result.ok) return result;
-    return {
-      ok: true,
-      pages: await Promise.all(
-        result.pages.map((page) => this.#materialize_aggregate(page)),
-      ),
-      next_cursor: result.next_cursor,
     };
   }
 
@@ -1084,7 +1081,8 @@ export class PageService
       if (
         result.reason === "not_found" ||
         result.reason === "revision_conflict" ||
-        result.reason === "endpoint_conflict"
+        result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded"
       ) {
         return { ok: false as const, reason: result.reason };
       }
@@ -1148,6 +1146,7 @@ export class PageService
       | "revision_conflict"
       | "locator_conflict"
       | "page_id_conflict"
+      | "endpoint_capacity_exceeded"
     >
   > {
     const result = await this.#repository.duplicate_managed_page_aggregate({
@@ -1169,14 +1168,6 @@ export class PageService
       outcome: result.outcome,
       page: await this.#materialize_aggregate(result.page),
     };
-  }
-
-  #delete_managed_record(
-    request: Parameters<
-      PageAggregateRepository["delete_managed_page_aggregate"]
-    >[0],
-  ) {
-    return this.#repository.delete_managed_page_aggregate(request);
   }
 
   async #find_public_record_by_locator(
@@ -1284,6 +1275,38 @@ export class PageService
     };
   }
 
+  async #endpoint_authorities(
+    actor: { kind: "guest" } | UserPageActor,
+    endpoint_set: PageEndpointSet,
+  ): Promise<Array<"unreserved" | "owned" | "reserved_by_other">> {
+    const namespaces = new Map<string, string>();
+    for (
+      const endpoint of [
+        endpoint_set.canonical,
+        ...endpoint_set.alternates,
+      ]
+    ) {
+      const key = endpoint.locator.namespace.toLowerCase();
+      if (!namespaces.has(key)) namespaces.set(key, endpoint.locator.namespace);
+    }
+    return await Promise.all(
+      [...namespaces.values()].map(async (namespace) =>
+        (await this.#namespace_authority.resolve(actor, namespace)).kind
+      ),
+    );
+  }
+
+  async #managed_endpoint_authority_failure(
+    actor: UserPageActor,
+    endpoint_set: PageEndpointSet,
+  ): Promise<"namespace_not_reserved" | "namespace_reserved" | null> {
+    const authorities = await this.#endpoint_authorities(actor, endpoint_set);
+    if (authorities.includes("reserved_by_other")) {
+      return "namespace_reserved";
+    }
+    return authorities.includes("unreserved") ? "namespace_not_reserved" : null;
+  }
+
   #prepare_endpoint_command(
     command: {
       readonly locator?: Locator;
@@ -1315,10 +1338,15 @@ export class PageService
     if (handler === undefined) {
       return { ok: false, reason: "unknown_content_type" };
     }
-    return this.#endpoint_planner.plan({
+    const planned = this.#endpoint_planner.plan({
       endpoint_set,
       supported_delivery_profiles: handler.supported_delivery_profiles,
     });
+    if (!planned.ok) return planned;
+    if (!this.#repository.can_persist_page_endpoint_set(planned.endpoint_set)) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
+    return planned;
   }
 
   #canonical_inline_endpoint_set(
@@ -1383,19 +1411,27 @@ export class PageService
       : null;
   }
 
-  #inspection(page: MaterializedPage): InspectManagedPageResult {
-    const handler = this.#handlers.get(page.content.content_type);
-    if (handler === undefined) {
-      return { ok: false, reason: "unknown_content_type" };
-    }
-    const inspection: ManagedPageInspection = {
+  #inspection(page: MaterializedPage): ManagedPageInspection {
+    const handler = this.#require_handler(page.content.content_type);
+    return {
       ...this.#summary(page),
       content: {
         content_type: page.content.content_type,
         input: handler.to_management(page.content.data),
       },
     };
-    return { ok: true, page: inspection };
+  }
+
+  #require_handler(
+    content_type: string,
+  ): ContentTypeHandler<unknown, unknown> {
+    const handler = this.#handlers.get(content_type);
+    if (handler === undefined) {
+      throw new Error(
+        `stored page content type has no handler: ${content_type}`,
+      );
+    }
+    return handler;
   }
 
   #public_summary(page: MaterializedPage): PublicPageSummary {

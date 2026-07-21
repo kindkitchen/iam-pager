@@ -17,7 +17,7 @@ export type PublicContentPreview =
   | { readonly kind: "html"; readonly document: string }
   | {
     readonly kind: "pdf";
-    readonly preview: PageEndpointLink;
+    readonly preview: PageEndpointLink | null;
     readonly downloads: readonly PageEndpointLink[];
     readonly size_bytes: number;
   }
@@ -129,30 +129,31 @@ export class CreatorPublicPageViewPresenter implements PublicPageViewPresenter {
 
 function preview_from_payload(
   page: PublicPageSummary,
-  payload: DeliveryPayload | null,
+  payload: DeliveryPayload,
 ): PublicContentPreview {
   if (
-    payload !== null && typeof payload.body === "string" &&
+    typeof payload.body === "string" &&
     payload.media_type.toLowerCase().startsWith("text/html")
   ) {
     return { kind: "html", document: payload.body };
   }
   if (
     page.content_type === "pdf" &&
-    page.media_type.toLowerCase() === "application/pdf" &&
-    page.endpoints.canonical.delivery_profile === "inline"
+    page.media_type.toLowerCase() === "application/pdf"
   ) {
-    const downloads = page.endpoints.alternates.filter((endpoint) =>
+    const endpoints = [page.endpoints.canonical, ...page.endpoints.alternates];
+    const preview = endpoints.find((endpoint) =>
+      endpoint.delivery_profile === "inline"
+    ) ?? null;
+    const downloads = endpoints.filter((endpoint) =>
       endpoint.delivery_profile === "attachment"
     );
-    if (downloads.length > 0) {
-      return {
-        kind: "pdf",
-        preview: structuredClone(page.endpoints.canonical),
-        downloads: structuredClone(downloads),
-        size_bytes: page.size_bytes,
-      };
-    }
+    return {
+      kind: "pdf",
+      preview: preview === null ? null : structuredClone(preview),
+      downloads: structuredClone(downloads),
+      size_bytes: page.size_bytes,
+    };
   }
   return {
     kind: "fallback",

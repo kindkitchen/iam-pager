@@ -108,7 +108,7 @@ export function test_page_aggregate_repository_conformance(
 ): void {
   const conformance_test = (
     label: string,
-    run: (subject: PageAggregateConformanceSubject) => Promise<void>,
+    run: (subject: PageAggregateConformanceSubject) => void | Promise<void>,
   ) => {
     Deno.test(`${options.name}: ${label}`, async () => {
       const subject = await options.make_subject();
@@ -119,6 +119,13 @@ export function test_page_aggregate_repository_conformance(
       }
     });
   };
+
+  conformance_test(
+    "one valid locator reference fits every selected persistence adapter",
+    (subject) => {
+      assert(subject.can_persist_page_endpoint_set(endpoint_set("page")));
+    },
+  );
 
   conformance_test(
     "content assets are immutable identities with isolated reads",
@@ -669,48 +676,55 @@ export function test_page_aggregate_repository_conformance(
   );
 
   conformance_test(
-    "endpoint replacement and duplication stay in the source namespace",
+    "endpoint replacement and duplication preserve content across namespaces",
     async (subject) => {
       await create_asset(subject, "asset-1");
-      const source = await create_managed(
+      await create_managed(
         subject,
         "source",
         "asset-1",
         endpoint_set("source"),
       );
-      await assertRejects(
-        () =>
-          subject.update_managed_page_aggregate({
-            page_id: "source",
-            owner_user_id: "owner-1",
-            expected_revision: 1,
-            patch: { endpoint_set: endpoint_set("moved", [], "Bob") },
-            now: t2,
-          }),
-        Error,
-        "current namespace",
-      );
-      await assertRejects(
-        () =>
-          subject.duplicate_managed_page_aggregate({
-            source_page_id: "source",
-            owner_user_id: "owner-1",
-            expected_revision: 1,
-            page_id: "copy",
-            endpoint_set: endpoint_set("copy", [], "Bob"),
-            now: t2,
-          }),
-        Error,
-        "source namespace",
-      );
-      assertEquals(await subject.find_page_aggregate_by_id("source"), source);
-      assertEquals(await subject.find_page_aggregate_by_id("copy"), null);
+      const moved = await subject.update_managed_page_aggregate({
+        page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 1,
+        patch: { endpoint_set: endpoint_set("moved", [], "Bob") },
+        now: t2,
+      });
+      assert(moved.ok);
+      assertEquals(moved.page.content_asset_id, "asset-1");
       assertEquals(
-        await subject.resolve_page_endpoint({
+        (await subject.resolve_page_endpoint({
           namespace: "bob",
           page_name: "moved",
+        }))?.page.page_id,
+        "source",
+      );
+      assertEquals(
+        await subject.resolve_page_endpoint({
+          namespace: "alice",
+          page_name: "source",
         }),
         null,
+      );
+
+      const duplicated = await subject.duplicate_managed_page_aggregate({
+        source_page_id: "source",
+        owner_user_id: "owner-1",
+        expected_revision: 2,
+        page_id: "copy",
+        endpoint_set: endpoint_set("copy", [], "Carol"),
+        now: t2,
+      });
+      assert(duplicated.ok);
+      assertEquals(duplicated.page.content_asset_id, "asset-1");
+      assertEquals(
+        (await subject.resolve_page_endpoint({
+          namespace: "carol",
+          page_name: "copy",
+        }))?.page.page_id,
+        "copy",
       );
     },
   );

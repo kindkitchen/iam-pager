@@ -20,10 +20,10 @@ link presentation use this one boundary.
 - direct delivery and wrapped public viewing;
 - namespace public listing and cross-namespace exploration.
 
-It accepts typed guest/user actors, resolves namespace authority through an
-interface, validates content through registered handlers, plans complete
-endpoint sets, and returns presentation-safe results. It has no dependency on
-sessions, HTTP, Fresh, or a concrete repository.
+It accepts typed guest/user actors, resolves every referenced namespace through
+an authority interface, validates content through registered handlers, plans
+non-empty complete endpoint sets, and returns presentation-safe results. It has
+no dependency on sessions, HTTP, Fresh, or a concrete repository.
 
 ## CP-PERSISTENCE — Page persistence capability
 
@@ -44,8 +44,9 @@ service has no backend-specific path.
 ## CP-CONTENT — Content handlers
 
 A `ContentTypeHandler` validates transport-neutral input, derives stored data,
-renders delivery payloads, returns bounded management data, and declares its
-supported endpoint profiles.
+renders delivery payloads, returns bounded management data, and declares the
+bounded delivery-profile identifiers it supports. Profiles are reference
+attributes and may be extended without changing content or locator identity.
 
 `MdPageHandler` and `PdfHandler` are current implementations. HTTP owns JSON,
 multipart, ranges, and response headers; components own file selection and draft

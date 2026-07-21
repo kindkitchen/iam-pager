@@ -1,10 +1,8 @@
 import PagePublishForm from "../islands/PagePublishForm.tsx";
 import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
-import { PublicExplorationPanel } from "./PublicExploration.tsx";
 import PageManagementPanel from "../islands/PageManagementPanel.tsx";
 import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
 import type { PageManagementPanel as PageManagementPanelModel } from "../lib/ui/page-management.ts";
-import type { PublicExploration } from "../lib/ui/public-exploration.ts";
 import { page_publish_authorization } from "../lib/ui/page-publish.ts";
 import { FourWordRandomNameGenerator } from "../lib/random-name.ts";
 import type {
@@ -19,7 +17,6 @@ export interface SiteAppProps {
   readonly breadcrumb?: SiteBreadcrumbTrail;
   readonly namespace_panel: NamespacePanel;
   readonly page_management: PageManagementPanelModel;
-  readonly public_exploration: PublicExploration;
 }
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
@@ -29,7 +26,6 @@ export function SiteApp(
     breadcrumb,
     namespace_panel,
     page_management,
-    public_exploration,
   }: SiteAppProps,
 ) {
   const initial_namespace = new FourWordRandomNameGenerator().generate();
@@ -45,8 +41,6 @@ export function SiteApp(
           page without this site's wrapper.
         </p>
       </header>
-
-      <PublicExplorationPanel exploration={public_exploration} />
 
       {namespace_panel.kind === "creator" && (
         <NamespaceReservationPanel
@@ -64,6 +58,7 @@ export function SiteApp(
       {page_management.kind === "creator" && (
         <PageManagementPanel
           csrf_token={page_management.csrf_token}
+          owned_namespaces={page_management.owned_namespaces}
           initial_pages={page_management.pages}
           initial_next_cursor={page_management.next_cursor}
         />
@@ -95,7 +90,18 @@ export function SiteSessionNavigation(
   { navigation }: { readonly navigation: SiteNavigation },
 ) {
   return (
-    <nav class="site-navigation" aria-label="Session">
+    <nav class="site-navigation" aria-label="Site">
+      <div class="site-navigation-destinations">
+        {navigation.destinations.map((destination) => (
+          <a
+            class="site-navigation-destination"
+            href={destination.href}
+            aria-current={destination.current ? "page" : undefined}
+          >
+            {destination.label}
+          </a>
+        ))}
+      </div>
       <span class="site-session-state">{navigation.session_label}</span>
       <SiteNavigationAction action={navigation.action} />
     </nav>

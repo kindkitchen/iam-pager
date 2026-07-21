@@ -47,9 +47,7 @@ function fixed_deliverer(result: DeliverPageResult): PageDeliverer {
   return { deliver: () => Promise.resolve(result) };
 }
 
-function delivery_endpoint(
-  delivery_profile: "inline" | "attachment" = "inline",
-) {
+function delivery_endpoint(delivery_profile = "inline") {
   return {
     locator: { namespace: "Ada", page_name: "notes" },
     path: "/Ada/notes",
@@ -152,6 +150,22 @@ Deno.test("direct delivery disposition follows the endpoint rather than filename
   await unnamed_attachment.body?.cancel();
 });
 
+Deno.test("direct delivery fails explicitly for a transport-unknown profile", async () => {
+  const response = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer({
+      ok: true,
+      page: page_with_size(7),
+      endpoint: delivery_endpoint("stream"),
+      payload: { body: "payload", media_type: "application/octet-stream" },
+    }),
+    "/ada/notes",
+    guest_actor,
+  );
+  assertEquals(response.status, 501);
+  assertStringIncludes(await response.text(), "not supported");
+});
+
 Deno.test("direct PDF delivery supports validators and strict single byte ranges", async () => {
   const body = new TextEncoder().encode("0123456789");
   const result: DeliverPageResult = {
@@ -248,7 +262,7 @@ Deno.test("direct delivery keeps invalid, missing, and undeliverable outcomes ex
 
   const undeliverable = await deliver_page_locator_path(
     engine,
-    fixed_deliverer({ ok: false, reason: "unknown_content_type" }),
+    fixed_deliverer({ ok: false, reason: "corrupt" }),
     "/ada/notes",
     guest_actor,
   );

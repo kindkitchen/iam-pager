@@ -3,9 +3,11 @@ import {
   is_json_media_type,
   read_bounded_request_text,
 } from "../http/request-body.ts";
+import { prefixed, strict_object } from "../http/strict-object.ts";
 import type { Session } from "../session/model.ts";
 import { max_page_list_cursor_length } from "./cursor.ts";
 import type { PageEndpointSetIntent } from "./endpoint.ts";
+import { decode_page_endpoint_set_intent } from "./endpoint-json.ts";
 import { format_page_etag, parse_page_etag } from "./etag.ts";
 import type {
   BulkChangeManagedPageAccessResult,
@@ -106,6 +108,10 @@ interface PatchBody {
 
 interface RenameBody {
   page_name?: string;
+}
+
+interface DuplicateBody {
+  endpoint_set: PageEndpointSetIntent;
 }
 
 interface BulkAccessBody {
@@ -362,18 +368,15 @@ export class PageHttpAdapter implements PageHttpHandler {
     const precondition = decode_precondition(request, target.page_id);
     if (!precondition.ok) return precondition.response;
     if (target.action === "duplicate") {
-      const body = await read_bounded_request_text(request, 0);
-      if (!body.ok || body.text !== "") {
-        return error_response(
-          400,
-          "invalid_request",
-          "duplicate requests must not include a body",
-        );
-      }
+      const decoded = await decode_optional_duplicate_body(request);
+      if (!decoded.ok) return decoded.response;
       const result = await this.#pages.duplicate_managed({
         actor,
         page_id: target.page_id,
         expected_revision: precondition.revision,
+        ...(decoded.value.endpoint_set === undefined
+          ? {}
+          : { endpoint_set: decoded.value.endpoint_set }),
       });
       if (!result.ok) return duplicate_failure_response(result);
       return action_success_response(201, result.outcome, result.page, {
@@ -566,28 +569,62 @@ async function decode_json_body<Value>(
 }
 
 function decode_create_body(input: unknown): DecodeResult<CreateBody> {
-  const body = strict_object(input, ["locator", "access", "tags?", "content"]);
+  const body = strict_object(input, [
+    "locator?",
+    "endpoint_set?",
+    "access",
+    "tags?",
+    "content",
+  ]);
   if (!body.ok) return body;
+  if (
+    (body.value.locator === undefined) ===
+      (body.value.endpoint_set === undefined)
+  ) {
+    return {
+      ok: false,
+      detail: "exactly one of locator or endpoint_set must be provided",
+    };
+  }
   if (typeof body.value.access !== "string") {
     return { ok: false, detail: "access must be a string" };
   }
   const tags = decode_tags_field(body.value.tags);
   if (!tags.ok) return tags;
-  const locator = strict_object(body.value.locator, [
-    "namespace",
-    "page_name?",
-  ]);
-  if (!locator.ok) return prefixed(locator, "locator");
-  if (typeof locator.value.namespace !== "string") {
-    return { ok: false, detail: "locator.namespace must be a string" };
-  }
-  if (
-    locator.value.page_name !== undefined &&
-    typeof locator.value.page_name !== "string"
-  ) {
-    return {
-      ok: false,
-      detail: "locator.page_name must be a string when present",
+  let endpoint_command:
+    | { locator: { namespace: string; page_name?: string } }
+    | { endpoint_set: PageEndpointSetIntent };
+  if (body.value.endpoint_set !== undefined) {
+    const endpoint_set = decode_page_endpoint_set_intent(
+      body.value.endpoint_set,
+    );
+    if (!endpoint_set.ok) return endpoint_set;
+    endpoint_command = { endpoint_set: endpoint_set.value };
+  } else {
+    const locator = strict_object(body.value.locator, [
+      "namespace",
+      "page_name?",
+    ]);
+    if (!locator.ok) return prefixed(locator, "locator");
+    if (typeof locator.value.namespace !== "string") {
+      return { ok: false, detail: "locator.namespace must be a string" };
+    }
+    if (
+      locator.value.page_name !== undefined &&
+      typeof locator.value.page_name !== "string"
+    ) {
+      return {
+        ok: false,
+        detail: "locator.page_name must be a string when present",
+      };
+    }
+    endpoint_command = {
+      locator: locator.value.page_name === undefined
+        ? { namespace: locator.value.namespace }
+        : {
+          namespace: locator.value.namespace,
+          page_name: locator.value.page_name,
+        },
     };
   }
   const content = decode_content_command(body.value.content);
@@ -595,21 +632,21 @@ function decode_create_body(input: unknown): DecodeResult<CreateBody> {
   return {
     ok: true,
     value: {
-      locator: locator.value.page_name === undefined
-        ? { namespace: locator.value.namespace }
-        : {
-          namespace: locator.value.namespace,
-          page_name: locator.value.page_name,
-        },
+      ...endpoint_command,
       access: body.value.access as PageAccess,
       ...(tags.value === undefined ? {} : { tags: tags.value }),
       content: content.value,
-    },
+    } as CreateBody,
   };
 }
 
 function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
-  const body = strict_object(input, ["access?", "tags?", "content?"]);
+  const body = strict_object(input, [
+    "access?",
+    "tags?",
+    "content?",
+    "endpoint_set?",
+  ]);
   if (!body.ok) return body;
   if (
     body.value.access !== undefined && typeof body.value.access !== "string"
@@ -624,6 +661,12 @@ function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
     if (!decoded.ok) return decoded;
     content = decoded.value;
   }
+  let endpoint_set: PageEndpointSetIntent | undefined;
+  if (body.value.endpoint_set !== undefined) {
+    const decoded = decode_page_endpoint_set_intent(body.value.endpoint_set);
+    if (!decoded.ok) return decoded;
+    endpoint_set = decoded.value;
+  }
   return {
     ok: true,
     value: {
@@ -632,6 +675,7 @@ function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
         : { access: body.value.access as PageAccess }),
       ...(tags.value === undefined ? {} : { tags: tags.value }),
       ...(content === undefined ? {} : { content }),
+      ...(endpoint_set === undefined ? {} : { endpoint_set }),
     },
   };
 }
@@ -650,6 +694,67 @@ function decode_tags_field(
     };
   }
   return { ok: true, value: input as string[] };
+}
+
+async function decode_optional_duplicate_body(
+  request: Request,
+): Promise<
+  | { ok: true; value: Partial<DuplicateBody> }
+  | { ok: false; response: Response }
+> {
+  const body = await read_bounded_request_text(request, page_request_max_bytes);
+  if (!body.ok) {
+    return {
+      ok: false,
+      response: body.reason === "too_large"
+        ? error_response(
+          413,
+          "request_too_large",
+          `request body exceeds ${page_request_max_bytes} bytes`,
+        )
+        : error_response(400, "invalid_json", "request body could not be read"),
+    };
+  }
+  if (body.text === "") return { ok: true, value: {} };
+  if (!is_json_media_type(request.headers.get("content-type"))) {
+    return {
+      ok: false,
+      response: error_response(
+        415,
+        "unsupported_media_type",
+        "content-type must be application/json",
+      ),
+    };
+  }
+  let input: unknown;
+  try {
+    input = JSON.parse(body.text);
+  } catch {
+    return {
+      ok: false,
+      response: error_response(
+        400,
+        "invalid_json",
+        "request body is not valid JSON",
+      ),
+    };
+  }
+  const object = strict_object(input, ["endpoint_set"]);
+  if (!object.ok) {
+    return {
+      ok: false,
+      response: error_response(400, "invalid_request", object.detail),
+    };
+  }
+  const endpoint_set = decode_page_endpoint_set_intent(
+    object.value.endpoint_set,
+  );
+  return endpoint_set.ok
+    ? { ok: true, value: { endpoint_set: endpoint_set.value } }
+    : {
+      ok: false,
+      response: error_response(400, "invalid_request", endpoint_set.detail),
+    };
 }
 
 function decode_rename_body(input: unknown): DecodeResult<RenameBody> {
@@ -736,35 +841,6 @@ function decode_content_command(
       input: content.value.input,
     },
   };
-}
-
-function strict_object(
-  input: unknown,
-  fields: readonly string[],
-): DecodeResult<Record<string, unknown>> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return { ok: false, detail: "value must be an object" };
-  }
-  const value = input as Record<string, unknown>;
-  const required = fields.filter((field) => !field.endsWith("?"));
-  const allowed = fields.map((field) => field.replace(/\?$/, ""));
-  const keys = Object.keys(value);
-  const unknown = keys.find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    return { ok: false, detail: `unknown field: ${unknown}` };
-  }
-  const missing = required.find((field) => !Object.hasOwn(value, field));
-  if (missing !== undefined) {
-    return { ok: false, detail: `missing field: ${missing}` };
-  }
-  return { ok: true, value };
-}
-
-function prefixed(
-  result: { ok: false; detail: string },
-  prefix: string,
-): { ok: false; detail: string } {
-  return { ok: false, detail: `${prefix}: ${result.detail}` };
 }
 
 function decode_list_query(request_url: string): DecodeResult<{
@@ -1031,8 +1107,6 @@ function create_failure_response(
     case "invalid_locator":
     case "invalid_access":
     case "invalid_tags":
-    case "invalid_endpoint_count":
-    case "namespace_mismatch":
     case "duplicate_locator":
     case "unsupported_delivery_profile":
       return error_response(422, result.reason, "page input is invalid");
@@ -1042,6 +1116,12 @@ function create_failure_response(
         409,
         result.reason,
         "page endpoints cannot be replaced",
+      );
+    case "endpoint_capacity_exceeded":
+      return error_response(
+        507,
+        result.reason,
+        "selected storage cannot atomically persist this locator set",
       );
     case "unknown_content_type":
       return error_response(
@@ -1083,9 +1163,7 @@ function list_failure_response(
 function inspect_failure_response(
   result: Exclude<InspectManagedPageResult, { ok: true }>,
 ): Response {
-  return result.reason === "not_found"
-    ? error_response(404, "not_found", "page was not found")
-    : error_response(500, "page_unavailable", "page cannot be represented");
+  return error_response(404, result.reason, "page was not found");
 }
 
 function update_failure_response(
@@ -1104,7 +1182,7 @@ function update_failure_response(
       return error_response(
         400,
         result.reason,
-        "PATCH must include access, tags, content, or a combination",
+        "PATCH must include access, tags, content, endpoint_set, or a combination",
       );
     case "invalid_access":
     case "invalid_tags":
@@ -1118,11 +1196,21 @@ function update_failure_response(
       );
     case "forbidden_namespace":
     case "invalid_locator":
-    case "invalid_endpoint_count":
-    case "namespace_mismatch":
     case "duplicate_locator":
     case "unsupported_delivery_profile":
       return error_response(422, result.reason, "page endpoints are invalid");
+    case "namespace_not_reserved":
+      return error_response(
+        409,
+        result.reason,
+        "creator must reserve every endpoint namespace before publishing",
+      );
+    case "namespace_reserved":
+      return error_response(
+        403,
+        result.reason,
+        "an endpoint namespace is reserved by another authority",
+      );
     case "page_exists":
       return error_response(
         409,
@@ -1140,6 +1228,12 @@ function update_failure_response(
         409,
         result.reason,
         "page cannot accept another revision",
+      );
+    case "endpoint_capacity_exceeded":
+      return error_response(
+        507,
+        result.reason,
+        "selected storage cannot atomically persist this locator set",
       );
   }
 }
@@ -1186,12 +1280,6 @@ function rename_failure_response(
         result.reason,
         "a managed page already exists at this locator",
       );
-    case "unknown_content_type":
-      return error_response(
-        500,
-        "page_unavailable",
-        "page cannot be represented",
-      );
   }
 }
 
@@ -1207,25 +1295,35 @@ function duplicate_failure_response(
         "precondition_failed",
         "page representation has changed",
       );
-    case "unknown_content_type":
-      return error_response(
-        500,
-        "page_unavailable",
-        "page cannot be represented",
-      );
     case "endpoint_set_required":
     case "forbidden_namespace":
     case "invalid_locator":
-    case "invalid_endpoint_count":
-    case "namespace_mismatch":
     case "duplicate_locator":
     case "unsupported_delivery_profile":
       return error_response(422, result.reason, "page endpoints are required");
+    case "namespace_not_reserved":
+      return error_response(
+        409,
+        result.reason,
+        "creator must reserve every destination namespace",
+      );
+    case "namespace_reserved":
+      return error_response(
+        403,
+        result.reason,
+        "a destination namespace is reserved by another authority",
+      );
     case "page_exists":
       return error_response(
         409,
         result.reason,
         "a managed page already claims an endpoint",
+      );
+    case "endpoint_capacity_exceeded":
+      return error_response(
+        507,
+        result.reason,
+        "selected storage cannot atomically persist this locator set",
       );
     case "page_name_generation_exhausted":
     case "page_id_generation_exhausted":

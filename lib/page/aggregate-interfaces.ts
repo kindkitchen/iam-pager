@@ -8,6 +8,11 @@ import type { PageAggregate, ResolvedPageEndpoint } from "./aggregate.ts";
 import type { PageEndpointSet } from "./endpoint.ts";
 import type { PageAccess, PageId, PageTag } from "./model.ts";
 
+/** Reports whether one valid set fits the selected persistence adapter. */
+export interface PageEndpointSetCapacity {
+  can_persist_page_endpoint_set(endpoint_set: PageEndpointSet): boolean;
+}
+
 /** Reads logical page state by stable management identity. */
 export interface PageAggregateReader {
   find_page_aggregate_by_id(page_id: PageId): Promise<PageAggregate | null>;
@@ -109,6 +114,7 @@ export type PutTrialPageAggregateResult =
       | "endpoint_conflict"
       | "page_id_conflict"
       | "content_asset_not_found"
+      | "endpoint_capacity_exceeded"
       | "revision_exhausted";
   };
 
@@ -141,7 +147,8 @@ export type CreateManagedPageAggregateResult =
     readonly reason:
       | "managed_conflict"
       | "page_id_conflict"
-      | "content_asset_not_found";
+      | "content_asset_not_found"
+      | "endpoint_capacity_exceeded";
   };
 
 /** Atomic managed creation; every claimed trial is retired or none are. */
@@ -153,9 +160,9 @@ export interface ManagedPageAggregateCreator {
 
 /**
  * One revision-bound aggregate mutation. Omitted fields remain unchanged. An
- * endpoint change supplies the complete replacement set in the page's current
- * case-insensitive namespace, and content replacement selects an already-created
- * immutable asset.
+ * endpoint change supplies the complete replacement set, and content
+ * replacement selects an already-created immutable asset. Namespace authority
+ * is checked by the application for every locator reference.
  */
 export interface UpdateManagedPageAggregateRequest {
   readonly page_id: PageId;
@@ -183,7 +190,8 @@ export type UpdateManagedPageAggregateResult =
       | "revision_conflict"
       | "revision_exhausted"
       | "endpoint_conflict"
-      | "content_asset_not_found";
+      | "content_asset_not_found"
+      | "endpoint_capacity_exceeded";
   };
 
 /** Atomic content, endpoint, access, and tag mutation capability. */
@@ -198,7 +206,7 @@ export interface DuplicateManagedPageAggregateRequest {
   readonly owner_user_id: string;
   readonly expected_revision: number;
   readonly page_id: PageId;
-  /** Fresh complete source-namespace destination set; locators are not copied. */
+  /** Fresh complete destination set; locators are not copied. */
   readonly endpoint_set: PageEndpointSet;
   readonly now: Date;
 }
@@ -215,7 +223,8 @@ export type DuplicateManagedPageAggregateResult =
       | "not_found"
       | "revision_conflict"
       | "endpoint_conflict"
-      | "page_id_conflict";
+      | "page_id_conflict"
+      | "endpoint_capacity_exceeded";
   };
 
 /** Revision-bound duplication that safely shares the immutable source asset. */
@@ -254,6 +263,7 @@ export interface PageAggregateRepository
   extends
     ContentAssetCreator,
     ContentAssetReader,
+    PageEndpointSetCapacity,
     PageAggregateReader,
     PageEndpointResolver,
     ManagedPageAggregateLister,

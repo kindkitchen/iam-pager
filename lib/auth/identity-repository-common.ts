@@ -32,14 +32,7 @@ export function validate_identity_observation(
 export function clone_identity_observation(
   observation: ExternalIdentityObservation,
 ): ExternalIdentityObservation {
-  return {
-    strategy_id: observation.strategy_id,
-    provider_subject: observation.provider_subject,
-    email: observation.email,
-    display_name: observation.display_name,
-    picture_url: observation.picture_url,
-    observed_at: new Date(observation.observed_at),
-  };
+  return structuredClone(observation);
 }
 
 export function create_identity_records(
@@ -77,18 +70,9 @@ export function update_identity(
 }
 
 export function clone_user(user: ApplicationUser): ApplicationUser {
-  return { user_id: user.user_id, created_at: new Date(user.created_at) };
+  return structuredClone(user);
 }
 
 export function clone_identity(identity: ExternalIdentity): ExternalIdentity {
-  return {
-    user_id: identity.user_id,
-    strategy_id: identity.strategy_id,
-    provider_subject: identity.provider_subject,
-    email: identity.email,
-    display_name: identity.display_name,
-    picture_url: identity.picture_url,
-    created_at: new Date(identity.created_at),
-    updated_at: new Date(identity.updated_at),
-  };
+  return structuredClone(identity);
 }

@@ -61,22 +61,20 @@ function make_fixture(
 }
 
 Deno.test("missing credential creates a guest and valid credential resolves it", async () => {
-  const { repository, service } = make_fixture();
+  const { service } = make_fixture();
   const created = await service.resolve();
 
   assertEquals(created.session.kind, "guest");
   assertEquals(created.session.session_id, "session-1");
   assertExists(created.credential_to_set);
-  assertEquals(repository.size, 1);
 
   const resolved = await service.resolve(created.credential_to_set.value);
   assertEquals(resolved.session, created.session);
   assertEquals(resolved.credential_to_set, undefined);
-  assertEquals(repository.size, 1);
 });
 
 Deno.test("malformed and unknown credentials get independent replacement guests", async () => {
-  const { repository, service } = make_fixture();
+  const { service } = make_fixture();
 
   const malformed = await service.resolve("attacker-chosen");
   const unknown = await service.resolve(credential("z"));
@@ -84,7 +82,6 @@ Deno.test("malformed and unknown credentials get independent replacement guests"
   assertEquals(malformed.session.kind, "guest");
   assertEquals(unknown.session.kind, "guest");
   assertNotEquals(malformed.session.session_id, unknown.session.session_id);
-  assertEquals(repository.size, 2);
 });
 
 Deno.test("expired and revoked credentials cannot resolve their old session", async () => {
@@ -123,7 +120,7 @@ Deno.test("repository stores a credential hash and never the bearer value", asyn
 });
 
 Deno.test("renewal is bounded by the threshold instead of writing every request", async () => {
-  const { clock, repository, service } = make_fixture();
+  const { clock, service } = make_fixture();
   const created = await service.resolve();
   assertExists(created.credential_to_set);
   const bearer = created.credential_to_set.value;
@@ -140,7 +137,6 @@ Deno.test("renewal is bounded by the threshold instead of writing every request"
   assertEquals(renewed.credential_to_set.value, bearer);
   assertEquals(renewed.session.last_seen_at, clock.current);
   assertEquals(renewed.session.absolute_expires_at, original_expiry);
-  assertEquals(repository.size, 1);
 
   clock.advance(1);
   const not_repeated = await service.resolve(bearer);
@@ -468,7 +464,7 @@ Deno.test("concurrent upgrades permit one credential rotation only", async () =>
 });
 
 Deno.test("concurrent first requests create distinct consistent sessions", async () => {
-  const { repository, service } = make_fixture();
+  const { service } = make_fixture();
 
   const sessions = await Promise.all([
     service.resolve(),
@@ -484,7 +480,6 @@ Deno.test("concurrent first requests create distinct consistent sessions", async
     new Set(sessions.map((item) => item.credential_to_set?.value)).size,
     3,
   );
-  assertEquals(repository.size, 3);
   for (const item of sessions) {
     assertExists(item.credential_to_set);
     const resolved = await service.resolve(item.credential_to_set.value);

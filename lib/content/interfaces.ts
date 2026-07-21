@@ -36,7 +36,7 @@ export type ContentResult<T> =
  */
 export interface ContentTypeHandler<Input, Data, Management = Input> {
   readonly content_type: string;
-  /** Non-empty endpoint profiles this content type can safely deliver. */
+  /** Non-empty set of bounded profile identifiers this type can deliver. */
   readonly supported_delivery_profiles: readonly DeliveryProfile[];
   /** Check untrusted input and narrow it to the type's input shape. */
   validate(input: unknown): ContentResult<Input>;

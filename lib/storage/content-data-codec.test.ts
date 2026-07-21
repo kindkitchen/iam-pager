@@ -1,12 +1,9 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
-import {
-  content_data_encoding_v8_1,
-  V8ContentDataCodec,
-} from "./content-data-codec.ts";
+import { V8ContentDataCodec } from "./content-data-codec.ts";
 
 Deno.test("V8 content codec round-trips detached Markdown and PDF data", () => {
   const codec = new V8ContentDataCodec();
-  assertEquals(codec.encoding_version, content_data_encoding_v8_1);
+  assertEquals(codec.encoding, "v8");
   const markdown = {
     md: "# Durable",
     html: "<h1>Durable</h1>",

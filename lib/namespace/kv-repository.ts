@@ -1,5 +1,5 @@
 import type { KvRecordGateway } from "../storage/kv-gateway.ts";
-import { ownership_database_schema_version } from "../storage/schema-versions.ts";
+import { is_exact_record, is_valid_stored_date } from "../storage/record.ts";
 import type {
   NamespaceRepository,
   ReserveRequest,
@@ -7,8 +7,6 @@ import type {
 } from "./interfaces.ts";
 import { namespace_key, type NamespaceReservation } from "./model.ts";
 
-const storage_schema_version = ownership_database_schema_version;
-// Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const reservation_prefix: Deno.KvKey = [
   "iam-pager",
   "namespace-reservations",
@@ -20,12 +18,7 @@ const owner_prefix: Deno.KvKey = [
   "by-owner",
 ];
 
-interface StoredNamespaceReservation {
-  readonly schema_version: 1;
-  readonly namespace: string;
-  readonly owner_user_id: string;
-  readonly reserved_at: string;
-}
+type StoredNamespaceReservation = NamespaceReservation;
 
 function namespace_reservation_key(namespace: string): Deno.KvKey {
   return [...reservation_prefix, namespace_key(namespace)];
@@ -42,42 +35,19 @@ function namespace_owner_key(
   return [...namespace_owner_prefix(owner_user_id), normalized_namespace];
 }
 
-function serialize_reservation(
-  reservation: NamespaceReservation,
-): StoredNamespaceReservation {
-  return {
-    schema_version: storage_schema_version,
-    namespace: reservation.namespace,
-    owner_user_id: reservation.owner_user_id,
-    reserved_at: reservation.reserved_at.toISOString(),
-  };
-}
-
 function deserialize_reservation(value: unknown): NamespaceReservation {
-  if (typeof value !== "object" || value === null) {
+  if (!is_exact_record(value, ["namespace", "owner_user_id", "reserved_at"])) {
     throw new TypeError("invalid stored namespace reservation");
   }
-  const stored = value as Record<string, unknown>;
+  const stored = value as unknown as NamespaceReservation;
   if (
-    stored.schema_version !== storage_schema_version ||
-    typeof stored.namespace !== "string" ||
-    typeof stored.owner_user_id !== "string" ||
-    typeof stored.reserved_at !== "string"
+    typeof stored.namespace !== "string" || stored.namespace === "" ||
+    typeof stored.owner_user_id !== "string" || stored.owner_user_id === "" ||
+    !is_valid_stored_date(stored.reserved_at)
   ) {
     throw new TypeError("invalid stored namespace reservation");
   }
-  const reserved_at = new Date(stored.reserved_at);
-  if (
-    Number.isNaN(reserved_at.getTime()) ||
-    reserved_at.toISOString() !== stored.reserved_at
-  ) {
-    throw new TypeError("invalid stored namespace reservation");
-  }
-  return {
-    namespace: stored.namespace,
-    owner_user_id: stored.owner_user_id,
-    reserved_at,
-  };
+  return structuredClone(stored as NamespaceReservation);
 }
 
 /**
@@ -112,7 +82,7 @@ export class DenoKvNamespaceRepository implements NamespaceRepository {
       owner_user_id,
       reserved_at: this.#now(),
     };
-    const stored = serialize_reservation(reservation);
+    const stored = structuredClone(reservation);
     const commit = await this.#kv.native_atomic()
       .check(existing)
       .set(key, stored)

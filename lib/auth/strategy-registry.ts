@@ -28,8 +28,4 @@ export class AuthenticationStrategyRegistry
   resolve(strategy_id: string): AuthenticationStrategy | null {
     return this.#strategies.get(strategy_id) ?? null;
   }
-
-  get size(): number {
-    return this.#strategies.size;
-  }
 }

@@ -14,25 +14,21 @@ import {
   V8ContentDataCodec,
 } from "./content-data-codec.ts";
 import type { KvGateway } from "./kv-gateway.ts";
-
-const storage_schema_version = 1;
+import { is_exact_record, is_valid_stored_date } from "./record.ts";
 
 export const content_asset_manifest_prefix: Deno.KvKey = [
   "iam-pager",
   "content-assets",
-  "v1",
   "by-id",
 ];
 export const content_asset_payload_prefix: Deno.KvKey = [
   "iam-pager",
   "content-assets",
-  "v1",
   "payloads",
 ];
 
 /** Adapter-owned record published only after its encoded payload is verified. */
 export interface StoredContentAssetManifest {
-  readonly schema_version: 1;
   readonly data_encoding: string;
   readonly content_asset_id: string;
   readonly payload_id: string;
@@ -42,7 +38,7 @@ export interface StoredContentAssetManifest {
   readonly media_type: string;
   readonly size_bytes: number;
   readonly download_filename?: string;
-  readonly created_at: string;
+  readonly created_at: Date;
 }
 
 /** Storage-local manifest snapshot used by atomic page publication. */
@@ -87,25 +83,6 @@ function invalid_stored_content_asset(): never {
   throw new TypeError("invalid stored content asset");
 }
 
-function has_exact_keys(
-  value: Record<string, unknown>,
-  required: readonly string[],
-  optional: readonly string[] = [],
-): boolean {
-  const keys = Object.keys(value);
-  return required.every((key) => keys.includes(key)) &&
-    keys.every((key) => required.includes(key) || optional.includes(key));
-}
-
-function deserialize_date(value: unknown): Date {
-  if (typeof value !== "string") return invalid_stored_content_asset();
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
-    return invalid_stored_content_asset();
-  }
-  return date;
-}
-
 function key_part_equals(a: Deno.KvKeyPart, b: Deno.KvKeyPart): boolean {
   if (a instanceof Uint8Array && b instanceof Uint8Array) {
     return a.length === b.length && a.every((byte, index) => byte === b[index]);
@@ -139,8 +116,7 @@ function deserialize_manifest(
     "download_filename",
   );
   if (
-    !has_exact_keys(stored, [
-      "schema_version",
+    !is_exact_record(stored, [
       "data_encoding",
       "content_asset_id",
       "payload_id",
@@ -151,7 +127,6 @@ function deserialize_manifest(
       "size_bytes",
       "created_at",
     ], ["download_filename"]) ||
-    stored.schema_version !== storage_schema_version ||
     stored.data_encoding !== expected_data_encoding ||
     stored.content_asset_id !== expected_content_asset_id ||
     !is_valid_content_asset_id(stored.content_asset_id) ||
@@ -169,7 +144,9 @@ function deserialize_manifest(
   ) {
     return invalid_stored_content_asset();
   }
-  deserialize_date(stored.created_at);
+  if (!is_valid_stored_date(stored.created_at)) {
+    return invalid_stored_content_asset();
+  }
   return stored as unknown as StoredContentAssetManifest;
 }
 
@@ -196,7 +173,7 @@ function manifest_asset(
         ? {}
         : { download_filename: manifest.download_filename }),
     },
-    created_at: deserialize_date(manifest.created_at),
+    created_at: new Date(manifest.created_at),
   };
   if (content_asset_violation(asset) !== null) {
     return invalid_stored_content_asset();
@@ -226,9 +203,9 @@ export class KvContentAssetRepository
     this.#payload_id_generator = options.payload_id_generator ??
       new CryptoContentAssetPayloadIdGenerator();
     require(
-      typeof this.#codec.encoding_version === "string" &&
-        /^[A-Za-z0-9_-]{1,64}$/.test(this.#codec.encoding_version),
-      "codec encoding_version must be a storage-safe identifier",
+      typeof this.#codec.encoding === "string" &&
+        /^[A-Za-z0-9_-]{1,64}$/.test(this.#codec.encoding),
+      "codec encoding must be a storage-safe identifier",
     );
   }
 
@@ -247,7 +224,7 @@ export class KvContentAssetRepository
       key: entry.key,
       value: deserialize_manifest(
         content_asset_id,
-        this.#codec.encoding_version,
+        this.#codec.encoding,
         entry,
       ),
       versionstamp: entry.versionstamp,
@@ -266,7 +243,7 @@ export class KvContentAssetRepository
     const media_type = asset.meta.media_type;
     const size_bytes = asset.meta.size_bytes;
     const download_filename = asset.meta.download_filename;
-    const created_at = asset.created_at.toISOString();
+    const created_at = new Date(asset.created_at);
     const encoded = this.#codec.encode(asset.data);
     if (!(encoded instanceof Uint8Array) || encoded.byteLength === 0) {
       throw new TypeError(
@@ -280,7 +257,7 @@ export class KvContentAssetRepository
     if (existing.versionstamp !== null) {
       deserialize_manifest(
         content_asset_id,
-        this.#codec.encoding_version,
+        this.#codec.encoding,
         existing,
       );
       return { ok: false, reason: "content_asset_id_conflict" };
@@ -301,8 +278,7 @@ export class KvContentAssetRepository
       cleanup_on_failure = true;
 
       const manifest: StoredContentAssetManifest = {
-        schema_version: storage_schema_version,
-        data_encoding: this.#codec.encoding_version,
+        data_encoding: this.#codec.encoding,
         content_asset_id,
         payload_id,
         payload_byte_length: payload_bytes.byteLength,

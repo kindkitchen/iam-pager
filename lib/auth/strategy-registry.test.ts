@@ -32,7 +32,6 @@ Deno.test("registry selects multiple authentication strategies independently", a
 
   assertStrictEquals(registry.resolve("first"), first);
   assertStrictEquals(registry.resolve("second"), second);
-  assertEquals(registry.size, 2);
 
   const first_start = await registry.resolve("first")?.begin({
     state: "state-1",

@@ -3,6 +3,14 @@ import type { NamespaceReservationManager } from "../namespace/interfaces.ts";
 import { sort_reservations } from "../namespace/model.ts";
 import type { Session } from "../session/model.ts";
 
+/** Cross-island notification emitted after an owned namespace is reserved. */
+export const namespace_reserved_event_type =
+  "iam-pager:namespace-reserved" as const;
+
+export interface NamespaceReservedEventDetail {
+  readonly namespace: string;
+}
+
 /** Serializable reservation view rendered by the site panel and island. */
 export interface NamespacePanelReservation {
   readonly namespace: string;

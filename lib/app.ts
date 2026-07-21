@@ -201,7 +201,10 @@ export function create_app_services(
   const pages_http = new PageHttpAdapter({ pages });
   const public_page_view = new CreatorPublicPageViewPresenter({ pages });
   const public_exploration = new SitePublicExplorationPresenter({ pages });
-  const page_management_panel = new CreatorPageManagementPresenter({ pages });
+  const page_management_panel = new CreatorPageManagementPresenter({
+    pages,
+    namespaces,
+  });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({

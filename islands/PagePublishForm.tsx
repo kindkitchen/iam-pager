@@ -1,13 +1,10 @@
 import type { JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
 import { PdfFileSelection } from "../components/PdfFileSelection.tsx";
-import type { DeliveryProfile } from "../lib/content/model.ts";
-import { is_valid_delivery_profile } from "../lib/content/model.ts";
 import {
   page_content_type_options,
   type PageContentType,
-  pdf_delivery_profile_options,
   pdf_publish_draft_violation,
   prepare_pdf_publish_request,
 } from "../lib/ui/page-content-type.ts";
@@ -22,6 +19,7 @@ import {
 import {
   page_publish_success_from_api,
   type PagePublishAuthorization,
+  type PagePublishReferenceDraft,
   type PagePublishSuccess,
   prepare_page_publish_request,
 } from "../lib/ui/page-publish.ts";
@@ -31,6 +29,10 @@ import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
 } from "../lib/random-name.ts";
+import {
+  namespace_reserved_event_type,
+  type NamespaceReservedEventDetail,
+} from "../lib/ui/namespace-panel.ts";
 
 type PublishState =
   | { status: "idle" }
@@ -38,12 +40,19 @@ type PublishState =
   | { status: "success"; result: PagePublishSuccess }
   | { status: "error"; failure: PageApiFailure };
 
+interface PublishReferenceState {
+  readonly id: number;
+  readonly namespace: string;
+  readonly page_name: string;
+  readonly downloadable: boolean;
+}
+
 const initial_markdown = `# Your page
 
 Write. Style. Preview. Publish.`;
 
 interface PagePublishFormBaseProps {
-  /** Generated once on the server so hydration keeps the visible suggestion. */
+  /** Generated once on the server so hydration keeps the guest suggestion. */
   initial_namespace: string;
   /** Server-selected initial projection; normal publishing starts in Markdown. */
   initial_content_type?: PageContentType;
@@ -59,24 +68,32 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     [],
   );
   const page_previewer = useMemo(() => new ClientPagePreviewer(), []);
+  const [creator_namespaces, set_creator_namespaces] = useState<
+    readonly string[]
+  >(
+    props.authorization.kind === "creator"
+      ? props.authorization.owned_namespaces
+      : [],
+  );
+  const initial_primary_namespace = props.authorization.kind === "creator"
+    ? (props.authorization.owned_namespaces[0] ?? "")
+    : props.initial_namespace;
   const [content_type, set_content_type] = useState<PageContentType>(
     props.initial_content_type ?? "md-page",
   );
-  const [namespace, set_namespace] = useState(props.initial_namespace);
-  const [page_name, set_page_name] = useState("");
+  const [primary, set_primary] = useState<PublishReferenceState>({
+    id: 0,
+    namespace: initial_primary_namespace,
+    page_name: "",
+    downloadable: false,
+  });
+  const [aliases, set_aliases] = useState<readonly PublishReferenceState[]>([]);
   const [markdown, set_markdown] = useState(initial_markdown);
   const [css, set_css] = useState(default_page_style_preset.css);
   const [pdf_file, set_pdf_file] = useState<File | null>(null);
-  const [canonical_delivery_profile, set_canonical_delivery_profile] = useState<
-    DeliveryProfile
-  >("inline");
-  const [alternate_namespace, set_alternate_namespace] = useState("");
-  const [alternate_page_name, set_alternate_page_name] = useState("");
-  const [alternate_delivery_profile, set_alternate_delivery_profile] = useState<
-    DeliveryProfile
-  >("attachment");
   const [state, set_state] = useState<PublishState>({ status: "idle" });
-  const generated_names = useRef(new Set([namespace]));
+  const next_alias_id = useRef(1);
+  const generated_names = useRef(new Set([initial_primary_namespace]));
   const pdf_file_view = useMemo(
     () =>
       pdf_file === null
@@ -85,6 +102,40 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     [pdf_file],
   );
 
+  useEffect(() => {
+    if (props.authorization.kind !== "creator") return;
+
+    function add_reserved_namespace(event: Event) {
+      const detail = (event as CustomEvent<NamespaceReservedEventDetail>)
+        .detail;
+      if (typeof detail?.namespace !== "string" || detail.namespace === "") {
+        return;
+      }
+      set_creator_namespaces((current) =>
+        current.some((namespace) =>
+            namespace.toLowerCase() === detail.namespace.toLowerCase()
+          )
+          ? current
+          : [...current, detail.namespace]
+      );
+      set_primary((current) =>
+        current.namespace === ""
+          ? { ...current, namespace: detail.namespace }
+          : current
+      );
+    }
+
+    globalThis.addEventListener(
+      namespace_reserved_event_type,
+      add_reserved_namespace,
+    );
+    return () =>
+      globalThis.removeEventListener(
+        namespace_reserved_event_type,
+        add_reserved_namespace,
+      );
+  }, [props.authorization.kind]);
+
   function update_draft(update: () => void) {
     update();
     if (state.status === "success" || state.status === "error") {
@@ -92,14 +143,41 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     }
   }
 
-  function randomize(
-    current_value: string,
-    set_value: (value: string) => void,
-  ) {
+  function generated_name(current_value: string): string {
     if (current_value !== "") generated_names.current.add(current_value);
     const generated = random_name_generator.generate(generated_names.current);
     generated_names.current.add(generated);
-    update_draft(() => set_value(generated));
+    return generated;
+  }
+
+  function update_primary(patch: Partial<PublishReferenceState>) {
+    update_draft(() => set_primary((current) => ({ ...current, ...patch })));
+  }
+
+  function update_alias(id: number, patch: Partial<PublishReferenceState>) {
+    update_draft(() =>
+      set_aliases((current) =>
+        current.map((alias) => alias.id === id ? { ...alias, ...patch } : alias)
+      )
+    );
+  }
+
+  function add_alias() {
+    const id = next_alias_id.current++;
+    update_draft(() =>
+      set_aliases((current) => [...current, {
+        id,
+        namespace: primary.namespace || creator_namespaces[0] || "",
+        page_name: "",
+        downloadable: false,
+      }])
+    );
+  }
+
+  function remove_alias(id: number) {
+    update_draft(() =>
+      set_aliases((current) => current.filter((alias) => alias.id !== id))
+    );
   }
 
   function select_content_type(value: PageContentType) {
@@ -109,18 +187,19 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     });
   }
 
-  function update_delivery_profile(
-    value: string,
-    set_value: (profile: DeliveryProfile) => void,
-  ) {
-    if (is_valid_delivery_profile(value)) {
-      update_draft(() => set_value(value));
-    }
+  function reference_draft(
+    reference: PublishReferenceState,
+  ): PagePublishReferenceDraft {
+    return {
+      namespace: reference.namespace,
+      page_name: reference.page_name,
+      delivery_profile: content_type === "pdf" && reference.downloadable
+        ? "attachment"
+        : "inline",
+    };
   }
 
-  async function publish(
-    event: JSX.TargetedSubmitEvent<HTMLFormElement>,
-  ) {
+  async function publish(event: JSX.TargetedSubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (content_type === "pdf" && pdf_file === null) {
       set_state({
@@ -136,10 +215,17 @@ export default function PagePublishForm(props: PagePublishFormProps) {
 
     set_state({ status: "publishing" });
     try {
+      const primary_draft = reference_draft(primary);
+      const alias_drafts = aliases.map(reference_draft);
       let response: Response;
       if (content_type === "md-page") {
         const request = prepare_page_publish_request(
-          { namespace, page_name, markdown, css },
+          {
+            primary: primary_draft,
+            aliases: alias_drafts,
+            markdown,
+            css,
+          },
           props.authorization,
         );
         response = await fetch("/api/pages", {
@@ -151,21 +237,12 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         if (pdf_file === null) {
           throw new Error("PDF selection disappeared before publishing");
         }
-        const selected_file = pdf_file;
         const draft = {
-          filename: selected_file.name,
-          bytes: new Uint8Array(await selected_file.arrayBuffer()),
+          filename: pdf_file.name,
+          bytes: new Uint8Array(await pdf_file.arrayBuffer()),
           access: "public" as const,
-          canonical: {
-            namespace,
-            page_name,
-            delivery_profile: canonical_delivery_profile,
-          },
-          alternates: [{
-            namespace: alternate_namespace,
-            page_name: alternate_page_name,
-            delivery_profile: alternate_delivery_profile,
-          }],
+          canonical: primary_draft,
+          alternates: alias_drafts,
           tags: [],
         };
         const violation = pdf_publish_draft_violation(draft);
@@ -176,10 +253,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
           });
           return;
         }
-        const request = prepare_pdf_publish_request(
-          draft,
-          props.authorization,
-        );
+        const request = prepare_pdf_publish_request(draft, props.authorization);
         response = await fetch(request.url, {
           method: request.method,
           headers: request.headers,
@@ -215,6 +289,15 @@ export default function PagePublishForm(props: PagePublishFormProps) {
 
   const is_publishing = state.status === "publishing";
   const is_pdf = content_type === "pdf";
+  const supports_downloadable =
+    page_content_type_options.find((option) => option.value === content_type)
+      ?.supported_delivery_profiles.includes("attachment") ?? false;
+  const creator_without_namespace = props.authorization.kind === "creator" &&
+    creator_namespaces.length === 0;
+  const current_authorization: PagePublishAuthorization =
+    props.authorization.kind === "creator"
+      ? { ...props.authorization, owned_namespaces: creator_namespaces }
+      : props.authorization;
   return (
     <section class="publish-panel" aria-labelledby="publish-heading">
       <div class="section-heading">
@@ -225,12 +308,16 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         </p>
         <h2 id="publish-heading">Create a page</h2>
         <p>
-          Choose its direct path. A page name is optional; omit it to publish
-          the namespace's default page. {props.authorization.kind === "creator"
-            ? "Pages in your reserved namespaces are protected."
-            : "Guest paths remain unprotected."}
+          Choose one primary path and, optionally, additional aliases. Every
+          path serves the same logical page and content.
         </p>
       </div>
+
+      {creator_without_namespace && (
+        <p class="error-message" role="status">
+          Reserve a namespace before publishing a managed page.
+        </p>
+      )}
 
       <form class="publish-form" onSubmit={publish}>
         <fieldset class="content-type-chooser">
@@ -255,70 +342,64 @@ export default function PagePublishForm(props: PagePublishFormProps) {
           </div>
         </fieldset>
 
-        <fieldset class="publish-endpoint">
-          <legend>{is_pdf ? "Canonical endpoint" : "Page path"}</legend>
-          <div class="locator-fields">
-            <div class="contextual-input locator-field">
-              <div class="contextual-input-heading">
-                <label for="namespace">Namespace</label>
-                <button
-                  type="button"
-                  class="embedded-input-action"
-                  aria-label="Use a random namespace"
-                  onClick={() => randomize(namespace, set_namespace)}
-                >
-                  Random
-                </button>
-              </div>
-              <input
-                id="namespace"
-                name="namespace"
-                required
-                value={namespace}
-                onInput={(event) =>
-                  update_draft(() => set_namespace(event.currentTarget.value))}
-                placeholder="your-name"
-                autocomplete="off"
-              />
-            </div>
-            <span class="path-separator" aria-hidden="true">/</span>
-            <div class="contextual-input locator-field">
-              <div class="contextual-input-heading">
-                <label for="page-name">
-                  Page name <small>optional</small>
-                </label>
-                <button
-                  type="button"
-                  class="embedded-input-action"
-                  aria-label="Use a random page name"
-                  onClick={() => randomize(page_name, set_page_name)}
-                >
-                  Random
-                </button>
-              </div>
-              <input
-                id="page-name"
-                name="page_name"
-                value={page_name}
-                onInput={(event) =>
-                  update_draft(() => set_page_name(event.currentTarget.value))}
-                placeholder="notes/today"
-                autocomplete="off"
-              />
-            </div>
+        <ReferenceFields
+          reference={primary}
+          title="Primary path"
+          is_pdf={supports_downloadable}
+          authorization={current_authorization}
+          on_change={update_primary}
+          on_random_namespace={() =>
+            update_primary({ namespace: generated_name(primary.namespace) })}
+          on_random_page_name={() =>
+            update_primary({ page_name: generated_name(primary.page_name) })}
+        />
+
+        <section
+          class="publish-aliases"
+          aria-labelledby="publish-aliases-title"
+        >
+          <div class="section-heading">
+            <h3 id="publish-aliases-title">Optional aliases</h3>
+            <p>
+              Add another URL for the same page. Aliases do not copy content.
+            </p>
           </div>
-          {is_pdf && (
-            <DeliveryProfileSelect
-              input_id="canonical-delivery-profile"
-              value={canonical_delivery_profile}
-              on_change={(value) =>
-                update_delivery_profile(
-                  value,
-                  set_canonical_delivery_profile,
-                )}
-            />
-          )}
-        </fieldset>
+          {aliases.map((alias, index) => (
+            <div class="publish-alias" key={alias.id}>
+              <ReferenceFields
+                reference={alias}
+                title={`Alias ${index + 1}`}
+                is_pdf={supports_downloadable}
+                authorization={current_authorization}
+                on_change={(patch) =>
+                  update_alias(alias.id, patch)}
+                on_random_namespace={() =>
+                  update_alias(alias.id, {
+                    namespace: generated_name(alias.namespace),
+                  })}
+                on_random_page_name={() =>
+                  update_alias(alias.id, {
+                    page_name: generated_name(alias.page_name),
+                  })}
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  remove_alias(alias.id)}
+              >
+                Remove alias
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            class="context-button"
+            disabled={creator_without_namespace}
+            onClick={add_alias}
+          >
+            Add alias
+          </button>
+        </section>
 
         {is_pdf
           ? (
@@ -328,61 +409,10 @@ export default function PagePublishForm(props: PagePublishFormProps) {
                 required
                 on_select={(file) => update_draft(() => set_pdf_file(file))}
               />
-
-              <fieldset class="publish-endpoint">
-                <legend>Alternate endpoint</legend>
-                <p class="field-hint">
-                  Configure an ordinary attachment endpoint for direct download.
-                  No path suffix is inferred.
-                </p>
-                <div class="locator-fields">
-                  <div class="contextual-input locator-field">
-                    <div class="contextual-input-heading">
-                      <label for="alternate-namespace">Namespace</label>
-                    </div>
-                    <input
-                      id="alternate-namespace"
-                      name="alternate_namespace"
-                      required
-                      value={alternate_namespace}
-                      onInput={(event) =>
-                        update_draft(() =>
-                          set_alternate_namespace(event.currentTarget.value)
-                        )}
-                      placeholder="your-name"
-                      autocomplete="off"
-                    />
-                  </div>
-                  <span class="path-separator" aria-hidden="true">/</span>
-                  <div class="contextual-input locator-field">
-                    <div class="contextual-input-heading">
-                      <label for="alternate-page-name">
-                        Page name <small>optional</small>
-                      </label>
-                    </div>
-                    <input
-                      id="alternate-page-name"
-                      name="alternate_page_name"
-                      value={alternate_page_name}
-                      onInput={(event) =>
-                        update_draft(() =>
-                          set_alternate_page_name(event.currentTarget.value)
-                        )}
-                      placeholder="report-download"
-                      autocomplete="off"
-                    />
-                  </div>
-                </div>
-                <DeliveryProfileSelect
-                  input_id="alternate-delivery-profile"
-                  value={alternate_delivery_profile}
-                  on_change={(value) =>
-                    update_delivery_profile(
-                      value,
-                      set_alternate_delivery_profile,
-                    )}
-                />
-              </fieldset>
+              <p class="field-hint">
+                Each PDF path has one delivery mode. Add an alias when the same
+                PDF needs both an in-browser and a downloadable URL.
+              </p>
             </div>
           )
           : (
@@ -391,13 +421,15 @@ export default function PagePublishForm(props: PagePublishFormProps) {
               css={css}
               on_markdown_input={(value) =>
                 update_draft(() => set_markdown(value))}
-              on_css_input={(value) =>
-                update_draft(() => set_css(value))}
+              on_css_input={(value) => update_draft(() => set_css(value))}
               previewer={page_previewer}
             />
           )}
 
-        <button type="submit" disabled={is_publishing}>
+        <button
+          type="submit"
+          disabled={is_publishing || creator_without_namespace}
+        >
           {is_publishing ? "Publishing…" : "Publish page"}
         </button>
       </form>
@@ -422,31 +454,108 @@ export default function PagePublishForm(props: PagePublishFormProps) {
   );
 }
 
-interface DeliveryProfileSelectProps {
-  readonly input_id: string;
-  readonly value: DeliveryProfile;
-  readonly on_change: (value: string) => void;
+interface ReferenceFieldsProps {
+  readonly reference: PublishReferenceState;
+  readonly title: string;
+  readonly is_pdf: boolean;
+  readonly authorization: PagePublishAuthorization;
+  readonly on_change: (patch: Partial<PublishReferenceState>) => void;
+  readonly on_random_namespace: () => void;
+  readonly on_random_page_name: () => void;
 }
 
-/** Renders explicit profile intent; route shape never chooses delivery. */
-function DeliveryProfileSelect(
-  { input_id, value, on_change }: DeliveryProfileSelectProps,
-) {
+function ReferenceFields(props: ReferenceFieldsProps) {
+  const suffix = props.reference.id === 0
+    ? "primary"
+    : String(props.reference.id);
+  const namespace_id = `namespace-${suffix}`;
+  const page_name_id = `page-name-${suffix}`;
   return (
-    <label class="delivery-profile-field" for={input_id}>
-      Delivery
-      <select
-        id={input_id}
-        name={input_id}
-        value={value}
-        onChange={(event) => on_change(event.currentTarget.value)}
-      >
-        {pdf_delivery_profile_options.map((option) => (
-          <option value={option.value} key={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <fieldset class="publish-endpoint">
+      <legend>{props.title}</legend>
+      <div class="locator-fields">
+        <div class="contextual-input locator-field">
+          <div class="contextual-input-heading">
+            <label for={namespace_id}>Namespace</label>
+            {props.authorization.kind === "guest" && (
+              <button
+                type="button"
+                class="embedded-input-action"
+                aria-label={`Use a random namespace for ${props.title}`}
+                onClick={props.on_random_namespace}
+              >
+                Random
+              </button>
+            )}
+          </div>
+          {props.authorization.kind === "creator"
+            ? (
+              <select
+                id={namespace_id}
+                name={namespace_id}
+                required
+                value={props.reference.namespace}
+                onChange={(event) =>
+                  props.on_change({ namespace: event.currentTarget.value })}
+              >
+                {props.authorization.owned_namespaces.length === 0 && (
+                  <option value="">No reserved namespaces</option>
+                )}
+                {props.authorization.owned_namespaces.map((namespace) => (
+                  <option value={namespace} key={namespace}>{namespace}</option>
+                ))}
+              </select>
+            )
+            : (
+              <input
+                id={namespace_id}
+                name={namespace_id}
+                required
+                value={props.reference.namespace}
+                onInput={(event) =>
+                  props.on_change({ namespace: event.currentTarget.value })}
+                placeholder="your-name"
+                autocomplete="off"
+              />
+            )}
+        </div>
+        <span class="path-separator" aria-hidden="true">/</span>
+        <div class="contextual-input locator-field">
+          <div class="contextual-input-heading">
+            <label for={page_name_id}>
+              Page name <small>optional</small>
+            </label>
+            <button
+              type="button"
+              class="embedded-input-action"
+              aria-label={`Use a random page name for ${props.title}`}
+              onClick={props.on_random_page_name}
+            >
+              Random
+            </button>
+          </div>
+          <input
+            id={page_name_id}
+            name={page_name_id}
+            value={props.reference.page_name}
+            onInput={(event) =>
+              props.on_change({ page_name: event.currentTarget.value })}
+            placeholder="notes/today"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+      {props.is_pdf && (
+        <label class="delivery-profile-field">
+          <input
+            type="checkbox"
+            checked={props.reference.downloadable}
+            onChange={(event) =>
+              props.on_change({ downloadable: event.currentTarget.checked })}
+          />
+          Downloadable
+        </label>
+      )}
+    </fieldset>
   );
 }

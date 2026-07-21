@@ -1,5 +1,6 @@
+import { csrf_tokens_match } from "../http/csrf.ts";
 import type { KvRecordGateway } from "../storage/kv-gateway.ts";
-import { session_database_schema_version } from "../storage/schema-versions.ts";
+import { is_exact_record, is_valid_stored_date } from "../storage/record.ts";
 import type {
   RepositoryAuthenticationAttemptConsume,
   RepositoryAuthenticationAttemptConsumeResult,
@@ -13,9 +14,7 @@ import type {
 } from "./interfaces.ts";
 import type { SessionAuthenticationAttempt, SessionRecord } from "./model.ts";
 
-const storage_schema_version = session_database_schema_version;
 const max_update_attempts = 16;
-// Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const record_prefix: Deno.KvKey = ["iam-pager", "sessions", "by-id"];
 const credential_prefix: Deno.KvKey = [
   "iam-pager",
@@ -23,36 +22,9 @@ const credential_prefix: Deno.KvKey = [
   "by-credential",
 ];
 
-interface StoredSessionAuthenticationAttempt {
-  readonly strategy_id: string;
-  readonly state_hash: string;
-  readonly callback_url: string;
-  readonly return_to: string;
-  readonly attempt_context?: string;
-  readonly created_at: string;
-  readonly expires_at: string;
-}
-
-interface StoredSessionRecord {
-  readonly schema_version: 1;
-  readonly kind: "guest" | "authenticated";
-  readonly session_id: string;
-  readonly session_version: number;
-  readonly created_at: string;
-  readonly last_seen_at: string;
-  readonly absolute_expires_at: string;
-  readonly credential_hash: string;
-  readonly revoked_at: string | null;
-  readonly authentication_attempts:
-    readonly StoredSessionAuthenticationAttempt[];
-  readonly user_id?: string;
-  readonly authenticated_at?: string;
-  readonly idle_expires_at?: string;
-  readonly csrf_token?: string;
-}
+type StoredSessionRecord = SessionRecord;
 
 interface StoredCredentialIndex {
-  readonly schema_version: 1;
   readonly session_id: string;
 }
 
@@ -64,170 +36,112 @@ function credential_key(credential_hash: string): Deno.KvKey {
   return [...credential_prefix, credential_hash];
 }
 
-function serialize_attempt(
-  attempt: SessionAuthenticationAttempt,
-): StoredSessionAuthenticationAttempt {
-  return {
-    strategy_id: attempt.strategy_id,
-    state_hash: attempt.state_hash,
-    callback_url: attempt.callback_url,
-    return_to: attempt.return_to,
-    ...(attempt.attempt_context === undefined
-      ? {}
-      : { attempt_context: attempt.attempt_context }),
-    created_at: attempt.created_at.toISOString(),
-    expires_at: attempt.expires_at.toISOString(),
-  };
-}
-
-function serialize_record(record: SessionRecord): StoredSessionRecord {
-  const common = {
-    schema_version: storage_schema_version,
-    kind: record.kind,
-    session_id: record.session_id,
-    session_version: record.session_version,
-    created_at: record.created_at.toISOString(),
-    last_seen_at: record.last_seen_at.toISOString(),
-    absolute_expires_at: record.absolute_expires_at.toISOString(),
-    credential_hash: record.credential_hash,
-    revoked_at: record.revoked_at === null
-      ? null
-      : record.revoked_at.toISOString(),
-    authentication_attempts: record.authentication_attempts.map(
-      serialize_attempt,
-    ),
-  } as const;
-  return record.kind === "guest" ? common : {
-    ...common,
-    user_id: record.user_id,
-    authenticated_at: record.authenticated_at.toISOString(),
-    idle_expires_at: record.idle_expires_at.toISOString(),
-    csrf_token: record.csrf_token,
-  };
-}
-
 function invalid_record(): never {
   throw new TypeError("invalid stored session record");
 }
 
-function stored_date(value: unknown): Date {
-  if (typeof value !== "string") return invalid_record();
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime()) || date.toISOString() !== value) {
-    return invalid_record();
-  }
-  return date;
-}
+const common_record_fields = [
+  "kind",
+  "session_id",
+  "session_version",
+  "created_at",
+  "last_seen_at",
+  "absolute_expires_at",
+  "credential_hash",
+  "revoked_at",
+  "authentication_attempts",
+] as const;
+const authenticated_record_fields = [
+  ...common_record_fields,
+  "user_id",
+  "authenticated_at",
+  "idle_expires_at",
+  "csrf_token",
+] as const;
 
 function deserialize_attempt(value: unknown): SessionAuthenticationAttempt {
-  if (typeof value !== "object" || value === null) return invalid_record();
-  const stored = value as Record<string, unknown>;
   if (
-    typeof stored.strategy_id !== "string" ||
-    stored.strategy_id.length === 0 ||
-    typeof stored.state_hash !== "string" || stored.state_hash.length === 0 ||
-    typeof stored.callback_url !== "string" ||
-    stored.callback_url.length === 0 ||
-    typeof stored.return_to !== "string" || stored.return_to.length === 0 ||
+    !is_exact_record(value, [
+      "strategy_id",
+      "state_hash",
+      "callback_url",
+      "return_to",
+      "created_at",
+      "expires_at",
+    ], ["attempt_context"])
+  ) return invalid_record();
+  const stored = value as unknown as SessionAuthenticationAttempt;
+  if (
+    typeof stored.strategy_id !== "string" || stored.strategy_id === "" ||
+    typeof stored.state_hash !== "string" || stored.state_hash === "" ||
+    typeof stored.callback_url !== "string" || stored.callback_url === "" ||
+    typeof stored.return_to !== "string" || stored.return_to === "" ||
     (stored.attempt_context !== undefined &&
-      typeof stored.attempt_context !== "string")
-  ) {
-    return invalid_record();
-  }
-  const created_at = stored_date(stored.created_at);
-  const expires_at = stored_date(stored.expires_at);
-  if (expires_at < created_at) return invalid_record();
-  return {
-    strategy_id: stored.strategy_id,
-    state_hash: stored.state_hash,
-    callback_url: stored.callback_url,
-    return_to: stored.return_to,
-    attempt_context: stored.attempt_context as string | undefined,
-    created_at,
-    expires_at,
-  };
+      typeof stored.attempt_context !== "string") ||
+    !is_valid_stored_date(stored.created_at) ||
+    !is_valid_stored_date(stored.expires_at) ||
+    stored.expires_at < stored.created_at
+  ) return invalid_record();
+  return structuredClone(stored);
 }
 
 function deserialize_record(value: unknown): SessionRecord {
-  if (typeof value !== "object" || value === null) return invalid_record();
-  const stored = value as Record<string, unknown>;
+  const kind = typeof value === "object" && value !== null
+    ? (value as { kind?: unknown }).kind
+    : undefined;
   if (
-    stored.schema_version !== storage_schema_version ||
+    !is_exact_record(
+      value,
+      kind === "authenticated"
+        ? authenticated_record_fields
+        : common_record_fields,
+    )
+  ) return invalid_record();
+  const stored = value as unknown as SessionRecord;
+  if (
     (stored.kind !== "guest" && stored.kind !== "authenticated") ||
-    typeof stored.session_id !== "string" || stored.session_id.length === 0 ||
+    typeof stored.session_id !== "string" || stored.session_id === "" ||
     !Number.isSafeInteger(stored.session_version) ||
-    (stored.session_version as number) <= 0 ||
+    stored.session_version <= 0 ||
     typeof stored.credential_hash !== "string" ||
-    stored.credential_hash.length === 0 ||
-    (stored.revoked_at !== null && typeof stored.revoked_at !== "string") ||
-    !Array.isArray(stored.authentication_attempts)
-  ) {
-    return invalid_record();
-  }
-  const created_at = stored_date(stored.created_at);
-  const last_seen_at = stored_date(stored.last_seen_at);
-  const absolute_expires_at = stored_date(stored.absolute_expires_at);
-  if (last_seen_at < created_at || absolute_expires_at < created_at) {
-    return invalid_record();
-  }
-  const common = {
-    session_id: stored.session_id,
-    session_version: stored.session_version as number,
-    created_at,
-    last_seen_at,
-    absolute_expires_at,
-    credential_hash: stored.credential_hash,
-    revoked_at: stored.revoked_at === null
-      ? null
-      : stored_date(stored.revoked_at),
-    authentication_attempts: stored.authentication_attempts.map(
-      deserialize_attempt,
-    ),
-  };
-  if (stored.kind === "guest") return { kind: "guest", ...common };
+    stored.credential_hash === "" ||
+    !is_valid_stored_date(stored.created_at) ||
+    !is_valid_stored_date(stored.last_seen_at) ||
+    !is_valid_stored_date(stored.absolute_expires_at) ||
+    (stored.revoked_at !== null &&
+      !is_valid_stored_date(stored.revoked_at)) ||
+    !Array.isArray(stored.authentication_attempts) ||
+    stored.last_seen_at < stored.created_at ||
+    stored.absolute_expires_at < stored.created_at
+  ) return invalid_record();
+  stored.authentication_attempts.forEach(deserialize_attempt);
   if (
-    typeof stored.user_id !== "string" || stored.user_id.length === 0 ||
-    typeof stored.csrf_token !== "string" || stored.csrf_token.length === 0
-  ) {
-    return invalid_record();
-  }
-  const authenticated_at = stored_date(stored.authenticated_at);
-  const idle_expires_at = stored_date(stored.idle_expires_at);
-  if (
-    authenticated_at < created_at || idle_expires_at < authenticated_at ||
-    absolute_expires_at < authenticated_at
-  ) {
-    return invalid_record();
-  }
-  return {
-    kind: "authenticated",
-    ...common,
-    user_id: stored.user_id,
-    authenticated_at,
-    idle_expires_at,
-    csrf_token: stored.csrf_token,
-  };
+    stored.kind === "authenticated" && (
+      typeof stored.user_id !== "string" || stored.user_id === "" ||
+      typeof stored.csrf_token !== "string" || stored.csrf_token === "" ||
+      !is_valid_stored_date(stored.authenticated_at) ||
+      !is_valid_stored_date(stored.idle_expires_at) ||
+      stored.authenticated_at < stored.created_at ||
+      stored.idle_expires_at < stored.authenticated_at ||
+      stored.absolute_expires_at < stored.authenticated_at
+    )
+  ) return invalid_record();
+  return structuredClone(stored);
 }
 
 function serialize_credential_index(session_id: string): StoredCredentialIndex {
-  return { schema_version: storage_schema_version, session_id };
+  return { session_id };
 }
 
 function deserialize_credential_index(value: unknown): StoredCredentialIndex {
-  if (typeof value !== "object" || value === null) {
+  if (!is_exact_record(value, ["session_id"])) {
     throw new TypeError("invalid stored session credential index");
   }
-  const stored = value as Record<string, unknown>;
-  if (
-    stored.schema_version !== storage_schema_version ||
-    typeof stored.session_id !== "string" || stored.session_id.length === 0
-  ) {
+  const stored = value;
+  if (typeof stored.session_id !== "string" || stored.session_id.length === 0) {
     throw new TypeError("invalid stored session credential index");
   }
-  return {
-    schema_version: storage_schema_version,
-    session_id: stored.session_id,
-  };
+  return { session_id: stored.session_id };
 }
 
 function expiry_options(record: SessionRecord, reference_at: Date) {
@@ -241,44 +155,6 @@ function expiry_options(record: SessionRecord, reference_at: Date) {
 
 function later_date(left: Date, right: Date): Date {
   return left < right ? new Date(right) : new Date(left);
-}
-
-function clone_upgrade(input: SessionUpgrade): SessionUpgrade {
-  return {
-    ...input,
-    authenticated_at: new Date(input.authenticated_at),
-    absolute_expires_at: new Date(input.absolute_expires_at),
-    idle_expires_at: new Date(input.idle_expires_at),
-  };
-}
-
-function clone_attempt_save(
-  input: RepositoryAuthenticationAttemptSave,
-): RepositoryAuthenticationAttemptSave {
-  return {
-    ...input,
-    attempt: deserialize_attempt(serialize_attempt(input.attempt)),
-  };
-}
-
-function clone_attempt_consume(
-  input: RepositoryAuthenticationAttemptConsume,
-): RepositoryAuthenticationAttemptConsume {
-  return { ...input, consumed_at: new Date(input.consumed_at) };
-}
-
-function clone_logout(input: RepositoryLogout): RepositoryLogout {
-  return { ...input, logged_out_at: new Date(input.logged_out_at) };
-}
-
-/** Fixed-length comparison avoids early exit on attacker-controlled input. */
-function csrf_tokens_match(expected: string, actual: string): boolean {
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index++) {
-    difference |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
-  }
-  return difference === 0;
 }
 
 interface LoadedRecord {
@@ -329,17 +205,12 @@ export class DenoKvSessionRepository implements SessionRepository {
   }
 
   create(record: SessionRecord): Promise<boolean> {
-    const stored = serialize_record(record);
-    const cloned = deserialize_record(stored);
-    return this.#create(cloned, stored);
+    return this.#create(deserialize_record(record));
   }
 
-  async #create(
-    record: SessionRecord,
-    stored: StoredSessionRecord,
-  ): Promise<boolean> {
-    const session_key = record_key(record.session_id);
-    const index_key = credential_key(record.credential_hash);
+  async #create(stored: StoredSessionRecord): Promise<boolean> {
+    const session_key = record_key(stored.session_id);
+    const index_key = credential_key(stored.credential_hash);
     const [session_entry, index_entry] = await this.#kv.get_many([
       session_key,
       index_key,
@@ -349,14 +220,14 @@ export class DenoKvSessionRepository implements SessionRepository {
     ) {
       return false;
     }
-    const expires = expiry_options(record, record.created_at);
+    const expires = expiry_options(stored, stored.created_at);
     const commit = await this.#kv.native_atomic()
       .check(session_entry)
       .check(index_entry)
       .set(session_key, stored, expires)
       .set(
         index_key,
-        serialize_credential_index(record.session_id),
+        serialize_credential_index(stored.session_id),
         expires,
       )
       .commit();
@@ -406,11 +277,11 @@ export class DenoKvSessionRepository implements SessionRepository {
         .check(loaded.entry)
         .set(
           record_key(session_id),
-          serialize_record(updated),
+          structuredClone(updated),
           expiry_options(updated, next_last_seen),
         )
         .commit();
-      if (commit.ok) return deserialize_record(serialize_record(updated));
+      if (commit.ok) return structuredClone(updated);
     }
     throw new Error("session renewal remained contended");
   }
@@ -418,7 +289,7 @@ export class DenoKvSessionRepository implements SessionRepository {
   save_authentication_attempt(
     input: RepositoryAuthenticationAttemptSave,
   ): Promise<RepositoryAuthenticationAttemptSaveResult> {
-    return this.#save_authentication_attempt(clone_attempt_save(input));
+    return this.#save_authentication_attempt(structuredClone(input));
   }
 
   async #save_authentication_attempt(
@@ -461,7 +332,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         .check(loaded.entry)
         .set(
           record_key(input.session_id),
-          serialize_record(updated),
+          structuredClone(updated),
           expiry_options(updated, reference_at),
         )
         .commit();
@@ -473,7 +344,7 @@ export class DenoKvSessionRepository implements SessionRepository {
   consume_authentication_attempt(
     input: RepositoryAuthenticationAttemptConsume,
   ): Promise<RepositoryAuthenticationAttemptConsumeResult> {
-    return this.#consume_authentication_attempt(clone_attempt_consume(input));
+    return this.#consume_authentication_attempt(structuredClone(input));
   }
 
   async #consume_authentication_attempt(
@@ -519,7 +390,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         .check(loaded.entry)
         .set(
           record_key(input.session_id),
-          serialize_record(updated),
+          structuredClone(updated),
           expiry_options(updated, reference_at),
         )
         .commit();
@@ -527,16 +398,14 @@ export class DenoKvSessionRepository implements SessionRepository {
       if (matched_index < 0) return { ok: false, reason: "not_found" };
       return {
         ok: true,
-        attempt: deserialize_attempt(
-          serialize_attempt(active_attempts[matched_index]),
-        ),
+        attempt: structuredClone(active_attempts[matched_index]),
       };
     }
     throw new Error("session attempt consumption remained contended");
   }
 
   upgrade(input: SessionUpgrade): Promise<RepositoryUpgradeResult> {
-    return this.#upgrade(clone_upgrade(input));
+    return this.#upgrade(structuredClone(input));
   }
 
   async #upgrade(input: SessionUpgrade): Promise<RepositoryUpgradeResult> {
@@ -579,7 +448,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         .check(loaded.entry)
         .check(new_index)
         .delete(credential_key(current.credential_hash))
-        .set(record_key(input.session_id), serialize_record(upgraded), expires)
+        .set(record_key(input.session_id), structuredClone(upgraded), expires)
         .set(
           new_index_key,
           serialize_credential_index(input.session_id),
@@ -589,7 +458,7 @@ export class DenoKvSessionRepository implements SessionRepository {
       if (commit.ok) {
         return {
           ok: true,
-          record: deserialize_record(serialize_record(upgraded)),
+          record: structuredClone(upgraded),
         };
       }
     }
@@ -597,7 +466,7 @@ export class DenoKvSessionRepository implements SessionRepository {
   }
 
   logout(input: RepositoryLogout): Promise<RepositoryLogoutResult> {
-    return this.#logout(clone_logout(input));
+    return this.#logout(structuredClone(input));
   }
 
   async #logout(input: RepositoryLogout): Promise<RepositoryLogoutResult> {
@@ -627,7 +496,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         .delete(credential_key(current.credential_hash))
         .set(
           record_key(input.session_id),
-          serialize_record(revoked),
+          structuredClone(revoked),
           expiry_options(revoked, input.logged_out_at),
         )
         .commit();
@@ -673,7 +542,7 @@ export class DenoKvSessionRepository implements SessionRepository {
         .delete(credential_key(current.credential_hash))
         .set(
           record_key(session_id),
-          serialize_record(revoked),
+          structuredClone(revoked),
           expiry_options(revoked, revoked_at),
         )
         .commit();

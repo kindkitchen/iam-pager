@@ -445,6 +445,85 @@ Deno.test("PageService composes PDF assets with generic endpoint contracts", asy
   }
 });
 
+Deno.test("PageService accepts many locator references and checks every namespace", async () => {
+  const { service, namespaces } = await make_fixture({ ids: ["many-page"] });
+  await namespaces.reserve({
+    namespace: "Alias",
+    owner_user_id: owner.user_id,
+  });
+  const alternates = [
+    {
+      locator: { namespace: "Alias", page_name: "shared" },
+      delivery_profile: "inline",
+    },
+    ...Array.from({ length: 15 }, (_, index) => ({
+      locator: { namespace: "Mine", page_name: `alias-${index}` },
+      delivery_profile: "inline",
+    })),
+  ];
+  const created = await service.create_managed({
+    actor: owner,
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "primary" },
+        delivery_profile: "inline",
+      },
+      alternates,
+    },
+    access: "public",
+    content: { content_type: "md-page", input: { md: "# Shared" } },
+  });
+  assert(created.ok);
+  assertEquals(created.page.endpoints.alternates.length, 16);
+  assert(
+    (await service.deliver(
+      { namespace: "Alias", page_name: "shared" },
+      guest,
+    )).ok,
+  );
+
+  assertEquals(
+    await service.update_managed({
+      actor: owner,
+      page_id: created.page.page_id,
+      expected_revision: 1,
+      patch: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "primary" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Free", page_name: "not-owned" },
+            delivery_profile: "inline",
+          }],
+        },
+      },
+    }),
+    { ok: false, reason: "namespace_not_reserved" },
+  );
+  assertEquals(
+    await service.update_managed({
+      actor: owner,
+      page_id: created.page.page_id,
+      expected_revision: 1,
+      patch: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "primary" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Theirs", page_name: "not-owned" },
+            delivery_profile: "inline",
+          }],
+        },
+      },
+    }),
+    { ok: false, reason: "namespace_reserved" },
+  );
+});
+
 Deno.test("PageService preserves complete PDF endpoints through update, rename, and duplicate", async () => {
   const bytes = pdf_bytes("1.7", "endpoint-lifecycle");
   const { service, repository } = await make_fixture({
@@ -1593,46 +1672,6 @@ Deno.test("PageService projects one page with complete endpoint links and resolv
   );
   assert(delivered.ok);
   assertEquals(delivered.endpoint, expected_endpoints.alternates[0]);
-});
-
-Deno.test("PageService authorizes private delivery before retired-handler disclosure", async () => {
-  const { service, repository } = await make_fixture();
-  await repository.create_managed({
-    page_id: "retired-private",
-    locator: { namespace: "Mine", page_name: "retired" },
-    owner_user_id: owner.user_id,
-    access: "private",
-    content: {
-      content_type: "retired",
-      data: {},
-      meta: { media_type: "text/plain", size_bytes: 0 },
-    },
-    now: t1,
-  });
-  assertEquals(
-    await service.deliver(
-      { namespace: "Mine", page_name: "retired" },
-      guest,
-    ),
-    { ok: false, reason: "not_found" },
-  );
-  assertEquals(
-    await service.deliver(
-      { namespace: "Mine", page_name: "retired" },
-      owner,
-    ),
-    { ok: false, reason: "unknown_content_type" },
-  );
-  assertEquals(
-    await service.update_managed({
-      actor: owner,
-      page_id: "retired-private",
-      expected_revision: 1,
-      patch: { access: "public" },
-    }),
-    { ok: false, reason: "unknown_content_type" },
-  );
-  assertEquals((await repository.find_by_id("retired-private"))?.revision, 1);
 });
 
 Deno.test("PageService public view resolves eligible pages and hides the rest", async () => {

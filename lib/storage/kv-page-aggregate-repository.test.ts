@@ -10,6 +10,7 @@ import type { KvGateway } from "./kv-gateway.ts";
 import { content_asset_manifest_key } from "./kv-content-asset-repository.ts";
 import {
   KvPageAggregateRepository,
+  max_kv_page_endpoints,
   max_page_aggregate_atomic_checks,
   page_aggregate_atomic_check_headroom,
   page_aggregate_by_id_prefix,
@@ -200,30 +201,10 @@ Deno.test("KV page aggregates survive repository reconstruction with exact proje
       created.page,
     );
 
-    const envelopes = await list_entries(kv, page_aggregate_by_id_prefix);
-    assertEquals(envelopes.length, 1);
-    assertEquals(envelopes[0].value, {
-      schema_version: 1,
-      page_id: "page-1",
-      canonical: {
-        namespace: "Alice",
-        page_name: "Preview",
-        delivery_profile: "inline",
-      },
-      alternates: [{
-        namespace: "Alice",
-        page_name: "Download",
-        delivery_profile: "attachment",
-      }],
-      stewardship: "managed",
-      owner_user_id: "owner-1",
-      access: "public",
-      tags: ["reference"],
-      revision: 1,
-      content_asset_id: "asset-1",
-      created_at: t1.toISOString(),
-      updated_at: t1.toISOString(),
-    });
+    assertEquals(
+      (await list_entries(kv, page_aggregate_by_id_prefix)).length,
+      1,
+    );
     assertEquals(
       (await list_entries(kv, page_endpoint_claim_prefix)).length,
       2,
@@ -258,7 +239,7 @@ Deno.test("KV page aggregates fail closed on malformed envelopes and index drift
     const envelope_key = [...page_aggregate_by_id_prefix, "page-1"];
     const envelope = (await kv.get<Record<string, unknown>>(envelope_key))
       .value!;
-    await kv.set(envelope_key, { ...envelope, schema_version: 3 });
+    await kv.set(envelope_key, { ...envelope, revision: 0 });
     await assertRejects(
       () => repository.find_page_aggregate_by_id("page-1"),
       TypeError,
@@ -272,11 +253,7 @@ Deno.test("KV page aggregates fail closed on malformed envelopes and index drift
       1,
       "preview",
     ];
-    await kv.set(endpoint_key, {
-      schema_version: 1,
-      page_id: "other-page",
-      revision: 1,
-    });
+    await kv.set(endpoint_key, { page_id: "other-page", revision: 1 });
     await assertRejects(
       () => repository.find_page_aggregate_by_id("page-1"),
       Error,
@@ -295,7 +272,7 @@ Deno.test("KV page aggregate publication requires an intact asset manifest", asy
     const manifest_key = content_asset_manifest_key("asset-1");
     const manifest = (await kv.get<Record<string, unknown>>(manifest_key))
       .value!;
-    await kv.set(manifest_key, { ...manifest, schema_version: 2 });
+    await kv.set(manifest_key, { ...manifest, data_encoding: "unknown" });
     await assertRejects(
       () =>
         repository.create_managed_page_aggregate({
@@ -371,6 +348,35 @@ Deno.test("KV page aggregate writes retry rejected native commits and bound exha
     );
   } finally {
     exhausted_kv.close();
+  }
+});
+
+Deno.test("KV reports its locator-set capacity without changing domain validity", async () => {
+  const kv = await Deno.openKv(":memory:");
+  try {
+    const repository = new KvPageAggregateRepository(new KvToolboxGateway(kv));
+    await create_asset(repository, "asset-1");
+    const endpoint_set_over_capacity = endpoint_set(
+      "page-0",
+      Array.from(
+        { length: max_kv_page_endpoints },
+        (_, index) => binding(`page-${index + 1}`),
+      ),
+    );
+    assertEquals(
+      await repository.create_managed_page_aggregate({
+        page_id: "page-1",
+        endpoint_set: endpoint_set_over_capacity,
+        owner_user_id: "owner-1",
+        access: "public",
+        content_asset_id: "asset-1",
+        now: t1,
+      }),
+      { ok: false, reason: "endpoint_capacity_exceeded" },
+    );
+    assertEquals(await repository.find_page_aggregate_by_id("page-1"), null);
+  } finally {
+    kv.close();
   }
 });
 

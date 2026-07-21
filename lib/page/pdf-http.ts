@@ -1,8 +1,8 @@
 import { default_pdf_limits, pdf_media_type } from "../content/pdf.ts";
 import { read_bounded_request_bytes } from "../http/request-body.ts";
-import type { DeliveryProfile } from "../content/model.ts";
-import type { Locator } from "../locator/model.ts";
+import { strict_object } from "../http/strict-object.ts";
 import type { PageEndpointSetIntent } from "./endpoint.ts";
+import { decode_page_endpoint_set_intent } from "./endpoint-json.ts";
 import type { PageAccess } from "./model.ts";
 
 export const pdf_multipart_metadata_max_bytes = 16 * 1024;
@@ -19,7 +19,7 @@ export interface PdfMultipartCreateCommand {
 }
 
 export interface PdfMultipartUpdateCommand {
-  readonly endpoint_set: PageEndpointSetIntent;
+  readonly endpoint_set?: PageEndpointSetIntent;
   readonly access?: PageAccess;
   readonly tags?: string[];
   readonly content: PdfMultipartCreateCommand["content"];
@@ -243,7 +243,9 @@ function decode_create_metadata(input: unknown): DecodeResult<{
   if (typeof body.value.access !== "string") {
     return { ok: false, detail: "access must be a string" };
   }
-  const endpoint_set = decode_pdf_endpoint_set(body.value.endpoint_set);
+  const endpoint_set = decode_page_endpoint_set_intent(
+    body.value.endpoint_set,
+  );
   if (!endpoint_set.ok) return endpoint_set;
   const tags = decode_tags(body.value.tags);
   if (!tags.ok) return tags;
@@ -258,106 +260,33 @@ function decode_create_metadata(input: unknown): DecodeResult<{
 }
 
 function decode_update_metadata(input: unknown): DecodeResult<{
-  endpoint_set: PageEndpointSetIntent;
+  endpoint_set?: PageEndpointSetIntent;
   access?: PageAccess;
   tags?: string[];
 }> {
-  const body = strict_object(input, ["endpoint_set", "access?", "tags?"]);
+  const body = strict_object(input, ["endpoint_set?", "access?", "tags?"]);
   if (!body.ok) return body;
   if (
     body.value.access !== undefined && typeof body.value.access !== "string"
   ) {
     return { ok: false, detail: "access must be a string when present" };
   }
-  const endpoint_set = decode_pdf_endpoint_set(body.value.endpoint_set);
-  if (!endpoint_set.ok) return endpoint_set;
+  let endpoint_set: PageEndpointSetIntent | undefined;
+  if (body.value.endpoint_set !== undefined) {
+    const decoded = decode_page_endpoint_set_intent(body.value.endpoint_set);
+    if (!decoded.ok) return decoded;
+    endpoint_set = decoded.value;
+  }
   const tags = decode_tags(body.value.tags);
   if (!tags.ok) return tags;
   return {
     ok: true,
     value: {
-      endpoint_set: endpoint_set.value,
+      ...(endpoint_set === undefined ? {} : { endpoint_set }),
       ...(body.value.access === undefined
         ? {}
         : { access: body.value.access as PageAccess }),
       ...(tags.value === undefined ? {} : { tags: tags.value }),
-    },
-  };
-}
-
-function decode_pdf_endpoint_set(
-  input: unknown,
-): DecodeResult<PageEndpointSetIntent> {
-  const set = strict_object(input, ["canonical", "alternates"]);
-  if (!set.ok) return prefixed(set, "endpoint_set");
-  if (!Array.isArray(set.value.alternates)) {
-    return { ok: false, detail: "endpoint_set.alternates must be an array" };
-  }
-  const canonical = decode_endpoint_binding(set.value.canonical);
-  if (!canonical.ok) return prefixed(canonical, "endpoint_set.canonical");
-  const alternates = [];
-  for (const [index, value] of set.value.alternates.entries()) {
-    const decoded = decode_endpoint_binding(value);
-    if (!decoded.ok) {
-      return prefixed(decoded, `endpoint_set.alternates[${index}]`);
-    }
-    alternates.push(decoded.value);
-  }
-  if (canonical.value.delivery_profile !== "inline") {
-    return {
-      ok: false,
-      detail: "endpoint_set.canonical.delivery_profile must be inline",
-    };
-  }
-  if (
-    !alternates.some((endpoint) => endpoint.delivery_profile === "attachment")
-  ) {
-    return {
-      ok: false,
-      detail: "endpoint_set must include an attachment alternate",
-    };
-  }
-  return {
-    ok: true,
-    value: { canonical: canonical.value, alternates },
-  };
-}
-
-function decode_endpoint_binding(
-  input: unknown,
-): DecodeResult<{ locator: Locator; delivery_profile: DeliveryProfile }> {
-  const binding = strict_object(input, ["locator", "delivery_profile"]);
-  if (!binding.ok) return binding;
-  const locator = strict_object(binding.value.locator, [
-    "namespace",
-    "page_name?",
-  ]);
-  if (!locator.ok) return prefixed(locator, "locator");
-  if (typeof locator.value.namespace !== "string") {
-    return { ok: false, detail: "locator.namespace must be a string" };
-  }
-  if (
-    locator.value.page_name !== undefined &&
-    typeof locator.value.page_name !== "string"
-  ) {
-    return {
-      ok: false,
-      detail: "locator.page_name must be a string when present",
-    };
-  }
-  if (typeof binding.value.delivery_profile !== "string") {
-    return { ok: false, detail: "delivery_profile must be a string" };
-  }
-  return {
-    ok: true,
-    value: {
-      locator: locator.value.page_name === undefined
-        ? { namespace: locator.value.namespace }
-        : {
-          namespace: locator.value.namespace,
-          page_name: locator.value.page_name,
-        },
-      delivery_profile: binding.value.delivery_profile as DeliveryProfile,
     },
   };
 }
@@ -373,34 +302,6 @@ function decode_tags(input: unknown): DecodeResult<string[] | undefined> {
     };
   }
   return { ok: true, value: input as string[] };
-}
-
-function strict_object(
-  input: unknown,
-  fields: readonly string[],
-): DecodeResult<Record<string, unknown>> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return { ok: false, detail: "value must be an object" };
-  }
-  const value = input as Record<string, unknown>;
-  const required = fields.filter((field) => !field.endsWith("?"));
-  const allowed = fields.map((field) => field.replace(/\?$/, ""));
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    return { ok: false, detail: `unknown field: ${unknown}` };
-  }
-  const missing = required.find((field) => !Object.hasOwn(value, field));
-  if (missing !== undefined) {
-    return { ok: false, detail: `missing field: ${missing}` };
-  }
-  return { ok: true, value };
-}
-
-function prefixed(
-  result: { readonly ok: false; readonly detail: string },
-  prefix: string,
-): { readonly ok: false; readonly detail: string } {
-  return { ok: false, detail: `${prefix}: ${result.detail}` };
 }
 
 function invalid_metadata(detail: string): PdfMultipartDecodeFailure {

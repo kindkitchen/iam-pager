@@ -5,17 +5,15 @@ import {
   DenoKvDatabaseOpener,
   type KvDatabaseOpener,
   type OwnershipStorageConfig,
+  parse_dependent_storage_config,
+  type StorageConfig,
+  type StorageEnvironmentSource,
 } from "./ownership-storage.ts";
 
 export const SESSION_STORAGE_BACKEND_ENV = "IAM_PAGER_SESSION_STORAGE_BACKEND";
 
-export interface SessionStorageEnvironmentSource {
-  get(name: string): string | undefined;
-}
-
-export type SessionStorageConfig =
-  | { readonly backend: "memory" }
-  | { readonly backend: "deno-kv"; readonly path?: string };
+export type SessionStorageEnvironmentSource = StorageEnvironmentSource;
+export type SessionStorageConfig = StorageConfig;
 
 export interface SessionRepositoryFactory {
   create(config: SessionStorageConfig): Promise<SessionRepository>;
@@ -46,21 +44,9 @@ export function parse_session_storage_config(
   environment: SessionStorageEnvironmentSource,
   ownership_config: OwnershipStorageConfig,
 ): SessionStorageConfig {
-  const backend = environment.get(SESSION_STORAGE_BACKEND_ENV);
-  if (backend === undefined || backend === "memory") {
-    return { backend: "memory" };
-  }
-  if (backend !== "deno-kv") {
-    throw new TypeError(
-      `${SESSION_STORAGE_BACKEND_ENV} must be memory or deno-kv`,
-    );
-  }
-  if (ownership_config.backend !== "deno-kv") {
-    throw new TypeError(
-      `${SESSION_STORAGE_BACKEND_ENV}=deno-kv requires durable ownership through IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv`,
-    );
-  }
-  return ownership_config.path === undefined
-    ? { backend: "deno-kv" }
-    : { backend: "deno-kv", path: ownership_config.path };
+  return parse_dependent_storage_config(
+    environment,
+    SESSION_STORAGE_BACKEND_ENV,
+    ownership_config,
+  );
 }

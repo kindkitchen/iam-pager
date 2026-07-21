@@ -1,3 +1,4 @@
+import { encode_base64url } from "../base64url.ts";
 import type { Clock, CredentialGenerator, IdGenerator } from "./interfaces.ts";
 
 export class SystemClock implements Clock {
@@ -15,12 +16,6 @@ export class CryptoIdGenerator implements IdGenerator {
 /** Generates a 256-bit bearer credential encoded without cookie delimiters. */
 export class CryptoCredentialGenerator implements CredentialGenerator {
   generate(): string {
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary)
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, "");
+    return encode_base64url(crypto.getRandomValues(new Uint8Array(32)));
   }
 }

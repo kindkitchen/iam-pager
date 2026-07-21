@@ -90,7 +90,11 @@ export interface PageContentCommand {
   input: unknown;
 }
 
-/** Canonical-locator shorthand or a complete publisher-configured endpoint set. */
+/**
+ * Inline canonical-locator shorthand or a complete publisher-configured
+ * non-empty locator-reference set. The shorthand is retained for existing
+ * Markdown clients; new callers should make delivery profile explicit.
+ */
 export type PageEndpointCommand =
   | { readonly locator: Locator; readonly endpoint_set?: never }
   | {
@@ -123,6 +127,7 @@ export type PublishTrialPageResult =
       | "private_requires_managed_page"
       | "namespace_reserved"
       | "endpoint_conflict"
+      | "endpoint_capacity_exceeded"
       | "revision_exhausted"
       | "unknown_content_type"
       | "page_id_generation_exhausted";
@@ -151,6 +156,7 @@ export type CreateManagedPageResult =
       | "namespace_not_reserved"
       | "namespace_reserved"
       | "page_exists"
+      | "endpoint_capacity_exceeded"
       | "unknown_content_type"
       | "page_id_generation_exhausted";
   }
@@ -187,7 +193,7 @@ export interface InspectManagedPageRequest {
 
 export type InspectManagedPageResult =
   | { ok: true; page: ManagedPageInspection }
-  | { ok: false; reason: "not_found" | "unknown_content_type" };
+  | { ok: false; reason: "not_found" };
 
 export interface UpdateManagedPageRequest {
   actor: UserPageActor;
@@ -214,6 +220,9 @@ export type UpdateManagedPageResult =
       | "invalid_access"
       | "invalid_tags"
       | "page_exists"
+      | "namespace_not_reserved"
+      | "namespace_reserved"
+      | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
       | "unknown_content_type";
   }
@@ -300,15 +309,14 @@ export type RenameManagedPageResult =
       | "revision_conflict"
       | "revision_exhausted"
       | "invalid_page_name"
-      | "page_exists"
-      | "unknown_content_type";
+      | "page_exists";
   };
 
 export interface DuplicateManagedPageRequest {
   actor: UserPageActor;
   page_id: PageId;
   expected_revision: number;
-  /** Required when the source has alternate or non-inline endpoints. */
+  /** Explicit fresh destination set; required for nontrivial sources. */
   endpoint_set?: PageEndpointSetIntent;
 }
 
@@ -323,9 +331,11 @@ export type DuplicateManagedPageResult =
     reason:
       | "not_found"
       | "revision_conflict"
-      | "unknown_content_type"
       | "endpoint_set_required"
       | "page_exists"
+      | "namespace_not_reserved"
+      | "namespace_reserved"
+      | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
       | "page_name_generation_exhausted"
       | "page_id_generation_exhausted";
@@ -335,8 +345,7 @@ export type ViewPublicPageResult =
   | {
     ok: true;
     page: PublicPageSummary;
-    /** Rendered content when its handler remains available; null is fallback. */
-    payload: DeliveryPayload | null;
+    payload: DeliveryPayload;
   }
   | { ok: false; reason: "not_found" };
 
@@ -380,10 +389,7 @@ export type DeliverPageResult =
     endpoint: PageEndpointLink;
     payload: DeliveryPayload;
   }
-  | {
-    ok: false;
-    reason: "not_found" | "unknown_content_type" | "corrupt";
-  };
+  | { ok: false; reason: "not_found" | "corrupt" };
 
 export interface TrialPagePublisher {
   publish_trial(

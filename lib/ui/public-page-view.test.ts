@@ -170,6 +170,35 @@ Deno.test("public PDF view derives native preview and downloads from endpoint pr
     size_bytes: 2048,
   });
   assertEquals(pages.list_calls, [{ namespace: "Alice", limit: 22 }]);
+
+  const download_only = {
+    ...pdf_page,
+    endpoints: {
+      canonical: {
+        ...pdf_page.endpoints.canonical,
+        delivery_profile: "attachment" as const,
+      },
+      alternates: [],
+    },
+  };
+  pages.views.set(locator_key(download_only.locator), {
+    ok: true,
+    page: download_only,
+    payload: {
+      media_type: "application/pdf",
+      body: new Uint8Array([37, 80, 68, 70]),
+    },
+  });
+  const download_view = await presenter.present(download_only.locator);
+  assertEquals(download_view.kind, "page");
+  if (download_view.kind === "page") {
+    assertEquals(download_view.preview, {
+      kind: "pdf",
+      preview: null,
+      downloads: [download_only.endpoints.canonical],
+      size_bytes: 2048,
+    });
+  }
 });
 
 Deno.test("public default page does not link to itself", async () => {
@@ -190,11 +219,18 @@ Deno.test("public default page does not link to itself", async () => {
 
 Deno.test("trial views stay out of creator listings", async () => {
   const pages = new FakePublicPages();
-  const trial = summary("Free", undefined, "trial");
+  const trial = {
+    ...summary("Free", undefined, "trial"),
+    content_type: "example-binary",
+    media_type: "application/octet-stream",
+  };
   pages.views.set(locator_key(trial.locator), {
     ok: true,
     page: trial,
-    payload: null,
+    payload: {
+      media_type: "application/octet-stream",
+      body: new Uint8Array(42),
+    },
   });
   const presenter = new CreatorPublicPageViewPresenter({ pages });
 
@@ -205,7 +241,7 @@ Deno.test("trial views stay out of creator listings", async () => {
     direct_path: "/Free",
     preview: {
       kind: "fallback",
-      media_type: "text/html; charset=utf-8",
+      media_type: "application/octet-stream",
       size_bytes: 42,
     },
     default_page: null,
