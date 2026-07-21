@@ -178,4 +178,5 @@ Deno.test("public page wrapper renders a non-disclosing missing view", () => {
   );
   assertStringIncludes(html, "That page was not found");
   assertStringIncludes(html, "missing or is not available");
+  assertStringIncludes(html, 'href="/site">Go home</a>');
 });

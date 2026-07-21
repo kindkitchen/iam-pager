@@ -192,3 +192,10 @@ deno task --env-file=.env.production.local start
 `PORT` is optional and must be an integer from 0 through 65535. Deno Deploy uses
 `deno task build` and `_fresh/server.js` with the same production environment
 and storage selectors.
+
+After deployment, verify that direct-content, framework-level, and wrapped-page
+404 responses are HTML pages with a working home link:
+
+```sh
+deno task smoke:not-found https://example.com
+```
