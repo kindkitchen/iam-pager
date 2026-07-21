@@ -1,5 +1,6 @@
 import { default_pdf_limits, pdf_media_type } from "../content/pdf.ts";
 import { read_bounded_request_bytes } from "../http/request-body.ts";
+import { prefixed, strict_object } from "../http/strict-object.ts";
 import type { DeliveryProfile } from "../content/model.ts";
 import type { Locator } from "../locator/model.ts";
 import type { PageEndpointSetIntent } from "./endpoint.ts";
@@ -373,34 +374,6 @@ function decode_tags(input: unknown): DecodeResult<string[] | undefined> {
     };
   }
   return { ok: true, value: input as string[] };
-}
-
-function strict_object(
-  input: unknown,
-  fields: readonly string[],
-): DecodeResult<Record<string, unknown>> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return { ok: false, detail: "value must be an object" };
-  }
-  const value = input as Record<string, unknown>;
-  const required = fields.filter((field) => !field.endsWith("?"));
-  const allowed = fields.map((field) => field.replace(/\?$/, ""));
-  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    return { ok: false, detail: `unknown field: ${unknown}` };
-  }
-  const missing = required.find((field) => !Object.hasOwn(value, field));
-  if (missing !== undefined) {
-    return { ok: false, detail: `missing field: ${missing}` };
-  }
-  return { ok: true, value };
-}
-
-function prefixed(
-  result: { readonly ok: false; readonly detail: string },
-  prefix: string,
-): { readonly ok: false; readonly detail: string } {
-  return { ok: false, detail: `${prefix}: ${result.detail}` };
 }
 
 function invalid_metadata(detail: string): PdfMultipartDecodeFailure {

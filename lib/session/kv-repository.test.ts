@@ -56,40 +56,8 @@ Deno.test("DenoKvSessionRepository: state is shared outside repository instances
       "by-id",
       "durable-session",
     ];
-    assertEquals((await kv.get(record_key)).value, {
-      schema_version: 1,
-      kind: "guest",
-      session_id: "durable-session",
-      session_version: 1,
-      created_at: "2026-07-18T00:00:00.000Z",
-      last_seen_at: "2026-07-18T00:00:00.000Z",
-      absolute_expires_at: "2026-07-25T00:00:00.000Z",
-      credential_hash: "durable-credential-hash",
-      revoked_at: null,
-      authentication_attempts: [],
-    });
-    assertEquals(
-      (await kv.get([
-        "iam-pager",
-        "sessions",
-        "by-credential",
-        "durable-credential-hash",
-      ])).value,
-      { schema_version: 1, session_id: "durable-session" },
-    );
-
-    await kv.set(record_key, {
-      schema_version: 1,
-      kind: "guest",
-      session_id: "wrong-session",
-      session_version: 1,
-      created_at: "2026-07-18T00:00:00.000Z",
-      last_seen_at: "2026-07-18T00:00:00.000Z",
-      absolute_expires_at: "2026-07-25T00:00:00.000Z",
-      credential_hash: "durable-credential-hash",
-      revoked_at: null,
-      authentication_attempts: [],
-    });
+    const stored = (await kv.get<Record<string, unknown>>(record_key)).value!;
+    await kv.set(record_key, { ...stored, session_id: "wrong-session" });
     await assertRejects(
       () => reader.find_by_credential_hash("durable-credential-hash"),
       Error,

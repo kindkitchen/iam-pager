@@ -1,3 +1,4 @@
+import { csrf_tokens_match } from "../http/csrf.ts";
 import type {
   RepositoryAuthenticationAttemptConsume,
   RepositoryAuthenticationAttemptConsumeResult,
@@ -9,7 +10,7 @@ import type {
   SessionRepository,
   SessionUpgrade,
 } from "./interfaces.ts";
-import type { SessionAuthenticationAttempt, SessionRecord } from "./model.ts";
+import type { SessionRecord } from "./model.ts";
 
 /** Process-local session storage. A restart invalidates every session. */
 export class MemorySessionRepository implements SessionRepository {
@@ -239,56 +240,14 @@ export class MemorySessionRepository implements SessionRepository {
     });
     return Promise.resolve(true);
   }
-
-  /** Operational visibility without exposing mutable repository state. */
-  get size(): number {
-    return this.#records.size;
-  }
-}
-
-/** Fixed-length comparison avoids early exit on attacker-controlled input. */
-function csrf_tokens_match(expected: string, actual: string): boolean {
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index++) {
-    difference |= expected.charCodeAt(index) ^ actual.charCodeAt(index);
-  }
-  return difference === 0;
 }
 
 function clone_record(record: SessionRecord): SessionRecord {
-  const common = {
-    session_id: record.session_id,
-    session_version: record.session_version,
-    created_at: new Date(record.created_at),
-    last_seen_at: new Date(record.last_seen_at),
-    absolute_expires_at: new Date(record.absolute_expires_at),
-    credential_hash: record.credential_hash,
-    revoked_at: record.revoked_at === null ? null : new Date(record.revoked_at),
-    authentication_attempts: record.authentication_attempts.map(
-      clone_authentication_attempt,
-    ),
-  };
-  return record.kind === "guest" ? { kind: "guest", ...common } : {
-    kind: "authenticated",
-    ...common,
-    user_id: record.user_id,
-    authenticated_at: new Date(record.authenticated_at),
-    idle_expires_at: new Date(record.idle_expires_at),
-    csrf_token: record.csrf_token,
-  };
+  return structuredClone(record);
 }
 
 function clone_authentication_attempt(
-  attempt: SessionAuthenticationAttempt,
-): SessionAuthenticationAttempt {
-  return {
-    strategy_id: attempt.strategy_id,
-    state_hash: attempt.state_hash,
-    callback_url: attempt.callback_url,
-    return_to: attempt.return_to,
-    attempt_context: attempt.attempt_context,
-    created_at: new Date(attempt.created_at),
-    expires_at: new Date(attempt.expires_at),
-  };
+  attempt: SessionRecord["authentication_attempts"][number],
+): SessionRecord["authentication_attempts"][number] {
+  return structuredClone(attempt);
 }

@@ -53,19 +53,8 @@ Deno.test("DenoKvNamespaceRepository: state is shared outside repository instanc
       "by-namespace",
       "durable",
     ];
-    assertEquals((await kv.get(storage_key)).value, {
-      schema_version: 1,
-      namespace: "Durable",
-      owner_user_id: "user-a",
-      reserved_at: "2026-07-18T00:00:00.000Z",
-    });
-
-    await kv.set(storage_key, {
-      schema_version: 1,
-      namespace: "Other",
-      owner_user_id: "user-a",
-      reserved_at: "2026-07-18T00:00:00.000Z",
-    });
+    const stored = (await kv.get<Record<string, unknown>>(storage_key)).value!;
+    await kv.set(storage_key, { ...stored, namespace: "Other" });
     await assertRejects(
       () => reader.find("durable"),
       Error,

@@ -51,6 +51,6 @@ KV must be selected explicitly where continuity matters. Local Google mode
 grants fake authentication and is safe only on loopback or narrowly designated
 preview hosts.
 
-Storage records fail closed on unknown or corrupt shapes. There is no automated
-migration or rollback framework; incompatible storage changes require an
-explicit project decision before deployment to data that matters.
+Storage records fail closed on unknown or corrupt shapes. Storage has one
+current format and no migration or rollback machinery; changing that format
+requires an explicit deployment decision once retained data matters.

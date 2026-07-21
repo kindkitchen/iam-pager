@@ -60,17 +60,8 @@ Deno.test("DenoKvIdentityRepository: state is shared outside repository instance
       "google",
       "provider-user",
     ];
-    const stored_identity = {
-      schema_version: 1,
-      user_id: "stable-user",
-      strategy_id: "google",
-      provider_subject: "provider-user",
-      email: "person@example.com",
-      created_at: "2026-07-18T00:00:00.000Z",
-      updated_at: "2026-07-18T00:00:00.000Z",
-    };
-    assertEquals((await kv.get(storage_key)).value, stored_identity);
-
+    const stored_identity = (await kv.get<Record<string, unknown>>(storage_key))
+      .value!;
     await kv.set(storage_key, {
       ...stored_identity,
       provider_subject: "wrong-subject",

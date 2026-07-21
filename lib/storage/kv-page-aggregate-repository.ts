@@ -4,7 +4,6 @@ import {
   is_valid_content_asset_id,
 } from "../content/asset.ts";
 import type { CreateContentAssetResult } from "../content/interfaces.ts";
-import { is_valid_delivery_profile } from "../content/model.ts";
 import type { Locator } from "../locator/model.ts";
 import {
   page_aggregate_endpoint_bindings,
@@ -12,6 +11,14 @@ import {
   type PageAggregate,
   type ResolvedPageEndpoint,
 } from "../page/aggregate.ts";
+import {
+  aggregate_sort_key,
+  matches_exploration,
+  matches_managed_list,
+  require_normalized_exploration_request,
+  require_normalized_managed_list_request,
+  require_positive_limit,
+} from "../page/aggregate-query.ts";
 import type {
   CreateManagedPageAggregateRequest,
   CreateManagedPageAggregateResult,
@@ -40,13 +47,11 @@ import {
   encode_page_exploration_cursor,
   encode_page_list_cursor,
   type ManagedPageListCursorScope,
-  page_sort_key,
   type PageExplorationCursorScope,
   type PageSortKey,
 } from "../page/cursor.ts";
 import {
   page_endpoint_set_violation,
-  type PageEndpointBinding,
   type PageEndpointSet,
 } from "../page/endpoint.ts";
 import {
@@ -57,12 +62,12 @@ import {
   type PageId,
 } from "../page/model.ts";
 import type { KvGateway } from "./kv-gateway.ts";
+import { is_exact_record, is_valid_stored_date } from "./record.ts";
 import {
   KvContentAssetRepository,
   type KvContentAssetRepositoryOptions,
 } from "./kv-content-asset-repository.ts";
 
-export const page_aggregate_storage_schema_version = 1 as const;
 export const page_aggregate_max_attempts = 16;
 /** Proven worst case with eight source endpoints and eight eight-endpoint trials. */
 export const max_page_aggregate_atomic_checks = 87;
@@ -73,7 +78,6 @@ export const page_aggregate_atomic_check_headroom = 100 -
 export const page_aggregate_storage_prefix: Deno.KvKey = [
   "iam-pager",
   "page-aggregates",
-  "v1",
 ];
 export const page_aggregate_by_id_prefix: Deno.KvKey = [
   ...page_aggregate_storage_prefix,
@@ -92,31 +96,11 @@ export const page_aggregate_public_prefix: Deno.KvKey = [
   "public",
 ];
 
-interface StoredPageEndpointBinding {
-  readonly namespace: string;
-  readonly page_name?: string;
-  readonly delivery_profile: "inline" | "attachment";
-}
-
 /** Authoritative page record. Payload bytes live only behind the asset manifest. */
-export interface StoredPageAggregateEnvelope {
-  readonly schema_version: 1;
-  readonly page_id: string;
-  readonly canonical: StoredPageEndpointBinding;
-  readonly alternates: readonly StoredPageEndpointBinding[];
-  readonly stewardship: "trial" | "managed";
-  readonly owner_user_id?: string;
-  readonly access: "public" | "private";
-  readonly tags: readonly string[];
-  readonly revision: number;
-  readonly content_asset_id: string;
-  readonly created_at: string;
-  readonly updated_at: string;
-}
+type StoredPageAggregateEnvelope = PageAggregate;
 
 /** Revision-bearing endpoint, owner, and public projection value. */
 export interface StoredPageAggregatePointer {
-  readonly schema_version: 1;
   readonly page_id: string;
   readonly revision: number;
 }
@@ -149,20 +133,6 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
-function is_valid_time(value: unknown): value is Date {
-  return value instanceof Date && Number.isFinite(value.getTime());
-}
-
-function has_exact_keys(
-  value: Record<string, unknown>,
-  required: readonly string[],
-  optional: readonly string[] = [],
-): boolean {
-  const keys = Object.keys(value);
-  return required.every((key) => keys.includes(key)) &&
-    keys.every((key) => required.includes(key) || optional.includes(key));
-}
-
 function key_part_equals(a: Deno.KvKeyPart, b: Deno.KvKeyPart): boolean {
   if (a instanceof Uint8Array && b instanceof Uint8Array) {
     return a.length === b.length && a.every((byte, index) => byte === b[index]);
@@ -183,88 +153,18 @@ function same_entry_version(
     left.versionstamp === right.versionstamp;
 }
 
-function stored_date(value: unknown): Date {
-  if (typeof value !== "string") return invalid_stored_page_aggregate();
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
-    return invalid_stored_page_aggregate();
-  }
-  return date;
-}
-
-function serialize_endpoint_binding(
-  binding: PageEndpointBinding,
-): StoredPageEndpointBinding {
-  return {
-    namespace: binding.locator.namespace,
-    ...(binding.locator.page_name === undefined
-      ? {}
-      : { page_name: binding.locator.page_name }),
-    delivery_profile: binding.delivery_profile,
-  };
-}
-
-function deserialize_endpoint_binding(
-  value: unknown,
-): PageEndpointBinding {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return invalid_stored_page_aggregate();
-  }
-  const stored = value as Record<string, unknown>;
-  if (
-    !has_exact_keys(stored, ["namespace", "delivery_profile"], [
-      "page_name",
-    ]) ||
-    typeof stored.namespace !== "string" || stored.namespace === "" ||
-    (stored.page_name !== undefined &&
-      (typeof stored.page_name !== "string" || stored.page_name === "")) ||
-    !is_valid_delivery_profile(stored.delivery_profile)
-  ) {
-    return invalid_stored_page_aggregate();
-  }
-  return {
-    locator: {
-      namespace: stored.namespace,
-      ...(stored.page_name === undefined
-        ? {}
-        : { page_name: stored.page_name as string }),
-    },
-    delivery_profile: stored.delivery_profile,
-  };
-}
-
 function serialize_envelope(page: PageAggregate): StoredPageAggregateEnvelope {
   const violation = page_aggregate_violation(page);
   require(violation === null, violation ?? "invalid page aggregate");
-  return {
-    schema_version: page_aggregate_storage_schema_version,
-    page_id: page.page_id,
-    canonical: serialize_endpoint_binding(page.endpoint_set.canonical),
-    alternates: page.endpoint_set.alternates.map(serialize_endpoint_binding),
-    stewardship: page.stewardship.kind,
-    ...(page.stewardship.kind === "managed"
-      ? { owner_user_id: page.stewardship.owner_user_id }
-      : {}),
-    access: page.access,
-    tags: [...page.tags],
-    revision: page.revision,
-    content_asset_id: page.content_asset_id,
-    created_at: page.created_at.toISOString(),
-    updated_at: page.updated_at.toISOString(),
-  };
+  return clone(page);
 }
 
 function deserialize_envelope(value: unknown): PageAggregate {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return invalid_stored_page_aggregate();
-  }
-  const stored = value as Record<string, unknown>;
   if (
-    !has_exact_keys(stored, [
-      "schema_version",
+    typeof value !== "object" || value === null || Array.isArray(value) ||
+    !is_exact_record(value, [
       "page_id",
-      "canonical",
-      "alternates",
+      "endpoint_set",
       "stewardship",
       "access",
       "tags",
@@ -272,50 +172,22 @@ function deserialize_envelope(value: unknown): PageAggregate {
       "content_asset_id",
       "created_at",
       "updated_at",
-    ], ["owner_user_id"]) ||
-    stored.schema_version !== page_aggregate_storage_schema_version ||
-    !is_valid_page_id(stored.page_id) ||
-    !Array.isArray(stored.alternates) ||
-    (stored.stewardship !== "trial" && stored.stewardship !== "managed") ||
-    (stored.stewardship === "trial" && stored.owner_user_id !== undefined) ||
-    (stored.stewardship === "managed" &&
-      (typeof stored.owner_user_id !== "string" ||
-        stored.owner_user_id === "")) ||
-    !is_valid_page_access(stored.access) ||
-    !is_valid_page_tags(stored.tags) ||
-    !is_valid_page_revision(stored.revision) ||
-    typeof stored.content_asset_id !== "string"
+    ])
   ) {
     return invalid_stored_page_aggregate();
   }
-  const page: PageAggregate = {
-    page_id: stored.page_id,
-    endpoint_set: {
-      canonical: deserialize_endpoint_binding(stored.canonical),
-      alternates: stored.alternates.map(deserialize_endpoint_binding),
-    },
-    stewardship: stored.stewardship === "trial"
-      ? { kind: "trial" }
-      : { kind: "managed", owner_user_id: stored.owner_user_id as string },
-    access: stored.access,
-    tags: [...stored.tags],
-    revision: stored.revision,
-    content_asset_id: stored.content_asset_id,
-    created_at: stored_date(stored.created_at),
-    updated_at: stored_date(stored.updated_at),
-  };
-  if (page_aggregate_violation(page) !== null) {
+  try {
+    const page = clone(value) as unknown as PageAggregate;
+    return page_aggregate_violation(page) === null
+      ? page
+      : invalid_stored_page_aggregate();
+  } catch {
     return invalid_stored_page_aggregate();
   }
-  return page;
 }
 
 function page_pointer(page: PageAggregate): StoredPageAggregatePointer {
-  return {
-    schema_version: page_aggregate_storage_schema_version,
-    page_id: page.page_id,
-    revision: page.revision,
-  };
+  return { page_id: page.page_id, revision: page.revision };
 }
 
 function deserialize_pointer(value: unknown): StoredPageAggregatePointer {
@@ -324,8 +196,7 @@ function deserialize_pointer(value: unknown): StoredPageAggregatePointer {
   }
   const stored = value as Record<string, unknown>;
   if (
-    !has_exact_keys(stored, ["schema_version", "page_id", "revision"]) ||
-    stored.schema_version !== page_aggregate_storage_schema_version ||
+    !is_exact_record(stored, ["page_id", "revision"]) ||
     !is_valid_page_id(stored.page_id) ||
     !is_valid_page_revision(stored.revision)
   ) {
@@ -393,13 +264,6 @@ export function page_aggregate_public_key(key: PageSortKey): Deno.KvKey {
   ];
 }
 
-function aggregate_sort_key(page: PageAggregate): PageSortKey {
-  return page_sort_key({
-    page_id: page.page_id,
-    locator: page.endpoint_set.canonical.locator,
-  });
-}
-
 function endpoint_keys(page: PageAggregate): Deno.KvKey[] {
   return page_aggregate_endpoint_bindings(page).map((binding) =>
     page_endpoint_claim_key(binding.locator)
@@ -423,83 +287,6 @@ function visibility_index_values(
     ...endpoint_keys(page).map((key) => ({ key, value: pointer })),
     ...projection_keys(page).map((key) => ({ key, value: pointer })),
   ];
-}
-
-function require_positive_limit(limit: number): void {
-  require(
-    Number.isSafeInteger(limit) && limit >= 1,
-    "limit must be a positive safe integer",
-  );
-}
-
-function require_normalized_managed_list_request(
-  request: ListManagedPageAggregatesRequest,
-): void {
-  if (request.page_name_query !== undefined) {
-    require(
-      request.page_name_query !== "" &&
-        request.page_name_query === request.page_name_query.trim() &&
-        request.page_name_query === request.page_name_query.toLowerCase(),
-      "page_name_query must be a normalized lowercase substring when present",
-    );
-  }
-  require(
-    request.access === undefined || is_valid_page_access(request.access),
-    "access filter must be public or private when present",
-  );
-  require(
-    request.tag === undefined || is_valid_page_tags([request.tag]),
-    "tag filter must be canonical when present",
-  );
-}
-
-function matches_managed_list(
-  page: PageAggregate,
-  key: PageSortKey,
-  scope: ManagedPageListCursorScope,
-): boolean {
-  return (scope.namespace === null || key.namespace_key === scope.namespace) &&
-    (scope.page_name_query === null ||
-      (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query))) &&
-    (scope.access === null || page.access === scope.access) &&
-    (scope.tag === null || page.tags.includes(scope.tag));
-}
-
-function require_normalized_exploration_request(
-  request: ExplorePublicPageAggregatesRequest,
-): void {
-  require_positive_limit(request.limit);
-  for (
-    const [name, query] of [
-      ["namespace_query", request.namespace_query],
-      ["page_name_query", request.page_name_query],
-    ] as const
-  ) {
-    require(
-      query === undefined ||
-        (query !== "" && query === query.trim() &&
-          query === query.toLowerCase()),
-      `${name} must be a normalized lowercase substring when present`,
-    );
-  }
-  require(
-    request.tag === undefined || is_valid_page_tags([request.tag]),
-    "tag must be canonical when present",
-  );
-}
-
-function matches_exploration(
-  page: PageAggregate,
-  key: PageSortKey,
-  scope: PageExplorationCursorScope,
-): boolean {
-  return (scope.namespace_query === null ||
-    key.namespace_key.includes(scope.namespace_query)) &&
-    (scope.page_name_query === null ||
-      (key.default_rank === 1 &&
-        key.page_name_key.includes(scope.page_name_query))) &&
-    (scope.tag === null || page.tags.includes(scope.tag));
 }
 
 /**
@@ -1492,7 +1279,7 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
   }
 
   #require_time(now: Date): void {
-    require(is_valid_time(now), "now must be a valid date");
+    require(is_valid_stored_date(now), "now must be a valid date");
   }
 
   #write_contention_exhausted(): never {

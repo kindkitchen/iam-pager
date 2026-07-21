@@ -363,15 +363,17 @@ export class PageService
     ) {
       return { ok: false, reason: "invalid_filter" };
     }
-    const listed = await this.#list_managed_records({
-      owner_user_id: request.actor.user_id,
-      ...(namespace === undefined ? {} : { namespace }),
-      ...(page_name_query === undefined ? {} : { page_name_query }),
-      ...(request.access === undefined ? {} : { access: request.access }),
-      ...(tag === undefined ? {} : { tag }),
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const listed = await this.#materialize_list(
+      this.#repository.list_managed_page_aggregates({
+        owner_user_id: request.actor.user_id,
+        ...(namespace === undefined ? {} : { namespace }),
+        ...(page_name_query === undefined ? {} : { page_name_query }),
+        ...(request.access === undefined ? {} : { access: request.access }),
+        ...(tag === undefined ? {} : { tag }),
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!listed.ok) return listed;
     return {
       ok: true,
@@ -772,7 +774,7 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
-    return await this.#delete_managed_record({
+    return await this.#repository.delete_managed_page_aggregate({
       page_id: page.page_id,
       owner_user_id: request.actor.user_id,
       expected_revision: request.expected_revision,
@@ -801,7 +803,7 @@ export class PageService
         });
         continue;
       }
-      const deleted = await this.#delete_managed_record({
+      const deleted = await this.#repository.delete_managed_page_aggregate({
         page_id: page.page_id,
         owner_user_id: request.actor.user_id,
         expected_revision: selected.expected_revision,
@@ -847,11 +849,13 @@ export class PageService
           : "invalid_namespace",
       };
     }
-    const listed = await this.#list_public_records({
-      namespace: validation.locator.namespace,
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const listed = await this.#materialize_list(
+      this.#repository.list_public_page_aggregates({
+        namespace: validation.locator.namespace,
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!listed.ok) return listed;
     return {
       ok: true,
@@ -873,13 +877,15 @@ export class PageService
     if (namespace_query === null || page_name_query === null || tag === null) {
       return { ok: false, reason: "invalid_query" };
     }
-    const explored = await this.#explore_public_records({
-      ...(namespace_query === undefined ? {} : { namespace_query }),
-      ...(page_name_query === undefined ? {} : { page_name_query }),
-      ...(tag === undefined ? {} : { tag }),
-      limit: request.limit,
-      cursor: request.cursor,
-    });
+    const explored = await this.#materialize_list(
+      this.#repository.explore_public_page_aggregates({
+        ...(namespace_query === undefined ? {} : { namespace_query }),
+        ...(page_name_query === undefined ? {} : { page_name_query }),
+        ...(tag === undefined ? {} : { tag }),
+        limit: request.limit,
+        cursor: request.cursor,
+      }),
+    );
     if (!explored.ok) return explored;
     return {
       ok: true,
@@ -1003,53 +1009,19 @@ export class PageService
     };
   }
 
-  async #list_managed_records(
-    request: Parameters<
-      PageAggregateRepository["list_managed_page_aggregates"]
-    >[0],
+  async #materialize_list(
+    pending: Promise<
+      | { ok: true; pages: PageAggregate[]; next_cursor: string | null }
+      | { ok: false; reason: "invalid_cursor" }
+    >,
   ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.list_managed_page_aggregates(request);
+    const result = await pending;
     if (!result.ok) return result;
     return {
-      ok: true,
+      ...result,
       pages: await Promise.all(
         result.pages.map((page) => this.#materialize_aggregate(page)),
       ),
-      next_cursor: result.next_cursor,
-    };
-  }
-
-  async #list_public_records(
-    request: Parameters<
-      PageAggregateRepository["list_public_page_aggregates"]
-    >[0],
-  ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.list_public_page_aggregates(request);
-    if (!result.ok) return result;
-    return {
-      ok: true,
-      pages: await Promise.all(
-        result.pages.map((page) => this.#materialize_aggregate(page)),
-      ),
-      next_cursor: result.next_cursor,
-    };
-  }
-
-  async #explore_public_records(
-    request: Parameters<
-      PageAggregateRepository["explore_public_page_aggregates"]
-    >[0],
-  ): Promise<MaterializedPageListResult> {
-    const result = await this.#repository.explore_public_page_aggregates(
-      request,
-    );
-    if (!result.ok) return result;
-    return {
-      ok: true,
-      pages: await Promise.all(
-        result.pages.map((page) => this.#materialize_aggregate(page)),
-      ),
-      next_cursor: result.next_cursor,
     };
   }
 
@@ -1169,14 +1141,6 @@ export class PageService
       outcome: result.outcome,
       page: await this.#materialize_aggregate(result.page),
     };
-  }
-
-  #delete_managed_record(
-    request: Parameters<
-      PageAggregateRepository["delete_managed_page_aggregate"]
-    >[0],
-  ) {
-    return this.#repository.delete_managed_page_aggregate(request);
   }
 
   async #find_public_record_by_locator(
