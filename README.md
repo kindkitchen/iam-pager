@@ -57,6 +57,11 @@ namespaces, including cross-namespace aliases; a newly reserved namespace is
 available to the publishing selector immediately. Every managed mutation is
 owner-checked and revision-bound.
 
+Signed-in creators also manage their API keys at `/site/api-keys`: generate a
+key with explicit permissions and optional expiry, copy the one-time bearer,
+edit or revoke individual keys, and revoke everything at once. The page is a
+projection of the same API-key capabilities exposed at `/api/api-keys`.
+
 ### Content
 
 The current handlers are:

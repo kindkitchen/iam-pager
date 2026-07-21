@@ -34,10 +34,10 @@ body {
   min-height: 100vh;
   background:
     radial-gradient(
-      circle at 15% 0%,
-      rgb(193 220 201 / 55%),
-      transparent 32rem
-    ),
+    circle at 15% 0%,
+    rgb(193 220 201 / 55%),
+    transparent 32rem
+  ),
     #f2f0e8;
 }
 
@@ -1691,4 +1691,134 @@ h2 {
 
 .manage-page-link {
   margin: 0 0 1rem;
+}
+
+.api-key-panel {
+  display: grid;
+  gap: 1.25rem;
+  border-top: 1px solid #b7b9b2;
+  padding-top: 2rem;
+  margin-bottom: 3rem;
+}
+
+.api-key-empty {
+  color: #59635c;
+}
+
+.api-key-generated {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid #8a9a4b;
+  border-radius: 0.5rem;
+  background: rgb(193 220 201 / 35%);
+  padding: 1rem;
+}
+
+.api-key-generated h3 {
+  margin: 0;
+}
+
+.api-key-generated-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.api-key-bearer {
+  overflow-wrap: anywhere;
+  user-select: all;
+  padding: 0.35rem 0.5rem;
+  border: 1px dashed #8a9a4b;
+  border-radius: 0.25rem;
+  background: #f8f7f1;
+}
+
+.api-key-list {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.api-key-item {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid #c9cec7;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.api-key-item-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.api-key-permissions-badge,
+.api-key-expiry,
+.api-key-created {
+  font-size: 0.85rem;
+  color: #59635c;
+}
+
+.api-key-status {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.api-key-status-expired {
+  color: #a4553a;
+}
+
+.api-key-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.api-key-edit-form,
+.api-key-form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 26rem;
+}
+
+.api-key-form h3 {
+  margin: 0.5rem 0 0;
+}
+
+.api-key-permissions {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid #c9cec7;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.api-key-permission-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.api-key-danger {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  border: 1px solid #d0a08e;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.api-key-danger h3,
+.api-key-danger p {
+  margin: 0;
+}
+
+.api-key-result p {
+  margin: 0;
 }

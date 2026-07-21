@@ -54,6 +54,10 @@ import {
   NamespaceReservationService,
 } from "./namespace/mod.ts";
 import {
+  type ApiKeyPanelPresenter,
+  CreatorApiKeyPanelPresenter,
+} from "./ui/api-key-panel.ts";
+import {
   CreatorNamespacePanelPresenter,
   type NamespacePanelPresenter,
 } from "./ui/namespace-panel.ts";
@@ -128,6 +132,7 @@ export interface AppServices {
   api_key_repository: ApiKeyRepository;
   api_keys: ApiKeyManager & ApiKeyBearerResolver;
   api_keys_http: ApiKeyHttpHandler;
+  api_key_panel: ApiKeyPanelPresenter;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -229,6 +234,7 @@ export function create_app_services(
     secret_generator: new CryptoSecretGenerator(),
   });
   const api_keys_http = new ApiKeyHttpAdapter({ api_keys });
+  const api_key_panel = new CreatorApiKeyPanelPresenter({ api_keys });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -283,6 +289,7 @@ export function create_app_services(
     api_key_repository,
     api_keys,
     api_keys_http,
+    api_key_panel,
     session,
     session_transport,
     request_context,

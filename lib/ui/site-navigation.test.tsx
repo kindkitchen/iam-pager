@@ -68,6 +68,7 @@ Deno.test("site navigation exposes only the trusted logout form for authenticate
       { href: "/site", label: "Home", current: false },
       { href: "/site/explore", label: "Explore", current: false },
       { href: "/site/manage", label: "Manage", current: false },
+      { href: "/site/api-keys", label: "API keys", current: false },
     ],
     session_label: "Signed in",
     action: {

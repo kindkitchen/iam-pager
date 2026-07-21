@@ -2,6 +2,14 @@
 
 ## 2026-07-22
 
+- Added the owner API-key management page at `/site/api-keys`: generate keys
+  with permission and expiry controls, one-time bearer reveal with a copy
+  shortcut, inline edit, revision-bound revoke, and confirmed revoke-all. The
+  page is a thin projection over `/api/api-keys` — the presenter and request
+  builders live in `lib/ui/api-key-panel.ts` and components make no
+  authorization decisions. Also fixed the pre-existing `deno task check`
+  failures (`static/site.css` formatting, `CssSourceEditor` timer type).
+
 - Implemented the owner API-key lifecycle as a new `lib/api-key/` sibling
   module: interface-backed model, service, memory repository, and HTTP adapter
   with thin Fresh routes at `/api/api-keys`. Browser-authenticated owners
