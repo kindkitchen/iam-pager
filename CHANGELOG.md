@@ -2,6 +2,7 @@
 
 ## 2026-07-21
 
+- Added the `web-multi-reference-ux` implementation task to align publishing and management with one-content/many-locator references, make PDF aliases optional with explicit downloadable controls, use owned-namespace selectors for creators, and move exploration to its own navigable page.
 - Decoupled logical content from its locator references: every publication now
   uses one non-empty, format-neutral endpoint set; references may span
   namespaces owned by the same creator; delivery profiles are extensible
