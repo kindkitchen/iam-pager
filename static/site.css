@@ -1581,6 +1581,85 @@ h2 {
   margin: 2rem auto;
 }
 
+.not-found-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.not-found-card {
+  position: relative;
+  width: min(100%, 54rem);
+  overflow: hidden;
+  border: 1px solid #b7b9b2;
+  border-radius: 1rem;
+  padding: clamp(2rem, 8vw, 5rem);
+  background: rgb(255 254 250 / 88%);
+  box-shadow: 0 1.5rem 4rem rgb(31 54 39 / 12%);
+}
+
+.not-found-code {
+  position: absolute;
+  top: -2.5rem;
+  right: -0.25rem;
+  margin: 0;
+  color: rgb(28 83 51 / 8%);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(9rem, 30vw, 17rem);
+  font-weight: 700;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.not-found-card h1 {
+  position: relative;
+  max-width: 42rem;
+  font-size: clamp(3rem, 10vw, 6.5rem);
+}
+
+.not-found-copy {
+  position: relative;
+  max-width: 34rem;
+  color: #59635c;
+  font-size: clamp(1rem, 3vw, 1.25rem);
+}
+
+.not-found-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-top: 2rem;
+}
+
+.not-found-actions a {
+  font-weight: 800;
+}
+
+.not-found-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5rem;
+  border-radius: 0.45rem;
+  padding: 0.9rem 1.15rem;
+  color: #fff;
+  background: #1c5333;
+  text-decoration: none;
+  box-shadow: 0 0.5rem 1.25rem rgb(28 83 51 / 20%);
+}
+
+.not-found-primary:hover {
+  background: #123d24;
+  transform: translateY(-1px);
+}
+
+.not-found-secondary {
+  color: #1c5333;
+  text-underline-offset: 0.25rem;
+}
+
 @media (min-width: 70rem) {
   .publish-panel {
     grid-template-columns: minmax(13rem, 0.32fr) minmax(0, 1fr);
