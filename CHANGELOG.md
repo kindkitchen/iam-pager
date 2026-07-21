@@ -8,6 +8,9 @@
 - Added a designed 404 page with a prominent route to public exploration and a
   secondary home link, including the same recovery actions in missing wrapped
   page views.
+- Added browser-friendly direct-content 404 responses and a deployment smoke
+  check verifying that direct, framework-level, and wrapped-page failures return
+  HTML with a `Go home` link to `/site`.
 - Aligned the web with one-content/many-locator pages: Markdown and PDF
   publishing now use explicit primary/optional-alias reference sets, PDF paths
   use independent downloadable controls, creators select from owned namespaces,
