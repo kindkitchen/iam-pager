@@ -2,6 +2,9 @@
 
 ## 2026-07-21
 
+- Added a designed 404 page with a prominent route to public exploration and a
+  secondary home link, including the same recovery actions in missing wrapped
+  page views.
 - Aligned the web with one-content/many-locator pages: Markdown and PDF
   publishing now use explicit primary/optional-alias reference sets, PDF paths
   use independent downloadable controls, creators select from owned namespaces,

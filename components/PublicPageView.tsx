@@ -26,6 +26,13 @@ export function PublicPageViewPage(
           <p class="eyebrow">Page unavailable</p>
           <h1>That page was not found</h1>
           <p>The path is missing or is not available to visitors.</p>
+          <nav class="not-found-actions" aria-label="Continue browsing">
+            <a class="not-found-primary" href="/site/explore">
+              Explore public pages
+              <span aria-hidden="true">→</span>
+            </a>
+            <a class="not-found-secondary" href="/site">Go home</a>
+          </nav>
         </section>
       </main>
     );
