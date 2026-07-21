@@ -37,15 +37,23 @@ export async function deliver_page_locator_path(
       : text_response(500, "page content is not deliverable", request_id);
   }
   const { endpoint, page, payload } = delivery;
+  const disposition = content_disposition(
+    endpoint.delivery_profile,
+    payload.download_filename,
+  );
+  if (disposition === null) {
+    return text_response(
+      501,
+      "page delivery profile is not supported by this transport",
+      request_id,
+    );
+  }
   const etag = await direct_delivery_etag(page.page_id, page.revision);
   const headers = new Headers({
     "content-type": payload.media_type,
     "content-length": String(page.size_bytes),
     "cache-control": "no-store",
-    "content-disposition": content_disposition(
-      endpoint.delivery_profile,
-      payload.download_filename,
-    ),
+    "content-disposition": disposition,
     "x-content-type-options": "nosniff",
     etag,
   });
@@ -130,8 +138,9 @@ function text_response(
 function content_disposition(
   delivery_profile: DeliveryProfile,
   download_filename?: string,
-): string {
+): string | null {
   if (delivery_profile === "inline") return "inline";
+  if (delivery_profile !== "attachment") return null;
   if (download_filename === undefined) return "attachment";
   const fallback = download_filename
     .replaceAll(/["\\\r\n]/g, "_")

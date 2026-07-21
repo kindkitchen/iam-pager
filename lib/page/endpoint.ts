@@ -3,7 +3,11 @@ import { is_valid_delivery_profile } from "../content/model.ts";
 import type { Locator, LocatorResolution } from "../locator/model.ts";
 import { locator_key } from "../locator/model.ts";
 
-/** One page may expose one canonical and at most seven alternate endpoints. */
+/**
+ * Legacy site advisory matching the current Deno KV atomic-write capacity.
+ * This is not a domain cardinality rule: endpoint sets are logically non-empty.
+ * @deprecated Site-only constraint retained until the UI projection is revised.
+ */
 export const max_page_endpoints = 8;
 
 /** Stored delivery behavior at one publisher-supplied locator. */
@@ -91,8 +95,9 @@ export function project_page_endpoint_links(
 
 /**
  * First storage-level endpoint-set invariant violation. Locator policy remains
- * the planner's responsibility; persistence enforces only coherent structure,
- * namespace/identity uniqueness, and deterministic ordering.
+ * the planner's responsibility; persistence enforces coherent non-empty
+ * structure, identity uniqueness, and deterministic ordering. Endpoint count
+ * and namespace grouping are not content invariants.
  */
 export function page_endpoint_set_violation(
   endpoint_set: unknown,
@@ -104,16 +109,15 @@ export function page_endpoint_set_violation(
     return "endpoint_set must be an object";
   }
   const candidate = endpoint_set as Record<string, unknown>;
+  if (!Object.hasOwn(candidate, "canonical")) {
+    return "endpoint set must contain a canonical binding";
+  }
   if (!Array.isArray(candidate.alternates)) {
     return "endpoint alternates must be an array";
   }
   const bindings = [candidate.canonical, ...candidate.alternates];
-  if (bindings.length < 1 || bindings.length > max_page_endpoints) {
-    return `endpoint set must contain 1-${max_page_endpoints} bindings`;
-  }
 
   const claimed_keys = new Set<string>();
-  let namespace_key: string | null = null;
   let previous_alternate_key: string | null = null;
   for (const [index, value] of bindings.entries()) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -140,11 +144,6 @@ export function page_endpoint_set_violation(
       return "endpoint delivery_profile must be valid";
     }
     const typed_locator = locator as unknown as Locator;
-    const current_namespace_key = typed_locator.namespace.toLowerCase();
-    namespace_key ??= current_namespace_key;
-    if (current_namespace_key !== namespace_key) {
-      return "endpoint namespaces must match case-insensitively";
-    }
     const key = locator_key(typed_locator);
     if (claimed_keys.has(key)) {
       return "endpoint locators must be unique case-insensitively";
@@ -185,10 +184,8 @@ export type PlanPageEndpointSetResult =
   | {
     readonly ok: false;
     readonly reason:
-      | "invalid_endpoint_count"
       | "invalid_locator"
       | "forbidden_namespace"
-      | "namespace_mismatch"
       | "duplicate_locator"
       | "unsupported_delivery_profile";
   };
@@ -200,8 +197,9 @@ export interface PageEndpointPlanner {
 
 /**
  * Transport/storage-neutral endpoint planner. It validates every locator,
- * requires one namespace and one case-insensitive claim per binding, applies
- * the content type's profile policy, and returns a detached stable set.
+ * requires one case-insensitive claim per binding, applies the content type's
+ * profile policy, and returns a detached stable set. Namespace authority is an
+ * application concern and is checked for every accepted binding.
  */
 export class DefaultPageEndpointPlanner implements PageEndpointPlanner {
   readonly #locator_validator: PageEndpointLocatorValidator;
@@ -218,11 +216,7 @@ export class DefaultPageEndpointPlanner implements PageEndpointPlanner {
       request.endpoint_set.canonical,
       ...(request.endpoint_set.alternates ?? []),
     ];
-    if (bindings.length < 1 || bindings.length > max_page_endpoints) {
-      return { ok: false, reason: "invalid_endpoint_count" };
-    }
 
-    const canonical_namespace_key = bindings[0].locator.namespace.toLowerCase();
     const claimed_locator_keys = new Set<string>();
     const planned: PageEndpointBinding[] = [];
     for (const binding of bindings) {
@@ -240,9 +234,6 @@ export class DefaultPageEndpointPlanner implements PageEndpointPlanner {
             ? "forbidden_namespace"
             : "invalid_locator",
         };
-      }
-      if (binding.locator.namespace.toLowerCase() !== canonical_namespace_key) {
-        return { ok: false, reason: "namespace_mismatch" };
       }
       const key = locator_key(binding.locator);
       if (claimed_locator_keys.has(key)) {

@@ -334,6 +334,60 @@ Deno.test("page HTTP managed create requires CSRF and presents management identi
   assertEquals((await unreserved.json()).error, "namespace_not_reserved");
 });
 
+Deno.test("page HTTP accepts explicit locator references for any content type", async () => {
+  const { adapter } = await make_fixture();
+  const created = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "article" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "article-alias" },
+            delivery_profile: "inline",
+          }],
+        },
+        access: "public",
+        content: {
+          content_type: "md-page",
+          input: { md: "# Article" },
+        },
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(created.status, 201);
+  const created_body = await created.json();
+  assertEquals(
+    created_body.page.endpoints.alternates[0].path,
+    "/Mine/article-alias",
+  );
+
+  const changed = await adapter.item(
+    request("/api/pages/page-1", {
+      method: "PATCH",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "article-primary" },
+            delivery_profile: "inline",
+          },
+        },
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(changed.status, 200);
+  const changed_body = await changed.json();
+  assertEquals(changed_body.page.path, "/Mine/article-primary");
+  assertEquals(changed_body.page.endpoints.alternates, []);
+});
+
 Deno.test("page HTTP create decoding is strict, typed, and bounded", async () => {
   const { adapter } = await make_fixture();
   const cases: readonly [Request, number, string][] = [
@@ -914,6 +968,57 @@ Deno.test("page HTTP duplicate copies the source into a generated locator", asyn
   assertEquals((await source.json()).page.revision, 1);
 });
 
+Deno.test("page HTTP duplicate accepts explicit destination references", async () => {
+  const { adapter } = await make_fixture();
+  const source = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: creator_headers(),
+      body: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "source-primary" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "source-alias" },
+            delivery_profile: "inline",
+          }],
+        },
+        access: "private",
+        content: { content_type: "md-page", input: { md: "# Source" } },
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(source.status, 201);
+
+  const duplicated = await adapter.item_action(
+    request("/api/pages/page-1/duplicate", {
+      method: "POST",
+      headers: creator_headers('"page-page-1-r1"'),
+      body: {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "copy-primary" },
+            delivery_profile: "inline",
+          },
+          alternates: [{
+            locator: { namespace: "Mine", page_name: "copy-alias" },
+            delivery_profile: "inline",
+          }],
+        },
+      },
+    }),
+    context(owner_session),
+  );
+  assertEquals(duplicated.status, 201);
+  const body = await duplicated.json();
+  assertEquals(body.page.path, "/Mine/copy-primary");
+  assertEquals(body.page.endpoints.alternates[0].path, "/Mine/copy-alias");
+  assertEquals(body.page.content.input.md, "# Source");
+});
+
 Deno.test("page HTTP bulk access validates fully, then applies per page", async () => {
   const { adapter } = await make_fixture();
   await create_managed_page(adapter, "one", "private", ["kept"]);
@@ -1161,7 +1266,7 @@ Deno.test("page HTTP publishes and revision-replaces one PDF endpoint set", asyn
   const replaced = await adapter.item(
     pdf_multipart_request(
       "/api/pages/page-1",
-      { endpoint_set: pdf_metadata().endpoint_set },
+      {},
       replacement,
       {
         method: "PATCH",
@@ -1181,7 +1286,7 @@ Deno.test("page HTTP publishes and revision-replaces one PDF endpoint set", asyn
   const stale = await adapter.item(
     pdf_multipart_request(
       "/api/pages/page-1",
-      { endpoint_set: pdf_metadata().endpoint_set },
+      {},
       original,
       {
         method: "PATCH",
@@ -1199,6 +1304,44 @@ Deno.test("page HTTP publishes and revision-replaces one PDF endpoint set", asyn
     { kind: "guest" },
   );
   assertEquals(new Uint8Array(await current.arrayBuffer()), replacement);
+});
+
+Deno.test("page HTTP accepts a single PDF locator with either supported profile", async () => {
+  const { adapter, engine, pages } = await make_fixture();
+  const bytes = pdf_bytes("single-download");
+  const created = await adapter.collection(
+    pdf_multipart_request(
+      "/api/pages",
+      {
+        endpoint_set: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "only-download" },
+            delivery_profile: "attachment",
+          },
+        },
+        access: "public",
+      },
+      bytes,
+    ),
+    context(owner_session),
+  );
+  assertEquals(created.status, 201);
+  const body = await created.json();
+  assertEquals(body.page.endpoints.alternates, []);
+  assertEquals(body.page.endpoints.canonical.delivery_profile, "attachment");
+
+  const delivered = await deliver_page_locator_path(
+    engine,
+    pages,
+    "/Mine/only-download",
+    { kind: "guest" },
+  );
+  assertEquals(delivered.status, 200);
+  assertStringIncludes(
+    delivered.headers.get("content-disposition")!,
+    "attachment",
+  );
+  assertEquals(new Uint8Array(await delivered.arrayBuffer()), bytes);
 });
 
 Deno.test("page HTTP rejects malformed PDF multipart before mutation", async () => {
@@ -1221,10 +1364,7 @@ Deno.test("page HTTP rejects malformed PDF multipart before mutation", async () 
           ...pdf_metadata(),
           endpoint_set: {
             ...pdf_metadata().endpoint_set,
-            canonical: {
-              ...pdf_metadata().endpoint_set.canonical,
-              delivery_profile: "attachment",
-            },
+            canonical: { delivery_profile: "attachment" },
           },
         },
         pdf_bytes(),

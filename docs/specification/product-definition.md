@@ -3,9 +3,9 @@
 ## PD-GOAL — Goal
 
 `iam-pager` is a content-sharing service built around deterministic URLs. A
-publisher associates supported content with a namespace and optional page name.
-A visitor opening that locator receives the content directly rather than first
-entering the site.
+publisher associates supported content with one or more locators, each composed
+of a namespace and optional page name. A visitor opening any such locator
+receives the content directly rather than first entering the site.
 
 The platform does not define what pages mean or how several pages relate. A page
 may represent any author-chosen purpose within the supported content and safety
@@ -25,10 +25,10 @@ of publishing, access, management, or exploration rules.
 ## PD-GUEST — Guest publishing
 
 Guest publishing is a constrained form of normal publishing, not the product's
-main purpose. A guest can publish a public trial page in an unreserved namespace
-but receives no reservation, discovery, durability, or overwrite guarantee.
-Another guest may replace that locator, and a creator may reserve the namespace
-and take it over.
+main purpose. A guest can publish a public trial page only when every referenced
+namespace is unreserved, and receives no reservation, discovery, durability, or
+overwrite guarantee. Another guest may replace a locator, and a creator may
+reserve a referenced namespace and take it over.
 
 ## PD-CREATOR — Creator control
 
@@ -40,13 +40,18 @@ revision checks.
 
 ## PD-PAGE — One logical page
 
-A logical page has one management and exploration identity even when one content
-asset is available at several locators. Every endpoint has an explicit delivery
-profile. Neither a filename nor a path suffix decides whether content is shown
-inline or downloaded.
+A logical page has one content, management, and exploration identity independent
+of its locators. Creation provides at least one valid locator reference, and any
+number of additional valid references may point to the same current immutable
+asset. One reference is preferred only so management and exploration have a
+stable link.
 
-PDF demonstrates this model: the same uploaded bytes can back a browser-preview
-endpoint and an attachment endpoint without creating two managed pages.
+Every reference has an explicit delivery profile supported by the content
+format. Neither preferred status, a filename, nor a path suffix decides whether
+content is shown inline, downloaded, or handled by a later delivery capability.
+PDF demonstrates the model but has no special reference-count rule: one PDF may
+have one locator or several inline and/or attachment locators without becoming
+several managed pages.
 
 ## PD-VISITOR — Visitor experience
 
