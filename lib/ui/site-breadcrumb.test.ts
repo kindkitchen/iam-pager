@@ -7,6 +7,12 @@ Deno.test("home trail is a single current step with no link", () => {
   });
 });
 
+Deno.test("explore trail links home and marks explore as current", () => {
+  assertEquals(site_breadcrumb_presenter.present({ kind: "explore" }), {
+    steps: [{ label: "Home", href: "/site" }, { label: "Explore" }],
+  });
+});
+
 Deno.test("manage trail links home and marks manage as current", () => {
   assertEquals(site_breadcrumb_presenter.present({ kind: "manage" }), {
     steps: [{ label: "Home", href: "/site" }, { label: "Manage pages" }],

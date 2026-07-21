@@ -5,6 +5,17 @@ import type {
   PublicPageSummary,
 } from "../page/interfaces.ts";
 
+const exploration_query_fields = ["namespace", "page", "tag", "cursor"];
+
+/** Canonicalizes legacy home exploration URLs without treating UI as logic. */
+export function legacy_exploration_redirect_location(
+  url: URL,
+): string | null {
+  return exploration_query_fields.some((field) => url.searchParams.has(field))
+    ? `/site/explore${url.search}`
+    : null;
+}
+
 export interface PublicExplorationInput {
   readonly namespace_query?: string;
   readonly page_name_query?: string;
@@ -136,5 +147,5 @@ function exploration_path(
   if (page_name_query !== "") query.set("page", page_name_query);
   if (tag !== "") query.set("tag", tag);
   query.set("cursor", cursor);
-  return `/site?${query}`;
+  return `/site/explore?${query}`;
 }

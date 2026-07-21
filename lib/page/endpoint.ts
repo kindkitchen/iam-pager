@@ -3,13 +3,6 @@ import { is_valid_delivery_profile } from "../content/model.ts";
 import type { Locator, LocatorResolution } from "../locator/model.ts";
 import { locator_key } from "../locator/model.ts";
 
-/**
- * Legacy site advisory matching the current Deno KV atomic-write capacity.
- * This is not a domain cardinality rule: endpoint sets are logically non-empty.
- * @deprecated Site-only constraint retained until the UI projection is revised.
- */
-export const max_page_endpoints = 8;
-
 /** Stored delivery behavior at one publisher-supplied locator. */
 export interface PageEndpointBinding {
   readonly locator: Locator;

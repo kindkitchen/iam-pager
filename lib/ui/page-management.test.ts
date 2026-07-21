@@ -3,6 +3,7 @@ import { MdPageHandler } from "../content/md-page.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
+import { NamespaceReservationService } from "../namespace/service.ts";
 import type { PageClock, PageIdGenerator } from "../page/interfaces.ts";
 import { MemoryPageAggregateRepository } from "../page/memory-aggregate-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "../page/namespace-authority.ts";
@@ -74,8 +75,13 @@ async function make_fixture(options: { page_size?: number } = {}) {
     namespace: "Mine",
     owner_user_id: creator_session.user_id,
   });
+  const engine = new LocatorEngine({ strategies: [new PathSlugStrategy()] });
+  const namespace_manager = new NamespaceReservationService({
+    engine,
+    repository: namespaces,
+  });
   const pages = new PageService({
-    engine: new LocatorEngine({ strategies: [new PathSlugStrategy()] }),
+    engine,
     repository: new MemoryPageAggregateRepository(),
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler()],
@@ -84,6 +90,7 @@ async function make_fixture(options: { page_size?: number } = {}) {
   });
   const presenter = new CreatorPageManagementPresenter({
     pages,
+    namespaces: namespace_manager,
     ...(options.page_size === undefined
       ? {}
       : { page_size: options.page_size }),
@@ -140,6 +147,7 @@ Deno.test("panel lists creator pages as API-shaped rows", async () => {
   const panel = await presenter.present(creator_session);
   assert(panel.kind === "creator");
   assertEquals(panel.csrf_token, creator_session.csrf_token);
+  assertEquals(panel.owned_namespaces, ["Mine"]);
   assertEquals(panel.next_cursor, null);
   assertEquals(panel.pages, [{
     page_id: "page-1",
@@ -326,10 +334,41 @@ Deno.test("update request binds CSRF, If-Match, and only supplied fields", () =>
     },
   });
 
+  const references = prepare_managed_update_request(
+    target,
+    {
+      endpoints: {
+        primary: {
+          namespace: " Mine ",
+          page_name: " report ",
+          delivery_profile: "attachment",
+        },
+        aliases: [{
+          namespace: "Archive",
+          page_name: "",
+          delivery_profile: "inline",
+        }],
+      },
+    },
+    "token-1",
+  );
+  assertEquals(references.body, {
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "report" },
+        delivery_profile: "attachment",
+      },
+      alternates: [{
+        locator: { namespace: "Archive" },
+        delivery_profile: "inline",
+      }],
+    },
+  });
+
   assertThrows(
     () => prepare_managed_update_request(target, {}, "token-1"),
     Error,
-    "access, tags, or content",
+    "access, tags, content, or endpoints",
   );
 });
 
@@ -577,7 +616,7 @@ Deno.test("managed PDF delivery links follow returned endpoint profiles", () => 
   }));
   assert(page !== null);
   assertEquals(managed_pdf_delivery_links(page), {
-    preview: page.endpoints.canonical,
+    previews: [page.endpoints.canonical],
     downloads: page.endpoints.alternates,
   });
   assertEquals(
@@ -589,11 +628,11 @@ Deno.test("managed PDF delivery links follow returned endpoint profiles", () => 
       ...page,
       endpoints: { canonical: page.endpoints.canonical, alternates: [] },
     }),
-    null,
+    { previews: [page.endpoints.canonical], downloads: [] },
   );
 });
 
-Deno.test("PDF replacement request repeats endpoints and binds the exact revision", async () => {
+Deno.test("PDF replacement omits endpoints and binds the exact revision", async () => {
   const page = management_summary_from_api(api_summary({
     content_type: "pdf",
     endpoints: {
@@ -633,16 +672,7 @@ Deno.test("PDF replacement request repeats endpoints and binds the exact revisio
   assertEquals(decoded.value.tags, ["Reports"]);
   assertEquals(decoded.value.content.input.filename, "revised.pdf");
   assertEquals([...decoded.value.content.input.bytes], [...bytes]);
-  assertEquals(decoded.value.endpoint_set, {
-    canonical: {
-      locator: { namespace: "Mine", page_name: "notes" },
-      delivery_profile: "inline",
-    },
-    alternates: [{
-      locator: { namespace: "Mine", page_name: "notes/download" },
-      delivery_profile: "attachment",
-    }],
-  });
+  assertEquals(decoded.value.endpoint_set, undefined);
 
   assertEquals(
     managed_pdf_replacement_violation({

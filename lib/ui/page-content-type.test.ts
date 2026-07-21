@@ -39,12 +39,19 @@ Deno.test("content and PDF delivery options stay explicit and UI-independent", (
     "inline",
     "attachment",
   ]);
+  assertEquals(
+    page_content_type_options.map((option) =>
+      option.supported_delivery_profiles
+    ),
+    [["inline"], ["inline", "attachment"]],
+  );
 });
 
 Deno.test("prepared pdf request omits content-type and adds creator CSRF", () => {
   const prepared = prepare_pdf_publish_request(draft(), {
     kind: "creator",
     csrf_token: "creator-csrf",
+    owned_namespaces: ["alice"],
   });
   assertEquals(prepared.url, "/api/pages");
   assertEquals(prepared.method, "POST");
@@ -58,7 +65,11 @@ Deno.test("prepared pdf request omits content-type and adds creator CSRF", () =>
 Deno.test("prepared pdf request is accepted by the real multipart create contract", async () => {
   const prepared = prepare_pdf_publish_request(
     draft({ tags: ["docs"] }),
-    { kind: "creator", csrf_token: "creator-csrf" },
+    {
+      kind: "creator",
+      csrf_token: "creator-csrf",
+      owned_namespaces: ["alice"],
+    },
   );
   const request = new Request("https://example.test/api/pages", {
     method: prepared.method,
@@ -120,9 +131,10 @@ Deno.test("advisory violation guides without replacing server authority", () => 
           page_name: "report",
           delivery_profile: "attachment",
         },
+        alternates: [],
       }),
     ),
-    "the canonical endpoint must deliver the PDF inline",
+    null,
   );
   assertEquals(
     pdf_publish_draft_violation(draft({
@@ -132,7 +144,7 @@ Deno.test("advisory violation guides without replacing server authority", () => 
         delivery_profile: "attachment",
       }],
     })),
-    "each PDF endpoint must use the canonical namespace",
+    null,
   );
   assertEquals(
     pdf_publish_draft_violation(draft({
@@ -142,10 +154,7 @@ Deno.test("advisory violation guides without replacing server authority", () => 
         delivery_profile: "attachment",
       }],
     })),
-    "each PDF endpoint needs a unique locator",
+    "each PDF path needs a unique locator",
   );
-  assertEquals(
-    pdf_publish_draft_violation(draft({ alternates: [] })),
-    "add an attachment endpoint so the PDF can be downloaded",
-  );
+  assertEquals(pdf_publish_draft_violation(draft({ alternates: [] })), null);
 });

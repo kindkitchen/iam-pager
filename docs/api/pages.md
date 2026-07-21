@@ -262,11 +262,12 @@ Accepted items execute independently in order and return one success,
 
 ## Public exploration
 
-`/` and `/site` accept optional `namespace` and `page` substring fields over the
-preferred locator, one exact `tag`, and opaque `cursor`. Each logical content
-item appears once even when references span namespaces. Public results contain
-no page ID, revision, access field, or owner identity. Private and trial pages
-are excluded by the page repository capability.
+`/site/explore` accepts optional `namespace` and `page` substring fields over
+the preferred locator, one exact `tag`, and opaque `cursor`. Legacy
+query-bearing `/` and `/site` URLs redirect to that canonical page. Each logical
+content item appears once even when references span namespaces. Public results
+contain no page ID, revision, access field, or owner identity. Private and trial
+pages are excluded by the page repository capability.
 
 ## Direct delivery
 

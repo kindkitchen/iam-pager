@@ -6,6 +6,7 @@ Deno.test("creator management component renders controls and safe rows", () => {
   const html = render_to_string(
     <PageManagementPanel
       csrf_token={"c".repeat(43)}
+      owned_namespaces={["Mine"]}
       initial_pages={[{
         page_id: "page-1",
         locator: { namespace: "Mine", page_name: "notes" },
@@ -45,7 +46,8 @@ Deno.test("creator management component renders controls and safe rows", () => {
   assertStringIncludes(html, "tags: notes, work");
   assertStringIncludes(html, "inline: /Mine/notes-copy");
   assertStringIncludes(html, "Rename");
-  assertStringIncludes(html, "Duplicate");
+  assertStringIncludes(html, "Edit paths");
+  assertEquals(html.includes(">Duplicate<"), false);
   assertStringIncludes(html, "Make public");
   assertStringIncludes(html, "Load more pages");
   assertEquals(html.includes("csrf_token"), false);
@@ -56,6 +58,7 @@ Deno.test("creator management component presents PDF preview and download action
   const html = render_to_string(
     <PageManagementPanel
       csrf_token={"c".repeat(43)}
+      owned_namespaces={["Mine"]}
       initial_pages={[{
         page_id: "pdf-1",
         locator: { namespace: "Mine", page_name: "report" },
@@ -85,9 +88,9 @@ Deno.test("creator management component presents PDF preview and download action
     />,
   );
 
-  assertStringIncludes(html, "PDF delivery actions");
+  assertStringIncludes(html, "delivery paths");
   assertStringIncludes(html, 'href="/Mine/report"');
-  assertStringIncludes(html, "Preview PDF");
+  assertStringIncludes(html, "Open PDF: /Mine/report");
   assertStringIncludes(html, 'href="/Mine/report-download"');
   assertStringIncludes(html, "Download PDF: /Mine/report-download");
   assertStringIncludes(html, "Inspect PDF");

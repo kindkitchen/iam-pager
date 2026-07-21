@@ -33,6 +33,10 @@ Deno.test("site navigation offers guests Google sign-in with a safe local return
       new URL("https://app.example/site/drafts?filter=mine&q=a%2Bb"),
     ),
     {
+      destinations: [
+        { href: "/site", label: "Home", current: false },
+        { href: "/site/explore", label: "Explore", current: false },
+      ],
       session_label: "Guest session",
       action: {
         kind: "link",
@@ -60,6 +64,11 @@ Deno.test("site navigation exposes only the trusted logout form for authenticate
   );
 
   assertEquals(navigation, {
+    destinations: [
+      { href: "/site", label: "Home", current: false },
+      { href: "/site/explore", label: "Explore", current: false },
+      { href: "/site/manage", label: "Manage", current: false },
+    ],
     session_label: "Signed in",
     action: {
       kind: "form",
@@ -78,6 +87,10 @@ Deno.test("site navigation exposes only the trusted logout form for authenticate
 
 Deno.test("site session navigation renders link and protected form models", () => {
   const guest_navigation: SiteNavigation = {
+    destinations: [
+      { href: "/site", label: "Home", current: true },
+      { href: "/site/explore", label: "Explore", current: false },
+    ],
     session_label: "Guest session",
     action: {
       kind: "link",
@@ -89,6 +102,8 @@ Deno.test("site session navigation renders link and protected form models", () =
     <SiteSessionNavigation navigation={guest_navigation} />,
   );
   assertStringIncludes(guest_html, "Guest session");
+  assertStringIncludes(guest_html, 'href="/site/explore"');
+  assertStringIncludes(guest_html, 'aria-current="page"');
   assertStringIncludes(
     guest_html,
     'href="/auth/google/start?return_to=%2F"',

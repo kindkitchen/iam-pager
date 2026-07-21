@@ -5,7 +5,6 @@ import type { Locator } from "../locator/model.ts";
 import { locator_key } from "../locator/model.ts";
 import type { PageAccess } from "../page/model.ts";
 import type { PageEndpointBinding } from "../page/endpoint.ts";
-import { max_page_endpoints } from "../page/endpoint.ts";
 import type { PagePublishAuthorization } from "./page-publish.ts";
 
 /** The publishable content types the site can offer at a locator. */
@@ -16,6 +15,7 @@ export interface PageContentTypeOption {
   readonly value: PageContentType;
   readonly label: string;
   readonly description: string;
+  readonly supported_delivery_profiles: readonly DeliveryProfile[];
 }
 
 /**
@@ -27,11 +27,13 @@ export const page_content_type_options: readonly PageContentTypeOption[] = [
     value: "md-page",
     label: "Markdown page",
     description: "Write and style a page in Markdown.",
+    supported_delivery_profiles: ["inline"],
   },
   {
     value: "pdf",
     label: "PDF document",
     description: "Publish a PDF at ordinary endpoints you configure.",
+    supported_delivery_profiles: ["inline", "attachment"],
   },
 ];
 
@@ -153,33 +155,19 @@ export function pdf_publish_draft_violation(
   if (filename_error !== null) {
     return filename_error;
   }
-  const endpoints = [draft.canonical, ...draft.alternates];
-  if (endpoints.length > max_page_endpoints) {
-    return `configure at most ${max_page_endpoints} endpoints`;
-  }
-  const canonical_namespace = draft.canonical.namespace.trim().toLowerCase();
   const endpoint_keys = new Set<string>();
-  for (const endpoint of endpoints) {
+  for (const endpoint of [draft.canonical, ...draft.alternates]) {
     if (endpoint.namespace.trim() === "") {
-      return "each endpoint needs a namespace";
-    }
-    if (endpoint.namespace.trim().toLowerCase() !== canonical_namespace) {
-      return "each PDF endpoint must use the canonical namespace";
+      return "each PDF path needs a namespace";
     }
     const key = locator_key(endpoint_binding(endpoint).locator);
     if (endpoint_keys.has(key)) {
-      return "each PDF endpoint needs a unique locator";
+      return "each PDF path needs a unique locator";
     }
     endpoint_keys.add(key);
     if (!is_valid_delivery_profile(endpoint.delivery_profile)) {
-      return "each endpoint needs a supported delivery profile";
+      return "each PDF path needs a supported delivery profile";
     }
-  }
-  if (draft.canonical.delivery_profile !== "inline") {
-    return "the canonical endpoint must deliver the PDF inline";
-  }
-  if (!draft.alternates.some((row) => row.delivery_profile === "attachment")) {
-    return "add an attachment endpoint so the PDF can be downloaded";
   }
   return null;
 }

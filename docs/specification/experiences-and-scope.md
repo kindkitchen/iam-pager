@@ -24,10 +24,11 @@ wrapped by known locator but never expose creator listings.
 
 ## EX-EXPLORE — Find public creator pages
 
-The site browses public managed pages and applies optional case-insensitive
-namespace/page-name substrings plus one exact canonical tag with AND semantics.
-Results are deterministic, bounded, and continued by an opaque cursor tied to
-the complete query.
+The dedicated `/site/explore` navigation destination browses public managed
+pages and applies optional case-insensitive namespace/page-name substrings plus
+one exact canonical tag with AND semantics. Results are deterministic, bounded,
+and continued by an opaque cursor tied to the complete query. Query-bearing
+legacy home URLs redirect without discarding their search.
 
 Private and trial pages are excluded by the page capability and repository, not
 by components. A public-to-private change disappears from the next query.
@@ -47,7 +48,11 @@ Markdown uses strict JSON. PDF uses exactly one bounded JSON metadata part and
 one bounded PDF file part. Every format uses the same non-empty endpoint intent:
 each publisher-chosen locator has an explicit profile supported by that format.
 PDF may therefore be created with one inline or attachment reference, or with
-several references in any supported combination.
+several references in any supported combination. The web requires one primary
+path and permits removable aliases for every format. Creator namespace fields
+select from owned reservations; guest namespace entry remains free-form. A PDF
+path's `Downloadable` control maps explicitly to attachment rather than deriving
+behavior from an alias or suffix.
 
 ## EX-MANAGE — Manage creator pages
 
@@ -56,7 +61,8 @@ A signed-in creator can reserve namespaces and then:
 - create default or named Markdown/PDF pages;
 - list and filter owned pages;
 - inspect bounded editable source or metadata;
-- replace content, access, tags, or a complete endpoint set;
+- replace content, access, tags, or a complete endpoint set through
+  owned-namespace path controls;
 - rename within the namespace;
 - duplicate into fresh endpoints;
 - delete one page;

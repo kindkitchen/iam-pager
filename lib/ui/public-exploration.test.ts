@@ -5,7 +5,10 @@ import type {
   PublicPageExplorer,
   PublicPageSummary,
 } from "../page/interfaces.ts";
-import { SitePublicExplorationPresenter } from "./public-exploration.ts";
+import {
+  legacy_exploration_redirect_location,
+  SitePublicExplorationPresenter,
+} from "./public-exploration.ts";
 
 function summary(
   namespace: string,
@@ -117,7 +120,8 @@ Deno.test("public exploration presenter maps safe links and bound continuation",
       tags: ["news"],
       updated_at: new Date("2026-07-19T02:00:00.000Z"),
     }],
-    next_path: "/site?namespace=Alice&page=Notes&tag=News&cursor=opaque-next",
+    next_path:
+      "/site/explore?namespace=Alice&page=Notes&tag=News&cursor=opaque-next",
     error: null,
   });
 });
@@ -143,6 +147,21 @@ Deno.test("public exploration presenter browses on blank fields and reports inva
     next_path: null,
     error: "invalid_cursor",
   });
+});
+
+Deno.test("legacy home exploration queries redirect without losing encoding", () => {
+  assertEquals(
+    legacy_exploration_redirect_location(
+      new URL("https://pager.test/site?namespace=A%2BB&page=notes"),
+    ),
+    "/site/explore?namespace=A%2BB&page=notes",
+  );
+  assertEquals(
+    legacy_exploration_redirect_location(
+      new URL("https://pager.test/site?unrelated=value"),
+    ),
+    null,
+  );
 });
 
 Deno.test("public exploration presenter validates its result bound", () => {

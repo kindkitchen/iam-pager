@@ -13,6 +13,7 @@ import {
   managed_pdf_replacement_violation,
   managed_revision_selection,
   managed_tags_from_input,
+  type ManagedEndpointDraft,
   type ManagedPageFilters,
   type ManagedPdfMetadata,
   management_summary_from_api,
@@ -65,6 +66,17 @@ interface RenameState {
   page_name: string;
 }
 
+interface ManagedReferenceRow extends ManagedEndpointDraft {
+  readonly id: number;
+}
+
+interface ReferenceEditorState {
+  readonly page_id: string;
+  readonly primary: ManagedReferenceRow;
+  readonly aliases: readonly ManagedReferenceRow[];
+  readonly saving: boolean;
+}
+
 interface BulkResultState {
   page_id: string;
   path: string;
@@ -84,6 +96,8 @@ const max_ui_selection = 100;
 export interface PageManagementPanelProps {
   /** Synchronizer token minted server-side for the authenticated session. */
   csrf_token: string;
+  /** Namespace choices authorized and loaded by the server presenter. */
+  owned_namespaces: readonly string[];
   /** Server-rendered snapshot; the island continues through `/api/pages`. */
   initial_pages: readonly PageManagementSummary[];
   initial_next_cursor: string | null;
@@ -123,6 +137,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     null,
   );
   const [rename, set_rename] = useState<RenameState | null>(null);
+  const [reference_editor, set_reference_editor] = useState<
+    ReferenceEditorState | null
+  >(null);
   const [editor, set_editor] = useState<EditorState | null>(null);
   const selected_pdf_replacement = editor?.kind === "pdf"
     ? editor.selected_file
@@ -185,6 +202,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       return next;
     });
     set_editor((current) => current?.page_id === page_id ? null : current);
+    set_reference_editor((current) =>
+      current?.page_id === page_id ? null : current
+    );
     set_rename((current) => current?.page_id === page_id ? null : current);
     set_confirming_delete((current) => current === page_id ? null : current);
   }
@@ -438,6 +458,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       update_filtered_row(page.page_id, refreshed);
       set_confirming_delete(null);
       set_rename(null);
+      set_reference_editor(null);
       set_editor(
         md_draft !== null
           ? {
@@ -585,6 +606,130 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       );
       set_editor((current) =>
         current?.kind === "pdf" ? { ...current, saving: false } : current
+      );
+    }
+  }
+
+  function open_reference_editor(page: PageManagementSummary) {
+    const row = (
+      endpoint: PageManagementSummary["endpoints"]["canonical"],
+      id: number,
+    ): ManagedReferenceRow => ({
+      id,
+      namespace: endpoint.locator.namespace,
+      page_name: endpoint.locator.page_name ?? "",
+      delivery_profile: endpoint.delivery_profile,
+    });
+    set_editor(null);
+    set_rename(null);
+    set_reference_editor({
+      page_id: page.page_id,
+      primary: row(page.endpoints.canonical, 0),
+      aliases: page.endpoints.alternates.map((endpoint, index) =>
+        row(endpoint, index + 1)
+      ),
+      saving: false,
+    });
+  }
+
+  function update_reference(
+    id: number,
+    patch: Partial<ManagedReferenceRow>,
+  ) {
+    set_reference_editor((current) => {
+      if (current === null) return null;
+      if (id === 0) {
+        return { ...current, primary: { ...current.primary, ...patch } };
+      }
+      return {
+        ...current,
+        aliases: current.aliases.map((alias) =>
+          alias.id === id ? { ...alias, ...patch } : alias
+        ),
+      };
+    });
+  }
+
+  function add_reference_alias() {
+    set_reference_editor((current) => {
+      if (current === null) return null;
+      const next_id = Math.max(
+        current.primary.id,
+        ...current.aliases.map((alias) => alias.id),
+      ) + 1;
+      return {
+        ...current,
+        aliases: [...current.aliases, {
+          id: next_id,
+          namespace: current.primary.namespace || props.owned_namespaces[0] ||
+            "",
+          page_name: "",
+          delivery_profile: "inline",
+        }],
+      };
+    });
+  }
+
+  function remove_reference_alias(id: number) {
+    set_reference_editor((current) =>
+      current === null ? null : {
+        ...current,
+        aliases: current.aliases.filter((alias) => alias.id !== id),
+      }
+    );
+  }
+
+  async function save_reference_editor(page: PageManagementSummary) {
+    if (
+      reference_editor === null ||
+      reference_editor.page_id !== page.page_id || reference_editor.saving
+    ) return;
+    const current = reference_editor;
+    set_reference_editor({ ...current, saving: true });
+    set_notice(null);
+    try {
+      const response = await send(prepare_managed_update_request(
+        page,
+        {
+          endpoints: {
+            primary: current.primary,
+            aliases: current.aliases,
+          },
+        },
+        props.csrf_token,
+      ));
+      if (response.status === 412) {
+        fail(`${page.path} changed elsewhere; the row was refreshed.`);
+        await refresh_row(page);
+        set_reference_editor(null);
+        return;
+      }
+      if (!response.ok) {
+        fail(await read_error(response, page.content_type));
+        set_reference_editor((next) =>
+          next === null ? null : { ...next, saving: false }
+        );
+        return;
+      }
+      const body = await response.json();
+      const updated = management_summary_from_api(body?.page);
+      if (updated === null) {
+        fail("reference update response was not understood");
+        set_reference_editor((next) =>
+          next === null ? null : { ...next, saving: false }
+        );
+        return;
+      }
+      update_filtered_row(page.page_id, updated);
+      set_reference_editor(null);
+      set_notice({
+        kind: "success",
+        message: `${updated.path} reference paths were updated.`,
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+      set_reference_editor((next) =>
+        next === null ? null : { ...next, saving: false }
       );
     }
   }
@@ -1054,6 +1199,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                       disabled={controls_busy}
                       onClick={() => {
                         set_editor(null);
+                        set_reference_editor(null);
                         set_confirming_delete(null);
                         set_rename(
                           rename?.page_id === page.page_id ? null : {
@@ -1067,7 +1213,23 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                         ? "Close rename"
                         : "Rename"}
                     </button>
-                    {page.content_type === "md-page" && (
+                    <button
+                      type="button"
+                      disabled={controls_busy}
+                      onClick={() => {
+                        if (reference_editor?.page_id === page.page_id) {
+                          set_reference_editor(null);
+                        } else {
+                          open_reference_editor(page);
+                        }
+                      }}
+                    >
+                      {reference_editor?.page_id === page.page_id
+                        ? "Close paths"
+                        : "Edit paths"}
+                    </button>
+                    {page.content_type === "md-page" &&
+                      page.endpoints.alternates.length === 0 && (
                       <button
                         type="button"
                         disabled={controls_busy}
@@ -1147,6 +1309,54 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                     >
                       Cancel
                     </button>
+                  </form>
+                )}
+
+                {reference_editor?.page_id === page.page_id && (
+                  <form
+                    class="page-management-editor page-management-reference-editor"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      save_reference_editor(page);
+                    }}
+                  >
+                    <h3>Reference paths</h3>
+                    <p class="field-hint">
+                      Every path serves this same logical page and content. The
+                      primary path remains its management and exploration link.
+                    </p>
+                    <ManagedReferenceFields
+                      title="Primary path"
+                      row={reference_editor.primary}
+                      owned_namespaces={props.owned_namespaces}
+                      is_pdf={page.content_type === "pdf"}
+                      on_change={(patch) => update_reference(0, patch)}
+                    />
+                    {reference_editor.aliases.map((alias, index) => (
+                      <ManagedReferenceFields
+                        title={`Alias ${index + 1}`}
+                        row={alias}
+                        owned_namespaces={props.owned_namespaces}
+                        is_pdf={page.content_type === "pdf"}
+                        on_change={(patch) => update_reference(alias.id, patch)}
+                        on_remove={() => remove_reference_alias(alias.id)}
+                      />
+                    ))}
+                    <div class="page-management-editor-actions">
+                      <button type="button" onClick={add_reference_alias}>
+                        Add alias
+                      </button>
+                      <button type="submit" disabled={reference_editor.saving}>
+                        {reference_editor.saving ? "Saving…" : "Save paths"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reference_editor.saving}
+                        onClick={() => set_reference_editor(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
                 )}
 
@@ -1256,8 +1466,8 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                         )}
                     />
                     <p class="field-hint">
-                      Replacement keeps the current preview and download
-                      endpoints and is bound to revision{" "}
+                      Replacement preserves every current reference path and
+                      delivery mode and is bound to revision{" "}
                       {page.revision}. A changed page is refreshed and never
                       retried silently.
                     </p>
@@ -1324,42 +1534,98 @@ interface ManagedDeliveryActionsProps {
   readonly page: PageManagementSummary;
 }
 
-/** Renders only delivery actions derived by the raw endpoint presenter. */
+/** Renders every delivery action derived by the raw endpoint presenter. */
 function ManagedDeliveryActions({ page }: ManagedDeliveryActionsProps) {
   const pdf_links = managed_pdf_delivery_links(page);
-  if (pdf_links !== null) {
-    return (
-      <nav
-        class="page-management-endpoints page-management-pdf-actions"
-        aria-label={`${page.path} PDF delivery actions`}
-      >
-        <a
-          href={pdf_links.preview.path}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Preview PDF
-        </a>
-        {pdf_links.downloads.map((endpoint) => (
-          <a key={endpoint.path} href={endpoint.path}>
-            Download PDF: {endpoint.path}
-          </a>
-        ))}
-      </nav>
-    );
-  }
-  if (page.endpoints.alternates.length === 0) return null;
+  const endpoints = [page.endpoints.canonical, ...page.endpoints.alternates];
   return (
     <nav
-      class="page-management-endpoints"
-      aria-label={`${page.path} alternate delivery endpoints`}
+      class={`page-management-endpoints${
+        pdf_links === null ? "" : " page-management-pdf-actions"
+      }`}
+      aria-label={`${page.path} delivery paths`}
     >
-      {page.endpoints.alternates.map((endpoint) => (
-        <a key={endpoint.path} href={endpoint.path}>
-          {endpoint.delivery_profile}: {endpoint.path}
+      {endpoints.map((endpoint) => (
+        <a
+          key={endpoint.path}
+          href={endpoint.path}
+          target={endpoint.delivery_profile === "inline" &&
+              page.content_type === "pdf"
+            ? "_blank"
+            : undefined}
+          rel={endpoint.delivery_profile === "inline" &&
+              page.content_type === "pdf"
+            ? "noopener noreferrer"
+            : undefined}
+        >
+          {page.content_type === "pdf"
+            ? endpoint.delivery_profile === "attachment"
+              ? `Download PDF: ${endpoint.path}`
+              : `Open PDF: ${endpoint.path}`
+            : `${endpoint.delivery_profile}: ${endpoint.path}`}
         </a>
       ))}
     </nav>
+  );
+}
+
+interface ManagedReferenceFieldsProps {
+  readonly title: string;
+  readonly row: ManagedReferenceRow;
+  readonly owned_namespaces: readonly string[];
+  readonly is_pdf: boolean;
+  readonly on_change: (patch: Partial<ManagedReferenceRow>) => void;
+  readonly on_remove?: () => void;
+}
+
+function ManagedReferenceFields(props: ManagedReferenceFieldsProps) {
+  return (
+    <fieldset class="publish-endpoint">
+      <legend>{props.title}</legend>
+      <div class="locator-fields">
+        <label>
+          Namespace
+          <select
+            required
+            value={props.row.namespace}
+            onChange={(event) =>
+              props.on_change({ namespace: event.currentTarget.value })}
+          >
+            {props.owned_namespaces.map((namespace) => (
+              <option value={namespace} key={namespace}>{namespace}</option>
+            ))}
+          </select>
+        </label>
+        <span class="path-separator" aria-hidden="true">/</span>
+        <label>
+          Page name <small>optional</small>
+          <input
+            value={props.row.page_name}
+            placeholder="Empty makes the default page"
+            onInput={(event) =>
+              props.on_change({ page_name: event.currentTarget.value })}
+          />
+        </label>
+      </div>
+      {props.is_pdf && (
+        <label class="delivery-profile-field">
+          <input
+            type="checkbox"
+            checked={props.row.delivery_profile === "attachment"}
+            onChange={(event) =>
+              props.on_change({
+                delivery_profile: event.currentTarget.checked
+                  ? "attachment"
+                  : "inline",
+              })}
+          />
+          Downloadable
+        </label>
+      )}
+      {props.on_remove !== undefined && (
+        <button type="button" onClick={props.on_remove}>Remove alias</button>
+      )}
+    </fieldset>
   );
 }
 

@@ -39,7 +39,8 @@ Anyone can:
 
 - open known public content directly, without the site shell;
 - inspect it through `/site/<locator>`;
-- browse and filter public creator pages by namespace, page name, and exact tag;
+- browse and filter public creator pages at `/site/explore` by namespace, page
+  name, and exact tag;
 - publish a public trial page when every referenced namespace is unreserved.
 
 Trial pages are not discoverable. They have no owner guarantee and may be
@@ -51,7 +52,9 @@ private, invalid, and unauthorized visitor lookups share a non-disclosing 404.
 Google authentication establishes an application user. A creator can reserve one
 or more namespaces and then create, inspect, update, rename, duplicate, make
 public or private, tag, filter, bulk-change, and delete pages in those
-namespaces. Every managed mutation is owner-checked and revision-bound.
+namespaces. Publishing and reference editing select from the creator's owned
+namespaces, including cross-namespace aliases. Every managed mutation is
+owner-checked and revision-bound.
 
 ### Content
 
@@ -64,9 +67,11 @@ The current handlers are:
 
 PDF create and replacement use strict bounded multipart requests. PDF has no
 special locator-count or profile-combination rule: one locator is sufficient,
-and several preview/download locators may expose byte-identical content.
-Content-only replacement preserves all references. Direct PDF delivery supports
-validators and one byte range.
+and optional aliases may expose byte-identical content. In the web UI each PDF
+path has a `Downloadable` checkbox: unchecked is inline delivery and checked is
+attachment delivery. Add an alias only when separate inline and download URLs
+are wanted. Content-only replacement preserves all references. Direct PDF
+delivery supports validators and one byte range.
 
 External storage, generic binary publication, text indexing, quotas, publishing
 rate limits, guest expiry, and account deletion are outside the current
