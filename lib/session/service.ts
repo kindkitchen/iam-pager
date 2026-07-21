@@ -2,6 +2,7 @@ import type {
   Clock,
   CredentialGenerator,
   CsrfTokenGenerator,
+  EphemeralGuestSessionSource,
   IdGenerator,
   SessionManager,
   SessionRepository,
@@ -53,7 +54,8 @@ export interface SessionServiceOptions {
 }
 
 /** Owns session lifecycle; HTTP cookie behavior remains a transport concern. */
-export class SessionService implements SessionManager {
+export class SessionService
+  implements SessionManager, EphemeralGuestSessionSource {
   readonly #repository: SessionRepository;
   readonly #clock: Clock;
   readonly #id_generator: IdGenerator;
@@ -285,6 +287,23 @@ export class SessionService implements SessionManager {
     });
     if (!result.ok) return result;
     return { ok: true, resolution: await this.#create_guest(logged_out_at) };
+  }
+
+  /**
+   * Non-persisted guest view for requests that authenticate outside the
+   * cookie session (bearer credentials). Nothing is stored and no cookie is
+   * staged, so automation traffic never accretes session records.
+   */
+  ephemeral_guest(): Session {
+    const at = this.#clock.now();
+    return {
+      kind: "guest",
+      session_id: this.#id_generator.generate(),
+      session_version: 1,
+      created_at: new Date(at),
+      last_seen_at: new Date(at),
+      absolute_expires_at: add_ms(at, this.#config.guest_absolute_lifetime_ms),
+    };
   }
 
   async #create_guest(at = this.#clock.now()): Promise<SessionResolution> {

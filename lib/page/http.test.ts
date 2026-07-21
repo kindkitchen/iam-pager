@@ -1,4 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { BearerFirstApiRequestAuthenticator } from "../api-auth/mod.ts";
+import type { ApiKeyBearerResolver, ApiKeyPrincipal } from "../api-key/mod.ts";
 import { MdPageHandler } from "../content/md-page.ts";
 import { PdfHandler } from "../content/pdf.ts";
 import { LocatorEngine } from "../locator/engine.ts";
@@ -62,6 +64,46 @@ const other_session: AuthenticatedSession = {
   csrf_token: "o".repeat(43),
 };
 
+const bearer_principals: Record<string, ApiKeyPrincipal> = {
+  "owner-all": {
+    kind: "api_key",
+    api_key_id: "key-all",
+    user_id: "owner-1",
+    permissions: ["read", "write", "delete"],
+  },
+  "owner-read": {
+    kind: "api_key",
+    api_key_id: "key-read",
+    user_id: "owner-1",
+    permissions: ["read"],
+  },
+  "owner-write": {
+    kind: "api_key",
+    api_key_id: "key-write",
+    user_id: "owner-1",
+    permissions: ["write"],
+  },
+  "other-all": {
+    kind: "api_key",
+    api_key_id: "key-other",
+    user_id: "other-1",
+    permissions: ["read", "write", "delete"],
+  },
+};
+
+const bearer_resolver: ApiKeyBearerResolver = {
+  resolve_bearer: (bearer) =>
+    Promise.resolve(bearer_principals[bearer] ?? null),
+};
+
+function bearer_headers(token: string, etag?: string): HeadersInit {
+  return {
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+    ...(etag === undefined ? {} : { "if-match": etag }),
+  };
+}
+
 class SequenceIds implements PageIdGenerator {
   #next = 0;
   generate(): string {
@@ -96,7 +138,12 @@ async function make_fixture() {
     clock: new AdvancingClock(),
   });
   return {
-    adapter: new PageHttpAdapter({ pages }),
+    adapter: new PageHttpAdapter({
+      pages,
+      authenticator: new BearerFirstApiRequestAuthenticator({
+        bearer_resolver,
+      }),
+    }),
     engine,
     pages,
     repository,
@@ -1441,4 +1488,194 @@ Deno.test("page HTTP rejects unsupported methods with no-store Allow responses",
   assertEquals(item.status, 405);
   assertEquals(item.headers.get("allow"), "GET, PATCH, DELETE");
   assertStringIncludes(await item.text(), "method_not_allowed");
+});
+
+Deno.test("bearer keys drive the full page lifecycle by permission", async () => {
+  const { adapter } = await make_fixture();
+
+  // A key-authenticated create is always managed: tags are accepted, the
+  // response carries owner surfaces, and no CSRF token is involved.
+  const created = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: bearer_headers("owner-all"),
+      body: { ...create_body("Mine", "automation"), tags: ["Ci"] },
+    }),
+    context(guest_session),
+  );
+  assertEquals(created.status, 201);
+  const created_body = await created.json();
+  assertEquals(created_body.page.tags, ["ci"]);
+  assert(typeof created_body.management_url === "string");
+  const page_id = created_body.page.page_id;
+  const etag = created.headers.get("etag");
+  assert(etag !== null);
+
+  // read permission lists and inspects the owner's pages.
+  const listed = await adapter.collection(
+    request("/api/pages", { headers: { authorization: "Bearer owner-read" } }),
+    context(guest_session),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(
+    (await listed.json()).pages.map((page: { page_id: string }) =>
+      page.page_id
+    ),
+    [page_id],
+  );
+  const inspected = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      headers: { authorization: "Bearer owner-read" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(inspected.status, 200);
+
+  // write permission updates and renames without any CSRF header.
+  const updated = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "PATCH",
+      headers: bearer_headers("owner-write", etag),
+      body: { access: "public" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(updated.status, 200);
+  const updated_etag = updated.headers.get("etag");
+  assert(updated_etag !== null);
+
+  // delete permission removes the page.
+  const deleted = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "DELETE",
+      headers: { authorization: "Bearer owner-all", "if-match": updated_etag },
+    }),
+    context(guest_session),
+  );
+  assertEquals(deleted.status, 204);
+});
+
+Deno.test("bearer keys without the mapped permission are denied", async () => {
+  const { adapter } = await make_fixture();
+  const created = await create_managed_page(adapter);
+  const etag = created.headers.get("etag")!;
+  const page_id = (await created.json()).page.page_id;
+
+  const denied: [Promise<Response>, string][] = [
+    [
+      adapter.collection(
+        request("/api/pages", {
+          headers: { authorization: "Bearer owner-write" },
+        }),
+        context(guest_session),
+      ),
+      "list without read",
+    ],
+    [
+      adapter.collection(
+        request("/api/pages", {
+          method: "POST",
+          headers: bearer_headers("owner-read"),
+          body: create_body("Mine", "denied"),
+        }),
+        context(guest_session),
+      ),
+      "create without write",
+    ],
+    [
+      adapter.item(
+        request(`/api/pages/${page_id}`, {
+          method: "PATCH",
+          headers: bearer_headers("owner-read", etag),
+          body: { access: "public" },
+        }),
+        context(guest_session),
+      ),
+      "update without write",
+    ],
+    [
+      adapter.item(
+        request(`/api/pages/${page_id}`, {
+          method: "DELETE",
+          headers: { authorization: "Bearer owner-write", "if-match": etag },
+        }),
+        context(guest_session),
+      ),
+      "delete without delete",
+    ],
+    [
+      adapter.item_action(
+        request(`/api/pages/${page_id}/rename`, {
+          method: "POST",
+          headers: bearer_headers("owner-read", etag),
+          body: { page_name: "renamed" },
+        }),
+        context(guest_session),
+      ),
+      "rename without write",
+    ],
+    [
+      adapter.bulk(
+        request("/api/pages/bulk/delete", {
+          method: "POST",
+          headers: bearer_headers("owner-write"),
+          body: { selection: [{ page_id, expected_revision: 1 }] },
+        }),
+        context(guest_session),
+      ),
+      "bulk delete without delete",
+    ],
+  ];
+  for (const [pending, label] of denied) {
+    const response = await pending;
+    assertEquals(response.status, 403, label);
+    assertEquals((await response.json()).error, "insufficient_permission");
+  }
+});
+
+Deno.test("domain ownership still applies to fully permitted foreign keys", async () => {
+  const { adapter } = await make_fixture();
+  const created = await create_managed_page(adapter);
+  const page_id = (await created.json()).page.page_id;
+
+  const foreign = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      headers: { authorization: "Bearer other-all" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(foreign.status, 404);
+
+  const foreign_create = await adapter.collection(
+    request("/api/pages", {
+      method: "POST",
+      headers: bearer_headers("other-all"),
+      body: create_body("Mine", "intruder"),
+    }),
+    context(guest_session),
+  );
+  assertEquals(foreign_create.status, 403);
+});
+
+Deno.test("an unusable explicit bearer never falls back to the session", async () => {
+  const { adapter } = await make_fixture();
+  for (
+    const authorization of [
+      "Bearer unknown-token",
+      "Basic Zm9vOmJhcg==",
+      "bearer owner-all",
+      "Bearer owner-all extra",
+    ]
+  ) {
+    const response = await adapter.collection(
+      request("/api/pages", { headers: { authorization } }),
+      context(owner_session),
+    );
+    assertEquals(response.status, 401);
+    assertEquals(
+      response.headers.get("www-authenticate"),
+      'Bearer realm="api"',
+    );
+    assertEquals((await response.json()).error, "invalid_bearer");
+  }
 });

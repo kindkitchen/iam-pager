@@ -1,4 +1,5 @@
 import type {
+  EphemeralGuestSessionSource,
   IdGenerator,
   Session,
   SessionCredential,
@@ -45,6 +46,8 @@ export interface RequestContextMiddlewareOptions {
   readonly session_resolver: SessionResolver;
   readonly session_transport: SessionTransport;
   readonly request_id_generator: IdGenerator;
+  /** Serves bearer-authorized requests without touching stored sessions. */
+  readonly ephemeral_guest_source: EphemeralGuestSessionSource;
 }
 
 /** Resolves typed request state without making Fresh the source of the logic. */
@@ -52,17 +55,32 @@ export class RequestContextMiddleware implements RequestContextHandler {
   readonly #session_resolver: SessionResolver;
   readonly #session_transport: SessionTransport;
   readonly #request_id_generator: IdGenerator;
+  readonly #ephemeral_guest_source: EphemeralGuestSessionSource;
 
   constructor(options: RequestContextMiddlewareOptions) {
     this.#session_resolver = options.session_resolver;
     this.#session_transport = options.session_transport;
     this.#request_id_generator = options.request_id_generator;
+    this.#ephemeral_guest_source = options.ephemeral_guest_source;
   }
 
   async handle(context: RequestPipelineContext): Promise<Response> {
     const request_id = this.#request_id_generator.generate();
     if (request_id.length === 0) {
       throw new Error("request ID generator must not return an empty value");
+    }
+
+    // An Authorization header makes the explicit credential authoritative:
+    // the cookie session is neither resolved, created, nor renewed, so no
+    // session cookie is ever issued solely for a bearer request and an
+    // invalid bearer can never fall back to the cookie.
+    if (context.req.headers.has("authorization")) {
+      context.state.request_context = {
+        request_id,
+        session: this.#ephemeral_guest_source.ephemeral_guest(),
+      };
+      context.state[response_context_key] = {};
+      return this.decorate(context.state, await context.next());
     }
 
     const resolution = await this.#session_resolver.resolve(

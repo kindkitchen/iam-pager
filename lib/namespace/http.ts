@@ -1,4 +1,9 @@
-import { csrf_tokens_match } from "../http/csrf.ts";
+import {
+  type ApiOperationPolicy,
+  type ApiRequestAuthenticator,
+  BearerFirstApiRequestAuthenticator,
+  PermissionApiOperationPolicy,
+} from "../api-auth/mod.ts";
 import {
   is_json_media_type,
   read_bounded_request_text,
@@ -38,11 +43,15 @@ export interface NamespaceHttpHandler {
 export interface NamespaceHttpAdapterOptions {
   readonly namespaces: NamespaceReservationManager;
   readonly engine: LocatorEngine;
+  /** Absent means fail closed: every explicit bearer is rejected. */
+  readonly authenticator?: ApiRequestAuthenticator;
+  readonly policy?: ApiOperationPolicy;
 }
 
 interface ReserveBody {
   namespace: string;
-  csrf_token: string;
+  /** Required for browser callers, meaningless for key principals. */
+  csrf_token?: string;
 }
 
 type BodyDecodeResult =
@@ -53,18 +62,28 @@ type BodyDecodeResult =
 export class NamespaceHttpAdapter implements NamespaceHttpHandler {
   readonly #namespaces: NamespaceReservationManager;
   readonly #engine: LocatorEngine;
+  readonly #authenticator: ApiRequestAuthenticator;
+  readonly #policy: ApiOperationPolicy;
 
   constructor(options: NamespaceHttpAdapterOptions) {
     this.#namespaces = options.namespaces;
     this.#engine = options.engine;
+    this.#authenticator = options.authenticator ??
+      new BearerFirstApiRequestAuthenticator();
+    this.#policy = options.policy ?? new PermissionApiOperationPolicy();
   }
 
   async reserve(
     request: Request,
     context: NamespaceHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
+    const auth = await this.#authenticator.authenticate(
+      request,
+      context.session,
+    );
+    if (!auth.ok) return bearer_challenge_response();
+    const principal = auth.principal;
+    if (principal.kind === "guest") {
       return error_response(
         401,
         "not_authenticated",
@@ -107,17 +126,27 @@ export class NamespaceHttpAdapter implements NamespaceHttpHandler {
     if (!decoded.ok) {
       return error_response(400, "invalid_request", decoded.detail);
     }
-    if (!csrf_tokens_match(session.csrf_token, decoded.value.csrf_token)) {
-      return error_response(
-        403,
-        "invalid_csrf",
-        "reservation could not be authorized",
-      );
+    const authorized = this.#policy.authorize(principal, {
+      permission: "write",
+      presented_csrf_token: decoded.value.csrf_token ?? null,
+    });
+    if (!authorized.ok) {
+      return authorized.reason === "invalid_csrf"
+        ? error_response(
+          403,
+          "invalid_csrf",
+          "reservation could not be authorized",
+        )
+        : error_response(
+          403,
+          "insufficient_permission",
+          "namespace reservation requires the write permission",
+        );
     }
 
     const result = await this.#namespaces.reserve({
       namespace: decoded.value.namespace,
-      owner_user_id: session.user_id,
+      owner_user_id: authorized.user_id,
     });
     if (!result.ok) return reserve_failure_response(result.reason);
     return json_response(
@@ -132,18 +161,31 @@ export class NamespaceHttpAdapter implements NamespaceHttpHandler {
   }
 
   async list_owned(
-    _request: Request,
+    request: Request,
     context: NamespaceHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
-      return error_response(
-        401,
-        "not_authenticated",
-        "namespace listing requires a signed-in creator",
-      );
+    const auth = await this.#authenticator.authenticate(
+      request,
+      context.session,
+    );
+    if (!auth.ok) return bearer_challenge_response();
+    const authorized = this.#policy.authorize(auth.principal, {
+      permission: "read",
+    });
+    if (!authorized.ok) {
+      return authorized.reason === "insufficient_permission"
+        ? error_response(
+          403,
+          "insufficient_permission",
+          "namespace listing requires the read permission",
+        )
+        : error_response(
+          401,
+          "not_authenticated",
+          "namespace listing requires a signed-in creator",
+        );
     }
-    const owned = await this.#namespaces.list_owned(session.user_id);
+    const owned = await this.#namespaces.list_owned(authorized.user_id);
     return json_response(200, {
       ok: true,
       reservations: sort_reservations(owned).map((reservation) =>
@@ -174,10 +216,16 @@ function decode_reserve_body(input: unknown): BodyDecodeResult {
   if (typeof namespace !== "string") {
     return { ok: false, detail: "namespace must be a string" };
   }
-  if (typeof csrf_token !== "string") {
+  if (csrf_token !== undefined && typeof csrf_token !== "string") {
     return { ok: false, detail: "csrf_token must be a string" };
   }
-  return { ok: true, value: { namespace, csrf_token } };
+  return {
+    ok: true,
+    value: {
+      namespace,
+      ...(csrf_token === undefined ? {} : { csrf_token }),
+    },
+  };
 }
 
 function reserve_failure_response(
@@ -203,6 +251,19 @@ function reserve_failure_response(
         "namespace is already reserved",
       );
   }
+}
+
+/** One non-disclosing challenge for every unusable explicit bearer. */
+function bearer_challenge_response(): Response {
+  return json_response(
+    401,
+    {
+      ok: false,
+      error: "invalid_bearer",
+      detail: "the request could not be authenticated",
+    },
+    { "www-authenticate": 'Bearer realm="api"' },
+  );
 }
 
 function error_response(

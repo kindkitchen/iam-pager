@@ -102,6 +102,12 @@ Important boundaries:
   browser-authenticated owners manage scoped, optionally expiring keys, bearers
   are returned once and stored only as hashes, and bearer-authenticated
   revoke-all is the single key operation an API key may perform on itself.
+- `ApiRequestAuthenticator` and `ApiOperationPolicy` resolve every `/api/**`
+  request to a guest, browser-user, or API-key principal. A presented
+  `Authorization: Bearer` header is authoritative (no cookie fallback and no
+  cookie issued for bearer requests); key requests skip CSRF and instead need
+  the mapped `read`/`write`/`delete` permission, with domain ownership rules
+  unchanged.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,

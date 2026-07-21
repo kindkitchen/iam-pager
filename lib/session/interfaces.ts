@@ -27,6 +27,11 @@ export interface CsrfTokenGenerator {
   generate(): string;
 }
 
+/** Guest view for requests that must not create or renew stored sessions. */
+export interface EphemeralGuestSessionSource {
+  ephemeral_guest(): Session;
+}
+
 /** Read-only lifecycle surface needed while resolving application requests. */
 export interface SessionResolver {
   resolve(credential?: string | null): Promise<SessionResolution>;

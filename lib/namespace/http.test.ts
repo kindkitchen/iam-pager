@@ -1,4 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
+import { BearerFirstApiRequestAuthenticator } from "../api-auth/mod.ts";
+import type { ApiKeyBearerResolver, ApiKeyPrincipal } from "../api-key/mod.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import type { AuthenticatedSession, Session } from "../session/model.ts";
@@ -33,6 +35,32 @@ const authenticated_session: AuthenticatedSession = {
   csrf_token,
 };
 
+const bearer_principals: Record<string, ApiKeyPrincipal> = {
+  "user-all": {
+    kind: "api_key",
+    api_key_id: "key-all",
+    user_id: "user-1",
+    permissions: ["read", "write", "delete"],
+  },
+  "user-read": {
+    kind: "api_key",
+    api_key_id: "key-read",
+    user_id: "user-1",
+    permissions: ["read"],
+  },
+  "user-write": {
+    kind: "api_key",
+    api_key_id: "key-write",
+    user_id: "user-1",
+    permissions: ["write"],
+  },
+};
+
+const bearer_resolver: ApiKeyBearerResolver = {
+  resolve_bearer: (bearer) =>
+    Promise.resolve(bearer_principals[bearer] ?? null),
+};
+
 function make_adapter() {
   const engine = new LocatorEngine({
     strategies: [new PathSlugStrategy()],
@@ -43,7 +71,13 @@ function make_adapter() {
     repository: new MemoryNamespaceRepository(),
   });
   return {
-    adapter: new NamespaceHttpAdapter({ namespaces, engine }),
+    adapter: new NamespaceHttpAdapter({
+      namespaces,
+      engine,
+      authenticator: new BearerFirstApiRequestAuthenticator({
+        bearer_resolver,
+      }),
+    }),
     namespaces,
   };
 }
@@ -115,8 +149,8 @@ Deno.test("reserve rejects malformed JSON and non-object bodies", async () => {
       ["Ada"],
       '"Ada"',
       { csrf_token },
-      { namespace: "Ada" },
       { namespace: 7 },
+      { namespace: "Ada", csrf_token: 7 },
     ]
   ) {
     const response = await adapter.reserve(
@@ -128,11 +162,18 @@ Deno.test("reserve rejects malformed JSON and non-object bodies", async () => {
   }
 });
 
-Deno.test("reserve rejects a wrong or differently sized CSRF token", async () => {
+Deno.test("reserve rejects a wrong, missing, or differently sized CSRF token", async () => {
   const { adapter, namespaces } = make_adapter();
-  for (const wrong of ["d".repeat(43), "c".repeat(42), ""]) {
+  for (
+    const body of [
+      { namespace: "Ada", csrf_token: "d".repeat(43) },
+      { namespace: "Ada", csrf_token: "c".repeat(42) },
+      { namespace: "Ada", csrf_token: "" },
+      { namespace: "Ada" },
+    ]
+  ) {
     const response = await adapter.reserve(
-      reserve_request({ namespace: "Ada", csrf_token: wrong }),
+      reserve_request(body),
       context(authenticated_session),
     );
     assertEquals(response.status, 403);
@@ -273,4 +314,87 @@ Deno.test("list_owned presents a stable oldest-first order with paths", async ()
       reserved_at: "2026-07-18T10:00:00.000Z",
     },
   ]);
+});
+
+Deno.test("bearer keys reserve and list namespaces by permission", async () => {
+  const { adapter, namespaces } = make_adapter();
+
+  const reserved = await adapter.reserve(
+    new Request("https://pager.test/api/namespaces", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer user-write",
+      },
+      body: JSON.stringify({ namespace: "Automation" }),
+    }),
+    context(guest_session),
+  );
+  assertEquals(reserved.status, 201);
+  assertEquals((await reserved.json()).reservation.namespace, "Automation");
+  assertEquals((await namespaces.list_owned("user-1")).length, 1);
+
+  const listed = await adapter.list_owned(
+    new Request("https://pager.test/api/namespaces", {
+      headers: { authorization: "Bearer user-read" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals((await listed.json()).reservations.length, 1);
+});
+
+Deno.test("bearer keys without the mapped permission are denied", async () => {
+  const { adapter, namespaces } = make_adapter();
+
+  const reserve_denied = await adapter.reserve(
+    new Request("https://pager.test/api/namespaces", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer user-read",
+      },
+      body: JSON.stringify({ namespace: "Denied" }),
+    }),
+    context(guest_session),
+  );
+  assertEquals(reserve_denied.status, 403);
+  assertEquals((await reserve_denied.json()).error, "insufficient_permission");
+  assertEquals(await namespaces.list_owned("user-1"), []);
+
+  const list_denied = await adapter.list_owned(
+    new Request("https://pager.test/api/namespaces", {
+      headers: { authorization: "Bearer user-write" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(list_denied.status, 403);
+  assertEquals((await list_denied.json()).error, "insufficient_permission");
+});
+
+Deno.test("an unusable explicit bearer never falls back to the session", async () => {
+  const { adapter } = make_adapter();
+  for (const path of ["reserve", "list"] as const) {
+    const request = path === "reserve"
+      ? new Request("https://pager.test/api/namespaces", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer unknown-token",
+        },
+        body: JSON.stringify({ namespace: "Ada", csrf_token }),
+      })
+      : new Request("https://pager.test/api/namespaces", {
+        headers: { authorization: "Basic Zm9vOmJhcg==" },
+      });
+    const response = path === "reserve"
+      ? await adapter.reserve(request, context(authenticated_session))
+      : await adapter.list_owned(request, context(authenticated_session));
+    assertEquals(response.status, 401);
+    assertEquals(
+      response.headers.get("www-authenticate"),
+      'Bearer realm="api"',
+    );
+    assertEquals((await response.json()).error, "invalid_bearer");
+  }
 });
