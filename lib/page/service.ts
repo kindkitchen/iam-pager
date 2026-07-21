@@ -120,7 +120,10 @@ type EndpointPreparationResult =
   | { ok: true; endpoint_set: PageEndpointSet }
   | {
     ok: false;
-    reason: PageEndpointCommandFailureReason | "unknown_content_type";
+    reason:
+      | PageEndpointCommandFailureReason
+      | "endpoint_capacity_exceeded"
+      | "unknown_content_type";
   };
 
 type MaterializedPage = PageAggregate & { readonly content: PageContent };
@@ -136,7 +139,11 @@ type MaterializedPageUpdateResult =
   | { ok: true; page: MaterializedPage }
   | {
     ok: false;
-    reason: "not_found" | "revision_conflict" | "endpoint_conflict";
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "endpoint_conflict"
+      | "endpoint_capacity_exceeded";
   };
 
 type MaterializedPageListResult =
@@ -235,11 +242,11 @@ export class PageService
     if (request.access === "private") {
       return { ok: false, reason: "private_requires_managed_page" };
     }
-    const authority = await this.#namespace_authority.resolve(
+    const authorities = await this.#endpoint_authorities(
       request.actor,
-      endpoints.endpoint_set.canonical.locator.namespace,
+      endpoints.endpoint_set,
     );
-    if (authority.kind !== "unreserved") {
+    if (authorities.some((authority) => authority !== "unreserved")) {
       return { ok: false, reason: "namespace_reserved" };
     }
     const prepared = this.#prepare_content(request.content);
@@ -266,6 +273,7 @@ export class PageService
       }
       if (
         result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded" ||
         result.reason === "revision_exhausted"
       ) {
         return { ok: false, reason: result.reason };
@@ -288,15 +296,12 @@ export class PageService
     }
     const tags = normalize_page_tags(request.tags ?? []);
     if (tags === null) return { ok: false, reason: "invalid_tags" };
-    const authority = await this.#namespace_authority.resolve(
+    const authority_failure = await this.#managed_endpoint_authority_failure(
       request.actor,
-      endpoints.endpoint_set.canonical.locator.namespace,
+      endpoints.endpoint_set,
     );
-    if (authority.kind === "unreserved") {
-      return { ok: false, reason: "namespace_not_reserved" };
-    }
-    if (authority.kind === "reserved_by_other") {
-      return { ok: false, reason: "namespace_reserved" };
+    if (authority_failure !== null) {
+      return { ok: false, reason: authority_failure };
     }
     const prepared = this.#prepare_content(request.content);
     if (!prepared.ok) return prepared;
@@ -321,6 +326,9 @@ export class PageService
       }
       if (result.reason === "managed_conflict") {
         return { ok: false, reason: "page_exists" };
+      }
+      if (result.reason === "endpoint_capacity_exceeded") {
+        return { ok: false, reason: "endpoint_capacity_exceeded" };
       }
     }
     return { ok: false, reason: "page_id_generation_exhausted" };
@@ -440,11 +448,15 @@ export class PageService
         content?.content_type ?? page.content.content_type,
       );
       if (!planned.ok) return planned;
-      if (
-        planned.endpoint_set.canonical.locator.namespace.toLowerCase() !==
-          current_endpoint_set.canonical.locator.namespace.toLowerCase()
-      ) {
-        return { ok: false, reason: "namespace_mismatch" };
+      if (has_endpoints) {
+        const authority_failure = await this
+          .#managed_endpoint_authority_failure(
+            request.actor,
+            planned.endpoint_set,
+          );
+        if (authority_failure !== null) {
+          return { ok: false, reason: authority_failure };
+        }
       }
       if (
         !page_endpoint_sets_equal(planned.endpoint_set, current_endpoint_set)
@@ -529,7 +541,10 @@ export class PageService
         now,
       });
       if (!replaced.ok) {
-        if (replaced.reason === "endpoint_conflict") {
+        if (
+          replaced.reason === "endpoint_conflict" ||
+          replaced.reason === "endpoint_capacity_exceeded"
+        ) {
           throw new Error(
             "page service persistence: access-only update changed endpoints",
           );
@@ -636,16 +651,22 @@ export class PageService
     const source_locator = source.endpoint_set.canonical.locator;
 
     if (request.endpoint_set !== undefined) {
-      const planned = this.#endpoint_planner.plan({
-        endpoint_set: request.endpoint_set,
-        supported_delivery_profiles: handler.supported_delivery_profiles,
-      });
-      if (!planned.ok) return planned;
-      if (
-        planned.endpoint_set.canonical.locator.namespace.toLowerCase() !==
-          source_locator.namespace.toLowerCase()
-      ) {
-        return { ok: false, reason: "namespace_mismatch" };
+      const planned = this.#prepare_endpoint_intent(
+        request.endpoint_set,
+        source.content.content_type,
+      );
+      if (!planned.ok) {
+        if (planned.reason === "unknown_content_type") {
+          throw new Error("stored page content type has no handler");
+        }
+        return { ok: false, reason: planned.reason };
+      }
+      const authority_failure = await this.#managed_endpoint_authority_failure(
+        request.actor,
+        planned.endpoint_set,
+      );
+      if (authority_failure !== null) {
+        return { ok: false, reason: authority_failure };
       }
       const now = this.#operation_time();
       for (
@@ -676,6 +697,9 @@ export class PageService
         }
         if (duplicated.reason === "locator_conflict") {
           return { ok: false, reason: "page_exists" };
+        }
+        if (duplicated.reason === "endpoint_capacity_exceeded") {
+          return { ok: false, reason: "endpoint_capacity_exceeded" };
         }
       }
       return { ok: false, reason: "page_id_generation_exhausted" };
@@ -745,6 +769,9 @@ export class PageService
         if (duplicated.reason === "locator_conflict") {
           name_conflict = true;
           break;
+        }
+        if (duplicated.reason === "endpoint_capacity_exceeded") {
+          return { ok: false, reason: "endpoint_capacity_exceeded" };
         }
       }
       if (!name_conflict) {
@@ -931,6 +958,7 @@ export class PageService
       | "managed_conflict"
       | "endpoint_conflict"
       | "page_id_conflict"
+      | "endpoint_capacity_exceeded"
       | "revision_exhausted"
     >
   > {
@@ -948,6 +976,7 @@ export class PageService
       if (
         result.reason === "managed_conflict" ||
         result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded" ||
         result.reason === "revision_exhausted" ||
         result.reason === "page_id_conflict"
       ) {
@@ -973,7 +1002,7 @@ export class PageService
   }): Promise<
     MaterializedPageMutationResult<
       "created" | "replaced_trial",
-      "managed_conflict" | "page_id_conflict"
+      "managed_conflict" | "page_id_conflict" | "endpoint_capacity_exceeded"
     >
   > {
     const content_asset_id = await this.#stage_content_asset(
@@ -990,8 +1019,11 @@ export class PageService
       now: request.now,
     });
     if (!result.ok) {
-      if (result.reason === "managed_conflict") {
-        return { ok: false, reason: "managed_conflict" };
+      if (
+        result.reason === "managed_conflict" ||
+        result.reason === "endpoint_capacity_exceeded"
+      ) {
+        return { ok: false, reason: result.reason };
       }
       return { ok: false, reason: "page_id_conflict" };
     }
@@ -1049,7 +1081,8 @@ export class PageService
       if (
         result.reason === "not_found" ||
         result.reason === "revision_conflict" ||
-        result.reason === "endpoint_conflict"
+        result.reason === "endpoint_conflict" ||
+        result.reason === "endpoint_capacity_exceeded"
       ) {
         return { ok: false as const, reason: result.reason };
       }
@@ -1113,6 +1146,7 @@ export class PageService
       | "revision_conflict"
       | "locator_conflict"
       | "page_id_conflict"
+      | "endpoint_capacity_exceeded"
     >
   > {
     const result = await this.#repository.duplicate_managed_page_aggregate({
@@ -1241,6 +1275,38 @@ export class PageService
     };
   }
 
+  async #endpoint_authorities(
+    actor: { kind: "guest" } | UserPageActor,
+    endpoint_set: PageEndpointSet,
+  ): Promise<Array<"unreserved" | "owned" | "reserved_by_other">> {
+    const namespaces = new Map<string, string>();
+    for (
+      const endpoint of [
+        endpoint_set.canonical,
+        ...endpoint_set.alternates,
+      ]
+    ) {
+      const key = endpoint.locator.namespace.toLowerCase();
+      if (!namespaces.has(key)) namespaces.set(key, endpoint.locator.namespace);
+    }
+    return await Promise.all(
+      [...namespaces.values()].map(async (namespace) =>
+        (await this.#namespace_authority.resolve(actor, namespace)).kind
+      ),
+    );
+  }
+
+  async #managed_endpoint_authority_failure(
+    actor: UserPageActor,
+    endpoint_set: PageEndpointSet,
+  ): Promise<"namespace_not_reserved" | "namespace_reserved" | null> {
+    const authorities = await this.#endpoint_authorities(actor, endpoint_set);
+    if (authorities.includes("reserved_by_other")) {
+      return "namespace_reserved";
+    }
+    return authorities.includes("unreserved") ? "namespace_not_reserved" : null;
+  }
+
   #prepare_endpoint_command(
     command: {
       readonly locator?: Locator;
@@ -1272,10 +1338,15 @@ export class PageService
     if (handler === undefined) {
       return { ok: false, reason: "unknown_content_type" };
     }
-    return this.#endpoint_planner.plan({
+    const planned = this.#endpoint_planner.plan({
       endpoint_set,
       supported_delivery_profiles: handler.supported_delivery_profiles,
     });
+    if (!planned.ok) return planned;
+    if (!this.#repository.can_persist_page_endpoint_set(planned.endpoint_set)) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
+    return planned;
   }
 
   #canonical_inline_endpoint_set(

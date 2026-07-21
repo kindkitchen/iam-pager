@@ -26,40 +26,50 @@ or a future owner from replacing a trial locator.
 
 ## DA-PAGE — Logical page
 
-A page is one managed and explored item with:
+A page is one managed and explored content item with:
 
 - an opaque stable page ID, separate from every public locator;
 - one current immutable content-asset reference;
-- one complete endpoint set;
+- one non-empty set of locator references;
 - trial or managed stewardship;
 - public or private access;
 - zero to ten canonical tags;
 - a positive revision and creation/update timestamps.
 
-A rename or endpoint change keeps the page ID. Alternate endpoints do not gain
-their own ID, revision, tags, access, management row, or exploration row.
+Content identity and bytes do not depend on a locator. A locator change keeps
+the page ID, and replacing content keeps every locator unless replacement also
+supplies a new complete set. Additional references do not gain their own ID,
+revision, tags, access, management row, or exploration row.
 
 Trial pages are public and unowned. Managed pages record their owner only in
 server-controlled storage and may be public or private.
 
 ## DA-ENDPOINT — Delivery endpoint
 
-An endpoint binds a locator to one page and one delivery profile: `inline` or
-`attachment`. The content handler declares which profiles it supports.
+An endpoint is a reference that binds one locator to one logical page and one
+explicit delivery profile. `inline` and `attachment` are the current profiles;
+profiles are bounded lowercase identifiers so later delivery capabilities do not
+change content or locator identity. Each content handler declares the subset it
+supports.
 
-An endpoint set has one structurally canonical binding and zero to seven
-alternates. All bindings:
+An endpoint set is non-empty. One binding is structurally canonical only to give
+management, exploration, sorting, and generated links a stable preferred
+locator; canonical is not content identity and does not imply a delivery
+profile. Zero or more alternate bindings may point to the same content. All
+bindings:
 
 - use valid, case-insensitively unique locators;
-- belong to the canonical locator's case-insensitive namespace;
 - preserve accepted publisher spelling;
-- participate in the same collision space;
-- resolve to the page's one current asset.
+- participate in the global locator collision space;
+- resolve to the page's one current asset;
+- pass namespace authority independently.
 
-Canonical does not imply inline. Alternate order is not semantic and storage
-orders it deterministically. Replacing an endpoint set supplies all bindings at
-an exact page revision and commits the page plus every old/new claim atomically.
-No path suffix has delivery meaning.
+A managed actor must own every referenced namespace; every trial namespace must
+be unreserved. Alternate order is not semantic and storage orders it
+deterministically. Replacing an endpoint set supplies all bindings at an exact
+page revision and commits the page plus every old/new claim atomically. No path
+suffix has delivery meaning. A storage adapter may report a capacity failure for
+a set it cannot commit atomically; that is not a content-format rule.
 
 ## DA-ASSET — Content asset
 
@@ -69,9 +79,11 @@ references one current asset; all its endpoints therefore expose one coherent
 payload.
 
 Content replacement stages a fresh asset before atomically switching the page
-reference. An asset has no public address without an eligible page endpoint.
-Deleting or replacing a page may leave an unreferenced asset, but must never
-publish incomplete data or remove data still referenced by another page.
+reference. It does not require locator resubmission. If the content type
+changes, every retained endpoint profile must be supported by the new handler.
+An asset has no public address without an eligible page endpoint. Deleting or
+replacing a page may leave an unreferenced asset, but must never publish
+incomplete data or remove data still referenced by another page.
 
 ## DA-CONTENT — Supported content
 
@@ -84,7 +96,9 @@ PDF 1.0–1.7 or 2.0 header, and terminal `startxref`/`%%EOF` structure pointing
 to an xref table or xref-stream object. This is structural screening, not
 malware detection or sanitization.
 
-Delivery profile belongs to the endpoint, not the asset or filename.
+Delivery profile belongs to each locator reference, not the asset, preferred
+locator designation, filename, or content type. A profile may be used only when
+the selected content handler supports it.
 
 ## DA-ACCESS — Visibility
 

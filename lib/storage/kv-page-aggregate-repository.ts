@@ -69,6 +69,11 @@ import {
 } from "./kv-content-asset-repository.ts";
 
 export const page_aggregate_max_attempts = 16;
+/**
+ * Current adapter capacity for one atomically visible locator-reference set.
+ * This is an infrastructure bound, not a content or endpoint-domain invariant.
+ */
+export const max_kv_page_endpoints = 8;
 /** Proven worst case with eight source endpoints and eight eight-endpoint trials. */
 export const max_page_aggregate_atomic_checks = 87;
 /** Deno KV currently accepts at most 100 checks in one atomic operation. */
@@ -156,6 +161,10 @@ function same_entry_version(
 function serialize_envelope(page: PageAggregate): StoredPageAggregateEnvelope {
   const violation = page_aggregate_violation(page);
   require(violation === null, violation ?? "invalid page aggregate");
+  require(
+    endpoint_binding_count(page.endpoint_set) <= max_kv_page_endpoints,
+    "endpoint capacity exceeded",
+  );
   return clone(page);
 }
 
@@ -178,7 +187,8 @@ function deserialize_envelope(value: unknown): PageAggregate {
   }
   try {
     const page = clone(value) as unknown as PageAggregate;
-    return page_aggregate_violation(page) === null
+    return page_aggregate_violation(page) === null &&
+        endpoint_binding_count(page.endpoint_set) <= max_kv_page_endpoints
       ? page
       : invalid_stored_page_aggregate();
   } catch {
@@ -264,6 +274,10 @@ export function page_aggregate_public_key(key: PageSortKey): Deno.KvKey {
   ];
 }
 
+function endpoint_binding_count(endpoint_set: PageEndpointSet): number {
+  return 1 + endpoint_set.alternates.length;
+}
+
 function endpoint_keys(page: PageAggregate): Deno.KvKey[] {
   return page_aggregate_endpoint_bindings(page).map((binding) =>
     page_endpoint_claim_key(binding.locator)
@@ -313,6 +327,11 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     content_asset_id: ContentAssetId,
   ): Promise<ContentAsset | null> {
     return this.#assets.find_content_asset_by_id(content_asset_id);
+  }
+
+  can_persist_page_endpoint_set(endpoint_set: PageEndpointSet): boolean {
+    return page_endpoint_set_violation(endpoint_set) === null &&
+      endpoint_binding_count(endpoint_set) <= max_kv_page_endpoints;
   }
 
   async find_page_aggregate_by_id(
@@ -521,6 +540,9 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     this.#require_endpoint_set(request.endpoint_set);
     this.#require_content_asset_id(request.content_asset_id);
     this.#require_time(request.now);
+    if (endpoint_binding_count(request.endpoint_set) > max_kv_page_endpoints) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
     const page_id = request.page_id;
     const endpoint_set = clone(request.endpoint_set);
     const content_asset_id = request.content_asset_id;
@@ -625,6 +647,9 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     );
     this.#require_content_asset_id(request.content_asset_id);
     this.#require_time(request.now);
+    if (endpoint_binding_count(request.endpoint_set) > max_kv_page_endpoints) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
     const page_id = request.page_id;
     const endpoint_set = clone(request.endpoint_set);
     const owner_user_id = request.owner_user_id;
@@ -723,6 +748,13 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
       "tags must be a bounded canonical sorted unique set when present",
     );
     this.#require_time(request.now);
+    if (
+      request.patch.endpoint_set !== undefined &&
+      endpoint_binding_count(request.patch.endpoint_set) >
+        max_kv_page_endpoints
+    ) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
     const page_id = request.page_id;
     const owner_user_id = request.owner_user_id;
     const expected_revision = request.expected_revision;
@@ -743,14 +775,6 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
         existing.page.stewardship.owner_user_id !== owner_user_id
       ) {
         return { ok: false, reason: "not_found" };
-      }
-      if (endpoint_patch !== undefined) {
-        require(
-          endpoint_patch.canonical.locator.namespace.toLowerCase() ===
-            existing.page.endpoint_set.canonical.locator.namespace
-              .toLowerCase(),
-          "endpoint replacement must stay within the current namespace",
-        );
       }
       if (existing.page.revision !== expected_revision) {
         return { ok: false, reason: "revision_conflict" };
@@ -839,6 +863,9 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     );
     this.#require_endpoint_set(request.endpoint_set);
     this.#require_time(request.now);
+    if (endpoint_binding_count(request.endpoint_set) > max_kv_page_endpoints) {
+      return { ok: false, reason: "endpoint_capacity_exceeded" };
+    }
     const source_page_id = request.source_page_id;
     const page_id = request.page_id;
     const owner_user_id = request.owner_user_id;
@@ -854,11 +881,6 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
       ) {
         return { ok: false, reason: "not_found" };
       }
-      require(
-        endpoint_set.canonical.locator.namespace.toLowerCase() ===
-          source.page.endpoint_set.canonical.locator.namespace.toLowerCase(),
-        "duplicate endpoints must stay within the source namespace",
-      );
       if (source.page.revision !== expected_revision) {
         return { ok: false, reason: "revision_conflict" };
       }

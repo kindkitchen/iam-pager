@@ -21,13 +21,17 @@ case-insensitive while publisher casing is preserved.
 
 A logical page has:
 
-- one stable management ID;
+- one stable management ID, independent of every locator;
 - one current immutable content asset;
-- one canonical endpoint and up to seven alternate endpoints in one namespace;
+- a non-empty set of locator references, one preferred only for stable
+  management and exploration links;
 - one access policy, revision, tag set, management row, and exploration row.
 
-Each endpoint binds an ordinary locator to an explicit `inline` or `attachment`
-profile. Paths and filename suffixes do not imply delivery behavior.
+Any number of valid URLs may reference the same logical content. Each reference
+binds an ordinary locator to an explicit delivery profile supported by the
+content format. The current profiles are `inline` and `attachment`; paths,
+preferred status, and filename suffixes do not imply delivery behavior. Managed
+references may cross namespaces when the same creator owns all of them.
 
 ### Visitors and guests
 
@@ -36,7 +40,7 @@ Anyone can:
 - open known public content directly, without the site shell;
 - inspect it through `/site/<locator>`;
 - browse and filter public creator pages by namespace, page name, and exact tag;
-- publish a public trial page in an unreserved namespace.
+- publish a public trial page when every referenced namespace is unreserved.
 
 Trial pages are not discoverable. They have no owner guarantee and may be
 replaced by another guest or by a creator who reserves the namespace. Missing,
@@ -58,9 +62,11 @@ The current handlers are:
 - `pdf`: up to 16 MiB, fixed `application/pdf`, portable filename metadata,
   lightweight PDF structure validation, and inline or attachment delivery.
 
-PDF create and replacement use strict bounded multipart requests. One asset can
-serve browser-preview and download endpoints with byte-identical content. Direct
-PDF delivery supports validators and one byte range.
+PDF create and replacement use strict bounded multipart requests. PDF has no
+special locator-count or profile-combination rule: one locator is sufficient,
+and several preview/download locators may expose byte-identical content.
+Content-only replacement preserves all references. Direct PDF delivery supports
+validators and one byte range.
 
 External storage, generic binary publication, text indexing, quotas, publishing
 rate limits, guest expiry, and account deletion are outside the current
@@ -90,7 +96,10 @@ Memory and Deno KV implement the same repository interfaces and share
 implementation-neutral conformance suites. Deno KV rejects malformed records.
 Page visibility changes commit the page, all endpoint claims, and owner/public
 projections atomically. Content is staged and verified before any page can
-reference it.
+reference it. Endpoint count is not a domain rule; the current Deno KV adapter
+reports a capacity error above eight references because of its native atomic
+check budget, while the memory implementation accepts larger request-bounded
+sets.
 
 See [the project specification](docs/specification/README.md) and
 [the page API contract](docs/api/pages.md).

@@ -10,6 +10,7 @@ import type { KvGateway } from "./kv-gateway.ts";
 import { content_asset_manifest_key } from "./kv-content-asset-repository.ts";
 import {
   KvPageAggregateRepository,
+  max_kv_page_endpoints,
   max_page_aggregate_atomic_checks,
   page_aggregate_atomic_check_headroom,
   page_aggregate_by_id_prefix,
@@ -347,6 +348,35 @@ Deno.test("KV page aggregate writes retry rejected native commits and bound exha
     );
   } finally {
     exhausted_kv.close();
+  }
+});
+
+Deno.test("KV reports its locator-set capacity without changing domain validity", async () => {
+  const kv = await Deno.openKv(":memory:");
+  try {
+    const repository = new KvPageAggregateRepository(new KvToolboxGateway(kv));
+    await create_asset(repository, "asset-1");
+    const endpoint_set_over_capacity = endpoint_set(
+      "page-0",
+      Array.from(
+        { length: max_kv_page_endpoints },
+        (_, index) => binding(`page-${index + 1}`),
+      ),
+    );
+    assertEquals(
+      await repository.create_managed_page_aggregate({
+        page_id: "page-1",
+        endpoint_set: endpoint_set_over_capacity,
+        owner_user_id: "owner-1",
+        access: "public",
+        content_asset_id: "asset-1",
+        now: t1,
+      }),
+      { ok: false, reason: "endpoint_capacity_exceeded" },
+    );
+    assertEquals(await repository.find_page_aggregate_by_id("page-1"), null);
+  } finally {
+    kv.close();
   }
 });
 

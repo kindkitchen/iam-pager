@@ -16,14 +16,15 @@ code, tests, and future tasks without depending on section order.
 
 ## SP-CORE — Product shape
 
-- Content is published at a deterministic namespace and optional page-name
-  locator.
+- Content is published at one or more deterministic namespace and optional
+  page-name locators.
 - Direct access returns content, not the management site's shell.
 - The site provides publishing, wrapped viewing, public exploration, and creator
   management as projections of shared application logic.
 - Authentication lets creators reserve namespaces and protect pages.
 - Guests may publish public, undiscoverable trial pages without ownership.
-- A logical page can expose several explicit delivery endpoints over one content
-  asset while remaining one managed and explored item.
+- A logical content item is independent of its non-empty locator-reference set;
+  one or many explicit delivery endpoints may expose the same current asset
+  while it remains one managed and explored item.
 - Markdown and PDF are the supported content types; broader formats and external
   storage remain later scope.

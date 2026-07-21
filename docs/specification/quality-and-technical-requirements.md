@@ -15,8 +15,10 @@ Stable product behavior must not depend on replaceable integrations:
 - locators are namespace/page-name values, not paths;
 - site and API publishing share `PageService`;
 - content handlers do not know HTTP or storage;
-- page, immutable asset, and endpoint set are separate models;
-- endpoint locators/profiles are publisher intent, never inferred from content;
+- logical content, immutable asset, and locator-reference set are separate
+  models;
+- every locator profile is publisher intent validated against the content
+  handler, never inferred from content, preferred status, filename, or path;
 - identity, namespace authority, sessions, and page persistence use interfaces;
 - presenters derive view models before components render them;
 - Fresh routes contain no business or authorization logic.
@@ -48,9 +50,14 @@ payloads are staged through the project-owned `KvGateway`, reconstructed and
 verified before manifest publication, and reverified on read by length, SHA-256,
 codec, and domain invariants.
 
-The maximum eight-endpoint takeover/duplication shape must remain within Deno
-KV's atomic-check limit. Commit exceptions are treated as ambiguous; code must
-not delete potentially referenced bytes or replay non-idempotent page changes.
+The domain does not impose an endpoint count. The current Deno KV adapter can
+atomically persist at most eight references and reports
+`endpoint_capacity_exceeded` rather than redefining a larger valid set as
+invalid content. The memory reference accepts larger sets. Removing the durable
+adapter capacity requires a staged or separately indexed reference protocol that
+keeps all-or-none visibility; silently splitting the current transaction is
+invalid. Commit exceptions are treated as ambiguous; code must not delete
+potentially referenced bytes or replay non-idempotent page changes.
 
 ## QT-STORAGE — Storage selection
 
@@ -76,7 +83,9 @@ database. Record decoders reject unknown, malformed, or incoherent values.
 - Direct responses set intentional status, type, length, cache, disposition,
   validators, and isolation headers.
 - Private and unauthorized pages are ordinary missing to visitors.
-- The stored endpoint profile alone selects inline versus attachment behavior.
+- The stored endpoint profile alone selects delivery behavior; the current HTTP
+  transport implements `inline` and `attachment` and fails explicitly for an
+  unknown transport profile.
 - Active creator content cannot read or mutate authenticated platform state.
 - Content and metadata changes must become visible together.
 
@@ -124,9 +133,11 @@ unsupported media, malformed JSON/multipart, and oversized input fail before
 mutation. Owner IDs are never accepted or returned.
 
 Authenticated create/update/delete/action requests use browser session identity,
-CSRF, and exact revisions. List cursors are opaque and bound to normalized
-filter scope. Management lists omit editable content; inspection returns only
-handler-approved input. Errors expose stable codes and bounded safe detail.
+CSRF, and exact revisions. JSON creation and update can submit the same explicit
+endpoint-set shape used by multipart content; content-only replacement preserves
+that set. List cursors are opaque and bound to normalized filter scope.
+Management lists omit editable content; inspection returns only handler-approved
+input. Errors expose stable codes and bounded safe detail.
 
 The exact contract is in [the page API reference](../api/pages.md).
 

@@ -112,6 +112,10 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     return asset === undefined ? null : clone(asset);
   }
 
+  can_persist_page_endpoint_set(endpoint_set: PageEndpointSet): boolean {
+    return page_endpoint_set_violation(endpoint_set) === null;
+  }
+
   // deno-lint-ignore require-await
   async find_page_aggregate_by_id(
     page_id: PageId,
@@ -428,13 +432,6 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     ) {
       return { ok: false, reason: "not_found" };
     }
-    if (request.patch.endpoint_set !== undefined) {
-      require(
-        this.#endpoint_namespace_key(request.patch.endpoint_set) ===
-          this.#endpoint_namespace_key(existing.endpoint_set),
-        "endpoint replacement must stay within the current namespace",
-      );
-    }
     if (existing.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -504,11 +501,6 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     ) {
       return { ok: false, reason: "not_found" };
     }
-    require(
-      this.#endpoint_namespace_key(request.endpoint_set) ===
-        this.#endpoint_namespace_key(source.endpoint_set),
-      "duplicate endpoints must stay within the source namespace",
-    );
     if (source.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -566,10 +558,6 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     }
     this.#remove_page(existing);
     return { ok: true };
-  }
-
-  #endpoint_namespace_key(endpoint_set: PageEndpointSet): string {
-    return endpoint_set.canonical.locator.namespace.toLowerCase();
   }
 
   #claimed_page_ids(endpoint_set: PageEndpointSet): Set<PageId> {

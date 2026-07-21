@@ -5,7 +5,6 @@ import type { PageEndpointBinding } from "./endpoint.ts";
 import {
   DefaultPageEndpointPlanner,
   is_safe_page_path,
-  max_page_endpoints,
   project_page_endpoint_links,
 } from "./endpoint.ts";
 
@@ -80,10 +79,10 @@ Deno.test("endpoint planner accepts one canonical endpoint", () => {
   );
 });
 
-Deno.test("endpoint planner accepts the bounded complete set and orders alternates", () => {
+Deno.test("endpoint planner accepts many references and orders alternates", () => {
   const alternates = Array.from(
-    { length: max_page_endpoints - 1 },
-    (_, index) => endpoint(`path-${max_page_endpoints - index}`, "attachment"),
+    { length: 16 },
+    (_, index) => endpoint(`path-${16 - index}`, "attachment"),
   );
   const result = make_planner().plan({
     endpoint_set: {
@@ -93,25 +92,27 @@ Deno.test("endpoint planner accepts the bounded complete set and orders alternat
     supported_delivery_profiles: ["inline", "attachment"],
   });
   assert(result.ok);
+  assertEquals(result.endpoint_set.alternates.length, 16);
   assertEquals(
     result.endpoint_set.alternates.map((binding) => binding.locator.page_name),
-    ["path-2", "path-3", "path-4", "path-5", "path-6", "path-7", "path-8"],
-  );
-});
-
-Deno.test("endpoint planner rejects more than eight endpoints", () => {
-  assertEquals(
-    make_planner().plan({
-      endpoint_set: {
-        canonical: endpoint("canonical"),
-        alternates: Array.from(
-          { length: max_page_endpoints },
-          (_, index) => endpoint(`alternate-${index}`),
-        ),
-      },
-      supported_delivery_profiles: ["inline"],
-    }),
-    { ok: false, reason: "invalid_endpoint_count" },
+    [
+      "path-1",
+      "path-10",
+      "path-11",
+      "path-12",
+      "path-13",
+      "path-14",
+      "path-15",
+      "path-16",
+      "path-2",
+      "path-3",
+      "path-4",
+      "path-5",
+      "path-6",
+      "path-7",
+      "path-8",
+      "path-9",
+    ],
   );
 });
 
@@ -135,28 +136,16 @@ Deno.test("endpoint planner validates every locator and reserved namespace", () 
   );
 });
 
-Deno.test("endpoint planner requires one case-insensitive namespace", () => {
-  const planner = make_planner();
-  const matching = planner.plan({
+Deno.test("endpoint planner keeps references independent across namespaces", () => {
+  const result = make_planner().plan({
     endpoint_set: {
       canonical: endpoint("preview", "inline", "Alice"),
-      alternates: [endpoint("download", "attachment", "ALICE")],
+      alternates: [endpoint("download", "attachment", "Bob")],
     },
     supported_delivery_profiles: ["inline", "attachment"],
   });
-  assert(matching.ok);
-  assertEquals(matching.endpoint_set.alternates[0].locator.namespace, "ALICE");
-
-  assertEquals(
-    planner.plan({
-      endpoint_set: {
-        canonical: endpoint("preview", "inline", "Alice"),
-        alternates: [endpoint("download", "attachment", "Bob")],
-      },
-      supported_delivery_profiles: ["inline", "attachment"],
-    }),
-    { ok: false, reason: "namespace_mismatch" },
-  );
+  assert(result.ok);
+  assertEquals(result.endpoint_set.alternates[0].locator.namespace, "Bob");
 });
 
 Deno.test("endpoint planner rejects case-insensitive duplicate locator claims", () => {
@@ -181,6 +170,21 @@ Deno.test("endpoint planner enforces content-specific delivery profiles", () => 
       supported_delivery_profiles: ["inline"],
     }),
     { ok: false, reason: "unsupported_delivery_profile" },
+  );
+
+  const future_profile = make_planner().plan({
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Alice", page_name: "stream" },
+        delivery_profile: "stream",
+      },
+    },
+    supported_delivery_profiles: ["stream"],
+  });
+  assert(future_profile.ok);
+  assertEquals(
+    future_profile.endpoint_set.canonical.delivery_profile,
+    "stream",
   );
 });
 

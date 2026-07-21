@@ -90,7 +90,11 @@ export interface PageContentCommand {
   input: unknown;
 }
 
-/** Canonical-locator shorthand or a complete publisher-configured endpoint set. */
+/**
+ * Inline canonical-locator shorthand or a complete publisher-configured
+ * non-empty locator-reference set. The shorthand is retained for existing
+ * Markdown clients; new callers should make delivery profile explicit.
+ */
 export type PageEndpointCommand =
   | { readonly locator: Locator; readonly endpoint_set?: never }
   | {
@@ -123,6 +127,7 @@ export type PublishTrialPageResult =
       | "private_requires_managed_page"
       | "namespace_reserved"
       | "endpoint_conflict"
+      | "endpoint_capacity_exceeded"
       | "revision_exhausted"
       | "unknown_content_type"
       | "page_id_generation_exhausted";
@@ -151,6 +156,7 @@ export type CreateManagedPageResult =
       | "namespace_not_reserved"
       | "namespace_reserved"
       | "page_exists"
+      | "endpoint_capacity_exceeded"
       | "unknown_content_type"
       | "page_id_generation_exhausted";
   }
@@ -214,6 +220,9 @@ export type UpdateManagedPageResult =
       | "invalid_access"
       | "invalid_tags"
       | "page_exists"
+      | "namespace_not_reserved"
+      | "namespace_reserved"
+      | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
       | "unknown_content_type";
   }
@@ -307,7 +316,7 @@ export interface DuplicateManagedPageRequest {
   actor: UserPageActor;
   page_id: PageId;
   expected_revision: number;
-  /** Required when the source has alternate or non-inline endpoints. */
+  /** Explicit fresh destination set; required for nontrivial sources. */
   endpoint_set?: PageEndpointSetIntent;
 }
 
@@ -324,6 +333,9 @@ export type DuplicateManagedPageResult =
       | "revision_conflict"
       | "endpoint_set_required"
       | "page_exists"
+      | "namespace_not_reserved"
+      | "namespace_reserved"
+      | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
       | "page_name_generation_exhausted"
       | "page_id_generation_exhausted";

@@ -2,6 +2,14 @@
 
 ## 2026-07-21
 
+- Decoupled logical content from its locator references: every publication now
+  uses one non-empty, format-neutral endpoint set; references may span
+  namespaces owned by the same creator; delivery profiles are extensible
+  handler-validated attributes; JSON and PDF updates can preserve or explicitly
+  replace locators; and PDF no longer requires a preview/download pair. The
+  domain has no endpoint-count limit, while Deno KV reports its current
+  eight-reference atomic capacity explicitly. Existing site projection conflicts
+  are documented for a separate UI task.
 - Concentrated the repository on the current product while preserving its
   behavior and interface boundaries. More than 21,000 lines were removed across
   release-transition storage code, disconnected page adapters, migration and
