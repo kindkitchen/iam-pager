@@ -58,6 +58,8 @@ Deno.test("creator publishing selects owned namespaces and blocks an empty owner
   assertStringIncludes(creator_html, '<option value="Alice"');
   assertStringIncludes(creator_html, '<option value="Knowledge"');
   assertEquals(creator_html.includes("ignored-random"), false);
+  assertEquals(creator_html.includes('placeholder="your-name"'), false);
+  assertEquals(creator_html.includes("Use a random namespace"), false);
 
   const empty_html = render_to_string(
     <PagePublishForm

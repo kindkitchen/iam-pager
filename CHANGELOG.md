@@ -2,6 +2,9 @@
 
 ## 2026-07-21
 
+- Improved creator publishing namespace controls: owned namespaces are rendered
+  as non-editable selectors, newly reserved namespaces become available without
+  a reload, and selector styling now matches the path editor.
 - Added a designed 404 page with a prominent route to public exploration and a
   secondary home link, including the same recovery actions in missing wrapped
   page views.

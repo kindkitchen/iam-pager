@@ -53,7 +53,8 @@ Google authentication establishes an application user. A creator can reserve one
 or more namespaces and then create, inspect, update, rename, duplicate, make
 public or private, tag, filter, bulk-change, and delete pages in those
 namespaces. Publishing and reference editing select from the creator's owned
-namespaces, including cross-namespace aliases. Every managed mutation is
+namespaces, including cross-namespace aliases; a newly reserved namespace is
+available to the publishing selector immediately. Every managed mutation is
 owner-checked and revision-bound.
 
 ### Content
