@@ -7,12 +7,26 @@ use `Cache-Control: no-store`. JSON errors have this shape:
 { "ok": false, "error": "stable_code", "detail": "bounded safe detail" }
 ```
 
-Authentication uses the browser session. Authenticated mutations require the
-exact session synchronizer token in `x-csrf-token`; owner/user IDs are never
-accepted from clients. Owner API keys exist as a separate credential (see
-[the API-key contract](api-keys.md)); bearer authorization of the page
-operations lands with the API principal resolver and until then this API is
-browser-session-only.
+Two credentials authenticate this API; owner/user IDs are never accepted from
+clients:
+
+- **Browser session.** Authenticated mutations require the exact session
+  synchronizer token in `x-csrf-token`. Guest browser sessions keep trial
+  publication on `POST /api/pages` only.
+- **API key** (see [the API-key contract](api-keys.md)) via
+  `Authorization: Bearer <key>`. When the header is present it is authoritative:
+  a malformed, unknown, expired, or revoked bearer receives one non-disclosing
+  `401` with a `WWW-Authenticate: Bearer` challenge and never falls back to the
+  cookie. Key requests carry no CSRF token; instead each operation requires the
+  mapped permission, otherwise `403` `insufficient_permission`:
+  - `read` — page list and inspect, namespace list;
+  - `write` — page create, update, rename, duplicate, bulk access change, and
+    namespace reservation;
+  - `delete` — page delete and bulk delete.
+
+  A key-authenticated create is always a managed owner create, never trial
+  publication. Namespace ownership, revision preconditions, and every other
+  domain rule apply after the permission check exactly as for browser owners.
 
 JSON objects and query strings are strict and bounded. Unknown fields, duplicate
 query fields, malformed input, unsupported media, and oversized requests fail

@@ -30,6 +30,10 @@ import {
   CryptoSecretGenerator,
   MemoryApiKeyRepository,
 } from "./api-key/mod.ts";
+import {
+  BearerFirstApiRequestAuthenticator,
+  PermissionApiOperationPolicy,
+} from "./api-auth/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
@@ -208,12 +212,31 @@ export function create_app_services(
     engine,
     repository: namespace_repository,
   });
-  const namespaces_http = new NamespaceHttpAdapter({ namespaces, engine });
   const namespace_panel = new CreatorNamespacePanelPresenter({
     namespaces,
     engine,
   });
   const clock = new SystemClock();
+  const api_key_repository = options.api_key_repository ??
+    new MemoryApiKeyRepository();
+  const api_keys = new ApiKeyService({
+    repository: api_key_repository,
+    clock,
+    id_generator: new CryptoIdGenerator(),
+    secret_generator: new CryptoSecretGenerator(),
+  });
+  // Bearer resolution and the permission matrix are shared by every /api
+  // adapter so cookie-versus-key behavior cannot drift between surfaces.
+  const api_request_authenticator = new BearerFirstApiRequestAuthenticator({
+    bearer_resolver: api_keys,
+  });
+  const api_operation_policy = new PermissionApiOperationPolicy();
+  const namespaces_http = new NamespaceHttpAdapter({
+    namespaces,
+    engine,
+    authenticator: api_request_authenticator,
+    policy: api_operation_policy,
+  });
   const pages = new PageService({
     engine,
     repository: page_repository,
@@ -223,20 +246,16 @@ export function create_app_services(
     ),
     clock,
   });
-  const pages_http = new PageHttpAdapter({ pages });
+  const pages_http = new PageHttpAdapter({
+    pages,
+    authenticator: api_request_authenticator,
+    policy: api_operation_policy,
+  });
   const public_page_view = new CreatorPublicPageViewPresenter({ pages });
   const public_exploration = new SitePublicExplorationPresenter({ pages });
   const page_management_panel = new CreatorPageManagementPresenter({
     pages,
     namespaces,
-  });
-  const api_key_repository = options.api_key_repository ??
-    new MemoryApiKeyRepository();
-  const api_keys = new ApiKeyService({
-    repository: api_key_repository,
-    clock,
-    id_generator: new CryptoIdGenerator(),
-    secret_generator: new CryptoSecretGenerator(),
   });
   const api_keys_http = new ApiKeyHttpAdapter({ api_keys });
   const api_key_panel = new CreatorApiKeyPanelPresenter({ api_keys });
@@ -256,6 +275,7 @@ export function create_app_services(
     session_resolver: session,
     session_transport,
     request_id_generator: new CryptoIdGenerator(),
+    ephemeral_guest_source: session,
   });
   const identity_repository = ownership_repositories.identity_repository;
   const authentication_strategies = new AuthenticationStrategyRegistry(

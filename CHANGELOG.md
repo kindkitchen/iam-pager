@@ -2,6 +2,19 @@
 
 ## 2026-07-22
 
+- Authorized API-key bearers over the existing page and namespace API. A new
+  `lib/api-auth/` module resolves every `/api/**` request to a guest,
+  browser-user, or API-key principal (`ApiRequestAuthenticator`) and applies the
+  documented permission matrix (`ApiOperationPolicy`): `read` for list/inspect,
+  `write` for create/update/rename/duplicate/bulk access and namespace
+  reservation, `delete` for page delete/bulk delete. A presented
+  `Authorization: Bearer` header is authoritative — invalid bearers fail with
+  one non-disclosing `401` challenge and never fall back to the cookie — and the
+  request middleware serves bearer requests from an ephemeral guest view, so no
+  session is stored or cookie issued solely for a bearer request.
+  Key-authenticated page creation is always managed; guest browser trial
+  publication is unchanged.
+
 - Added durable API-key persistence: a strict `DenoKvApiKeyRepository` with
   atomic create/update/revoke commits and an owner-generation bump for
   linearizable, unbounded revoke-all; one shared repository conformance suite

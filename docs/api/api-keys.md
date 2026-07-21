@@ -33,6 +33,11 @@ time, so future permissions are never granted silently. Stored and returned
 permission lists are always explicit and in canonical `read, write, delete`
 order.
 
+Keys authorize the page and namespace operations under `/api/**`
+([the page API contract](pages.md) maps each operation to its required
+permission). Key management itself stays browser-owned: the sole key-accessible
+management operation is bearer revoke-all below.
+
 ## Key metadata
 
 ```json

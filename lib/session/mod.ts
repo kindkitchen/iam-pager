@@ -2,6 +2,7 @@ export type {
   Clock,
   CredentialGenerator,
   CsrfTokenGenerator,
+  EphemeralGuestSessionSource,
   IdGenerator,
   RepositoryAuthenticationAttemptConsume,
   RepositoryAuthenticationAttemptConsumeResult,

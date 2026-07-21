@@ -1,3 +1,11 @@
+import {
+  type ApiOperationPolicy,
+  type ApiPrincipal,
+  type ApiRequestAuthenticator,
+  BearerFirstApiRequestAuthenticator,
+  PermissionApiOperationPolicy,
+} from "../api-auth/mod.ts";
+import type { ApiKeyPermission } from "../api-key/mod.ts";
 import { csrf_tokens_match } from "../http/csrf.ts";
 import {
   is_json_media_type,
@@ -83,6 +91,9 @@ export interface PageHttpHandler {
 export interface PageHttpAdapterOptions {
   readonly pages: PageHttpApplication;
   readonly pdf_multipart_decoder?: PdfMultipartDecoder;
+  /** Absent means fail closed: every explicit bearer is rejected. */
+  readonly authenticator?: ApiRequestAuthenticator;
+  readonly policy?: ApiOperationPolicy;
 }
 
 type CreateBody =
@@ -130,11 +141,16 @@ type DecodeResult<Value> =
 export class PageHttpAdapter implements PageHttpHandler {
   readonly #pages: PageHttpApplication;
   readonly #pdf_multipart_decoder: PdfMultipartDecoder;
+  readonly #authenticator: ApiRequestAuthenticator;
+  readonly #policy: ApiOperationPolicy;
 
   constructor(options: PageHttpAdapterOptions) {
     this.#pages = options.pages;
     this.#pdf_multipart_decoder = options.pdf_multipart_decoder ??
       new WebPdfMultipartDecoder();
+    this.#authenticator = options.authenticator ??
+      new BearerFirstApiRequestAuthenticator();
+    this.#policy = options.policy ?? new PermissionApiOperationPolicy();
   }
 
   collection(
@@ -180,9 +196,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const principal = resolved.principal;
     if (
-      session.kind === "guest" && request.headers.has("x-csrf-token")
+      principal.kind === "guest" && request.headers.has("x-csrf-token")
     ) {
       return error_response(
         401,
@@ -190,14 +208,11 @@ export class PageHttpAdapter implements PageHttpHandler {
         "creator publication requires a current signed-in session",
       );
     }
-    if (
-      session.kind === "authenticated" &&
-      !csrf_tokens_match(
-        session.csrf_token,
-        request.headers.get("x-csrf-token") ?? "",
-      )
-    ) {
-      return invalid_csrf_response();
+    let actor: UserPageActor | null = null;
+    if (principal.kind !== "guest") {
+      const authorized = this.#authorize(principal, request, "write");
+      if (!authorized.ok) return authorized.response;
+      actor = authorized.actor;
     }
 
     const decoded = await decode_create_request_body(
@@ -212,7 +227,9 @@ export class PageHttpAdapter implements PageHttpHandler {
       access: decoded.value.access,
       content: decoded.value.content,
     };
-    if (session.kind === "guest") {
+    // A key-authenticated create is always a managed owner create; only the
+    // guest browser context keeps trial publication.
+    if (actor === null) {
       if (decoded.value.tags !== undefined) {
         return error_response(
           422,
@@ -229,7 +246,7 @@ export class PageHttpAdapter implements PageHttpHandler {
     const result = await this.#pages.create_managed({
       ...command,
       ...(decoded.value.tags === undefined ? {} : { tags: decoded.value.tags }),
-      actor: actor_from_session(session),
+      actor,
     });
     return create_result_response(request.url, result, true);
   }
@@ -238,8 +255,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const actor = authenticated_actor(context.session);
-    if (actor === null) return authentication_required_response();
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const authorized = this.#authorize(resolved.principal, request, "read");
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     const query = decode_list_query(request.url);
     if (!query.ok) {
       return error_response(400, "invalid_query", query.detail);
@@ -257,8 +277,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const actor = authenticated_actor(context.session);
-    if (actor === null) return authentication_required_response();
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const authorized = this.#authorize(resolved.principal, request, "read");
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     const target = decode_item_target(request.url);
     if (!target.ok) return target.response;
     const result = await this.#pages.inspect_managed({
@@ -273,19 +296,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
-      return authentication_required_response();
-    }
-    const actor = actor_from_session(session);
-    if (
-      !csrf_tokens_match(
-        session.csrf_token,
-        request.headers.get("x-csrf-token") ?? "",
-      )
-    ) {
-      return invalid_csrf_response();
-    }
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const authorized = this.#authorize(resolved.principal, request, "write");
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     const target = decode_item_target(request.url);
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
@@ -309,19 +324,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
-      return authentication_required_response();
-    }
-    const actor = actor_from_session(session);
-    if (
-      !csrf_tokens_match(
-        session.csrf_token,
-        request.headers.get("x-csrf-token") ?? "",
-      )
-    ) {
-      return invalid_csrf_response();
-    }
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const authorized = this.#authorize(resolved.principal, request, "delete");
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     const target = decode_item_target(request.url);
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
@@ -350,19 +357,11 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
-      return authentication_required_response();
-    }
-    const actor = actor_from_session(session);
-    if (
-      !csrf_tokens_match(
-        session.csrf_token,
-        request.headers.get("x-csrf-token") ?? "",
-      )
-    ) {
-      return invalid_csrf_response();
-    }
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const authorized = this.#authorize(resolved.principal, request, "write");
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     const target = decode_action_target(request.url);
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
@@ -401,14 +400,16 @@ export class PageHttpAdapter implements PageHttpHandler {
     request: Request,
     context: PageHttpRequestContext,
   ): Promise<Response> {
-    const session = context.session;
-    if (session.kind !== "authenticated") {
-      return authentication_required_response();
-    }
-    const actor = actor_from_session(session);
+    const resolved = await this.#principal(request, context);
+    if (!resolved.ok) return resolved.response;
+    const principal = resolved.principal;
+    if (principal.kind === "guest") return authentication_required_response();
+    // Both bulk operations are mutations, so the browser CSRF check precedes
+    // target decoding; the operation-specific permission follows it.
     if (
+      principal.kind === "browser_user" &&
       !csrf_tokens_match(
-        session.csrf_token,
+        principal.csrf_token,
         request.headers.get("x-csrf-token") ?? "",
       )
     ) {
@@ -416,6 +417,13 @@ export class PageHttpAdapter implements PageHttpHandler {
     }
     const target = decode_bulk_target(request.url);
     if (!target.ok) return target.response;
+    const authorized = this.#authorize(
+      principal,
+      request,
+      target.operation === "access" ? "write" : "delete",
+    );
+    if (!authorized.ok) return authorized.response;
+    const actor = authorized.actor;
     if (target.operation === "access") {
       const decoded = await decode_json_body(request, decode_bulk_access_body);
       if (!decoded.ok) return decoded.response;
@@ -454,16 +462,50 @@ export class PageHttpAdapter implements PageHttpHandler {
       ),
     });
   }
-}
 
-function authenticated_actor(session: Session): UserPageActor | null {
-  return session.kind === "authenticated" ? actor_from_session(session) : null;
-}
+  /** One non-disclosing challenge for every unusable explicit bearer. */
+  async #principal(
+    request: Request,
+    context: PageHttpRequestContext,
+  ): Promise<
+    | { ok: true; principal: ApiPrincipal }
+    | { ok: false; response: Response }
+  > {
+    const result = await this.#authenticator.authenticate(
+      request,
+      context.session,
+    );
+    if (!result.ok) return { ok: false, response: bearer_challenge_response() };
+    return { ok: true, principal: result.principal };
+  }
 
-function actor_from_session(
-  session: Extract<Session, { kind: "authenticated" }>,
-): UserPageActor {
-  return { kind: "user", user_id: session.user_id };
+  /** Maps the policy verdict onto wire responses and a domain actor. */
+  #authorize(
+    principal: ApiPrincipal,
+    request: Request,
+    permission: ApiKeyPermission,
+  ):
+    | { ok: true; actor: UserPageActor }
+    | { ok: false; response: Response } {
+    const authorized = this.#policy.authorize(principal, {
+      permission,
+      presented_csrf_token: request.headers.get("x-csrf-token"),
+    });
+    if (authorized.ok) {
+      return { ok: true, actor: { kind: "user", user_id: authorized.user_id } };
+    }
+    switch (authorized.reason) {
+      case "not_authenticated":
+        return { ok: false, response: authentication_required_response() };
+      case "invalid_csrf":
+        return { ok: false, response: invalid_csrf_response() };
+      case "insufficient_permission":
+        return {
+          ok: false,
+          response: insufficient_permission_response(permission),
+        };
+    }
+  }
 }
 
 async function decode_create_request_body(
@@ -1418,6 +1460,25 @@ function present_endpoint_link(
     path: endpoint.path,
     delivery_profile: endpoint.delivery_profile,
   };
+}
+
+function bearer_challenge_response(): Response {
+  return error_response(
+    401,
+    "invalid_bearer",
+    "the request could not be authenticated",
+    { "www-authenticate": 'Bearer realm="api"' },
+  );
+}
+
+function insufficient_permission_response(
+  permission: ApiKeyPermission,
+): Response {
+  return error_response(
+    403,
+    "insufficient_permission",
+    `this operation requires the ${permission} permission`,
+  );
 }
 
 function authentication_required_response(): Response {

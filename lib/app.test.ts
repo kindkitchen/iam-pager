@@ -108,6 +108,59 @@ Deno.test("composition root publishes through HTTP and delivers direct content",
   );
 });
 
+Deno.test("composition root authorizes bearer principals over the page API", async () => {
+  const services = create_app_services();
+  await services.namespaces.reserve({
+    namespace: "Robot",
+    owner_user_id: "user-1",
+  });
+  const created_key = await services.api_keys.create({
+    owner_user_id: "user-1",
+    label: "automation",
+    permissions: ["all"],
+    expires_at: null,
+  });
+  if (!created_key.ok) throw new Error("key creation failed");
+
+  const page_request = () =>
+    new Request("https://pager.test/api/pages", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${created_key.bearer}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        locator: { namespace: "Robot", page_name: "status" },
+        access: "public",
+        content: { content_type: "md-page", input: { md: "# Robot" } },
+      }),
+    });
+  const handle = (req: Request) => {
+    const state = {} as AppRequestState;
+    return services.request_context.handle({
+      req,
+      state,
+      next: async () =>
+        await services.pages_http.collection(req, state.request_context),
+    });
+  };
+
+  // The full middleware-to-adapter path: the bearer creates a managed page
+  // and no session cookie is issued for the bearer request.
+  const created = await handle(page_request());
+  assertEquals(created.status, 201);
+  assertEquals(created.headers.getSetCookie(), []);
+  assertExists((await created.json()).management_url);
+
+  // Revoke-all invalidates the same bearer immediately, without fallback to
+  // any cookie session.
+  await services.api_keys.revoke_all("user-1");
+  const rejected = await handle(page_request());
+  assertEquals(rejected.status, 401);
+  assertEquals((await rejected.json()).error, "invalid_bearer");
+  assertEquals(rejected.headers.get("www-authenticate"), 'Bearer realm="api"');
+});
+
 Deno.test("composition root registers PDF and explicit delivery profiles", async () => {
   const services = create_app_services();
   const bytes = pdf_bytes();

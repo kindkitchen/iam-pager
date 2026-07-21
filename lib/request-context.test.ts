@@ -55,6 +55,7 @@ function make_fixture() {
   const middleware = new RequestContextMiddleware({
     session_resolver: session,
     session_transport,
+    ephemeral_guest_source: session,
     request_id_generator: new SequenceGenerator([
       "request-1",
       "request-2",
@@ -257,6 +258,57 @@ Deno.test("framework error boundaries can decorate a response after a route thro
   assertEquals(response.headers.get("x-request-id"), "request-1");
   assertEquals(response.headers.getSetCookie().length, 1);
   assertEquals(await response.text(), "Internal server error");
+});
+
+Deno.test("bearer requests never create, renew, or receive cookie sessions", async () => {
+  const { middleware, session_transport } = make_fixture();
+
+  // First a cookie is minted normally so a stored session exists.
+  const seed_context = pipeline_context(
+    new Request("http://localhost/site"),
+    () => new Response("ok"),
+  );
+  const seed_response = await middleware.handle(seed_context);
+  const cookie = seed_response.headers.getSetCookie()[0].split(";", 1)[0];
+
+  // With an Authorization header the cookie is ignored entirely: the state
+  // session is a fresh guest view and no set-cookie is staged.
+  const bearer_context = pipeline_context(
+    new Request("http://localhost/api/pages", {
+      headers: { authorization: "Bearer iamp_token", cookie },
+    }),
+    (state) => {
+      assertEquals(state.request_context.session.kind, "guest");
+      assertNotEquals(
+        state.request_context.session.session_id,
+        seed_context.state.request_context.session.session_id,
+      );
+      return Response.json({ ok: true });
+    },
+  );
+  const bearer_response = await middleware.handle(bearer_context);
+  assertEquals(bearer_response.headers.getSetCookie(), []);
+  assertEquals(bearer_response.headers.get("x-request-id"), "request-2");
+
+  // The stored cookie session is untouched and still resolves afterwards.
+  const followup_context = pipeline_context(
+    new Request("http://localhost/site", { headers: { cookie } }),
+    (state) => {
+      assertEquals(
+        state.request_context.session.session_id,
+        seed_context.state.request_context.session.session_id,
+      );
+      return new Response("ok");
+    },
+  );
+  const followup_response = await middleware.handle(followup_context);
+  assertEquals(followup_response.status, 200);
+  assertEquals(
+    session_transport.extract(
+      new Request("http://localhost/site", { headers: { cookie } }),
+    ) !== null,
+    true,
+  );
 });
 
 Deno.test("malformed browser credentials receive a replacement guest cookie", async () => {

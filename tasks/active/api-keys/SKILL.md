@@ -18,7 +18,9 @@ single key-accessible operation ([[004.log]]). The web projection is live at
 revoke-all UX ([[005.log]]). Durable persistence is done: shared repository
 conformance suite, `DenoKvApiKeyRepository` with owner-generation revoke-all,
 and the `IAM_PAGER_API_KEY_STORAGE_BACKEND` factory inheriting durable
-ownership ([[006.log]]).
+ownership ([[006.log]]). Bearer authorization is live: `lib/api-auth/`
+resolves guest/browser/key principals, the permission matrix guards every
+page and namespace operation, and bearer requests get an ephemeral guest
+view with no cookie issuance or fallback ([[007.log]]).
 
-Next from [[003.plan]]: link 1 specification documents, link 5 API principal
-resolver over page/namespace operations, link 7 closure.
+Next from [[003.plan]]: link 1 specification documents, link 7 closure.
