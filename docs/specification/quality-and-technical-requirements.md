@@ -61,9 +61,10 @@ potentially referenced bytes or replay non-idempotent page changes.
 
 ## QT-STORAGE — Storage selection
 
-Identity plus namespace ownership form one persistence unit. Sessions and pages
-are separate opt-ins but durable selection requires durable ownership, so an
-authenticated session or protected page cannot outlive its user and claim.
+Identity plus namespace ownership form one persistence unit. Sessions, pages,
+and API keys are separate opt-ins but durable selection requires durable
+ownership, so an authenticated session, protected page, or API key cannot
+outlive its user and claim.
 
 Each repository defaults to memory. Current durable selectors are:
 
@@ -71,6 +72,7 @@ Each repository defaults to memory. Current durable selectors are:
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
+IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv
 ```
 
 All Deno KV adapters use the ownership database path or attached default

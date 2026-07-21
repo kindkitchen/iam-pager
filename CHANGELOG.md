@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-22
+
+- Added durable API-key persistence: a strict `DenoKvApiKeyRepository` with
+  atomic create/update/revoke commits and an owner-generation bump for
+  linearizable, unbounded revoke-all; one shared repository conformance suite
+  now runs against both the memory reference and Deno KV. Durable keys are
+  selected with `IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv` through a new
+  storage factory that inherits the ownership database, so key owner IDs cannot
+  outlive durable identities. Malformed stored records fail closed.
+
+- Added the owner API-key management page at `/site/api-keys`: generate keys
+  with permission and expiry controls, one-time bearer reveal with a copy
+  shortcut, inline edit, revision-bound revoke, and confirmed revoke-all. The
+  page is a thin projection over `/api/api-keys` — the presenter and request
+  builders live in `lib/ui/api-key-panel.ts` and components make no
+  authorization decisions. Also fixed the pre-existing `deno task check`
+  failures (`static/site.css` formatting, `CssSourceEditor` timer type).
+
+- Implemented the owner API-key lifecycle as a new `lib/api-key/` sibling
+  module: interface-backed model, service, memory repository, and HTTP adapter
+  with thin Fresh routes at `/api/api-keys`. Browser-authenticated owners
+  create, list, inspect, update, and revoke scoped keys with one-time bearers,
+  strict bounds, CSRF, and strong ETags; bearer-authenticated revoke-all with
+  the `delete` permission is the only key operation an API key can perform.
+  Documented the wire contract in `docs/api/api-keys.md`.
+
 ## 2026-07-21
 
 - Added the `api-keys` specification-first implementation task: browser owners

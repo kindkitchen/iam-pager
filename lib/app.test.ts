@@ -18,6 +18,7 @@ import {
   parse_session_cookie_mode,
   SESSION_COOKIE_MODE_ENV,
 } from "./app.ts";
+import { MemoryApiKeyRepository } from "./api-key/mod.ts";
 import { pdf_media_type } from "./content/mod.ts";
 import { MemoryNamespaceRepository } from "./namespace/mod.ts";
 import {
@@ -27,6 +28,9 @@ import {
 import type { AppRequestState } from "./request-context.ts";
 import { MemorySessionRepository } from "./session/mod.ts";
 import {
+  API_KEY_STORAGE_BACKEND_ENV,
+  type ApiKeyRepositoryFactory,
+  type ApiKeyStorageConfig,
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
   type OwnershipRepositoryFactory,
@@ -168,9 +172,11 @@ Deno.test("configured composition selects every persistence interface together",
   const namespace_repository = new MemoryNamespaceRepository();
   const session_repository = new MemorySessionRepository();
   const page_repository = new MemoryPageAggregateRepository();
+  const api_key_repository = new MemoryApiKeyRepository();
   let ownership_config: OwnershipStorageConfig | undefined;
   let session_config: SessionStorageConfig | undefined;
   let page_config: PageStorageConfig | undefined;
+  let api_key_config: ApiKeyStorageConfig | undefined;
   const ownership_repository_factory: OwnershipRepositoryFactory = {
     create: (config) => {
       ownership_config = config;
@@ -189,12 +195,19 @@ Deno.test("configured composition selects every persistence interface together",
       return Promise.resolve(page_repository);
     },
   };
+  const api_key_repository_factory: ApiKeyRepositoryFactory = {
+    create: (config) => {
+      api_key_config = config;
+      return Promise.resolve(api_key_repository);
+    },
+  };
   const values = {
     ...local_google_environment,
     [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
     [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
     [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
     [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+    [API_KEY_STORAGE_BACKEND_ENV]: "deno-kv",
   };
 
   const services = await create_configured_app_services(
@@ -203,15 +216,18 @@ Deno.test("configured composition selects every persistence interface together",
       ownership_repository_factory,
       session_repository_factory,
       page_repository_factory,
+      api_key_repository_factory,
     },
   );
   const durable = { backend: "deno-kv", path: "/data/iam-pager.kv" } as const;
   assertEquals(ownership_config, durable);
   assertEquals(session_config, durable);
   assertEquals(page_config, durable);
+  assertEquals(api_key_config, durable);
   assertStrictEquals(services.identity_repository, identity_repository);
   assertStrictEquals(services.namespace_repository, namespace_repository);
   assertStrictEquals(services.page_repository, page_repository);
+  assertStrictEquals(services.api_key_repository, api_key_repository);
 });
 
 Deno.test("configured local Google flow upgrades its guest session", async () => {

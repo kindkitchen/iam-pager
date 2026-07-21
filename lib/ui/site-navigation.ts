@@ -99,6 +99,11 @@ function site_destinations(
       href: "/site/manage",
       label: "Manage",
       current: pathname === "/site/manage" || pathname === "/site/manage/",
+    }, {
+      href: "/site/api-keys",
+      label: "API keys",
+      current: pathname === "/site/api-keys" ||
+        pathname === "/site/api-keys/",
     });
   }
   return destinations;

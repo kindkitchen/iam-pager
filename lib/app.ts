@@ -20,6 +20,16 @@ import {
   parse_google_auth_config,
   SiteAuthenticationCallbackFailurePresenter,
 } from "./auth/mod.ts";
+import {
+  type ApiKeyBearerResolver,
+  ApiKeyHttpAdapter,
+  type ApiKeyHttpHandler,
+  type ApiKeyManager,
+  type ApiKeyRepository,
+  ApiKeyService,
+  CryptoSecretGenerator,
+  MemoryApiKeyRepository,
+} from "./api-key/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
@@ -43,6 +53,10 @@ import {
   type NamespaceReservationManager,
   NamespaceReservationService,
 } from "./namespace/mod.ts";
+import {
+  type ApiKeyPanelPresenter,
+  CreatorApiKeyPanelPresenter,
+} from "./ui/api-key-panel.ts";
 import {
   CreatorNamespacePanelPresenter,
   type NamespacePanelPresenter,
@@ -77,12 +91,15 @@ import {
   RequestContextMiddleware,
 } from "./request-context.ts";
 import {
+  type ApiKeyRepositoryFactory,
+  DefaultApiKeyRepositoryFactory,
   DefaultOwnershipRepositoryFactory,
   DefaultPageAggregateRepositoryFactory,
   DefaultSessionRepositoryFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
   type PageAggregateRepositoryFactory,
+  parse_api_key_storage_config,
   parse_ownership_storage_config,
   parse_page_storage_config,
   parse_session_storage_config,
@@ -115,6 +132,10 @@ export interface AppServices {
   namespaces_http: NamespaceHttpHandler;
   namespace_panel: NamespacePanelPresenter;
   page_management_panel: PageManagementPanelPresenter;
+  api_key_repository: ApiKeyRepository;
+  api_keys: ApiKeyManager & ApiKeyBearerResolver;
+  api_keys_http: ApiKeyHttpHandler;
+  api_key_panel: ApiKeyPanelPresenter;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -134,6 +155,8 @@ export interface AppServiceOptions {
   readonly page_repository?: PageAggregateRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
+  /** API-key persistence stays behind the repository interface. */
+  readonly api_key_repository?: ApiKeyRepository;
   /** Provider implementations are supplied at the composition boundary. */
   readonly authentication_strategies?: readonly AuthenticationStrategy[];
   /** Selects static or explicitly allowlisted request-derived callbacks. */
@@ -150,6 +173,8 @@ export interface ConfiguredAppServiceOptions {
   readonly session_repository_factory?: SessionRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
   readonly page_repository_factory?: PageAggregateRepositoryFactory;
+  /** Override only at an outer composition or test boundary. */
+  readonly api_key_repository_factory?: ApiKeyRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -205,6 +230,16 @@ export function create_app_services(
     pages,
     namespaces,
   });
+  const api_key_repository = options.api_key_repository ??
+    new MemoryApiKeyRepository();
+  const api_keys = new ApiKeyService({
+    repository: api_key_repository,
+    clock,
+    id_generator: new CryptoIdGenerator(),
+    secret_generator: new CryptoSecretGenerator(),
+  });
+  const api_keys_http = new ApiKeyHttpAdapter({ api_keys });
+  const api_key_panel = new CreatorApiKeyPanelPresenter({ api_keys });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -256,6 +291,10 @@ export function create_app_services(
     namespaces_http,
     namespace_panel,
     page_management_panel,
+    api_key_repository,
+    api_keys,
+    api_keys_http,
+    api_key_panel,
     session,
     session_transport,
     request_context,
@@ -281,6 +320,10 @@ export async function create_configured_app_services(
     environment,
     ownership_storage_config,
   );
+  const api_key_storage_config = parse_api_key_storage_config(
+    environment,
+    ownership_storage_config,
+  );
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
   const ownership_repositories = await (
@@ -296,10 +339,14 @@ export async function create_configured_app_services(
     options.page_repository_factory ??
       new DefaultPageAggregateRepositoryFactory()
   ).create(page_storage_config);
+  const api_key_repository = await (
+    options.api_key_repository_factory ?? new DefaultApiKeyRepositoryFactory()
+  ).create(api_key_storage_config);
   return create_app_services({
     ownership_repositories,
     session_repository,
     page_repository,
+    api_key_repository,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),

@@ -7,9 +7,12 @@ use `Cache-Control: no-store`. JSON errors have this shape:
 { "ok": false, "error": "stable_code", "detail": "bounded safe detail" }
 ```
 
-Authentication uses the browser session. There are no external API bearer
-credentials. Authenticated mutations require the exact session synchronizer
-token in `x-csrf-token`; owner/user IDs are never accepted from clients.
+Authentication uses the browser session. Authenticated mutations require the
+exact session synchronizer token in `x-csrf-token`; owner/user IDs are never
+accepted from clients. Owner API keys exist as a separate credential (see
+[the API-key contract](api-keys.md)); bearer authorization of the page
+operations lands with the API principal resolver and until then this API is
+browser-session-only.
 
 JSON objects and query strings are strict and bounded. Unknown fields, duplicate
 query fields, malformed input, unsupported media, and oversized requests fail

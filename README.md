@@ -57,6 +57,11 @@ namespaces, including cross-namespace aliases; a newly reserved namespace is
 available to the publishing selector immediately. Every managed mutation is
 owner-checked and revision-bound.
 
+Signed-in creators also manage their API keys at `/site/api-keys`: generate a
+key with explicit permissions and optional expiry, copy the one-time bearer,
+edit or revoke individual keys, and revoke everything at once. The page is a
+projection of the same API-key capabilities exposed at `/api/api-keys`.
+
 ### Content
 
 The current handlers are:
@@ -93,6 +98,10 @@ Important boundaries:
   logical pages, endpoint claims, and owner/public projections.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
+- `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
+  browser-authenticated owners manage scoped, optionally expiring keys, bearers
+  are returned once and stored only as hashes, and bearer-authenticated
+  revoke-all is the single key operation an API key may perform on itself.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,
@@ -107,8 +116,9 @@ reports a capacity error above eight references because of its native atomic
 check budget, while the memory implementation accepts larger request-bounded
 sets.
 
-See [the project specification](docs/specification/README.md) and
-[the page API contract](docs/api/pages.md).
+See [the project specification](docs/specification/README.md),
+[the page API contract](docs/api/pages.md), and
+[the API-key contract](docs/api/api-keys.md).
 
 ## Local development
 
@@ -146,6 +156,7 @@ set:
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
+IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv
 ```
 
 For a self-hosted database, also set the shared path:
@@ -155,8 +166,8 @@ IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/iam-pager.kv
 ```
 
 On Deno Deploy, leave the path unset to use the attached database. Durable
-sessions and pages require durable ownership so a session or protected page
-cannot outlive its user and namespace claim.
+sessions, pages, and API keys require durable ownership so a session, protected
+page, or API key cannot outlive its user and namespace claim.
 
 ## Authentication configuration
 

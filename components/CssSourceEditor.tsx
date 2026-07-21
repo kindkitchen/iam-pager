@@ -29,7 +29,7 @@ export function CssSourceEditor(props: CssSourceEditorProps) {
 
   useEffect(() => {
     let attempts = 0;
-    let retry: number | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
 
     function highlight() {
       const code = code_ref.current;

@@ -7,6 +7,7 @@ export type SiteLocation =
   | { readonly kind: "home" }
   | { readonly kind: "explore" }
   | { readonly kind: "manage" }
+  | { readonly kind: "api_keys" }
   | { readonly kind: "public_page"; readonly title: string };
 
 /** One breadcrumb step. The current (last) step carries no link. */
@@ -47,6 +48,13 @@ export class SiteLocationBreadcrumbPresenter
           steps: [
             { label: "Home", href: site_home_href },
             { label: "Manage pages" },
+          ],
+        };
+      case "api_keys":
+        return {
+          steps: [
+            { label: "Home", href: site_home_href },
+            { label: "API keys" },
           ],
         };
       case "public_page":
