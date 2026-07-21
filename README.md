@@ -93,6 +93,10 @@ Important boundaries:
   logical pages, endpoint claims, and owner/public projections.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
+- `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
+  browser-authenticated owners manage scoped, optionally expiring keys, bearers
+  are returned once and stored only as hashes, and bearer-authenticated
+  revoke-all is the single key operation an API key may perform on itself.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,
@@ -107,8 +111,9 @@ reports a capacity error above eight references because of its native atomic
 check budget, while the memory implementation accepts larger request-bounded
 sets.
 
-See [the project specification](docs/specification/README.md) and
-[the page API contract](docs/api/pages.md).
+See [the project specification](docs/specification/README.md),
+[the page API contract](docs/api/pages.md), and
+[the API-key contract](docs/api/api-keys.md).
 
 ## Local development
 

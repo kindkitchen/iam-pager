@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-22
+
+- Implemented the owner API-key lifecycle as a new `lib/api-key/` sibling
+  module: interface-backed model, service, memory repository, and HTTP adapter
+  with thin Fresh routes at `/api/api-keys`. Browser-authenticated owners
+  create, list, inspect, update, and revoke scoped keys with one-time bearers,
+  strict bounds, CSRF, and strong ETags; bearer-authenticated revoke-all with
+  the `delete` permission is the only key operation an API key can perform.
+  Documented the wire contract in `docs/api/api-keys.md`.
+
 ## 2026-07-21
 
 - Added the `api-keys` specification-first implementation task: browser owners

@@ -20,6 +20,16 @@ import {
   parse_google_auth_config,
   SiteAuthenticationCallbackFailurePresenter,
 } from "./auth/mod.ts";
+import {
+  type ApiKeyBearerResolver,
+  ApiKeyHttpAdapter,
+  type ApiKeyHttpHandler,
+  type ApiKeyManager,
+  type ApiKeyRepository,
+  ApiKeyService,
+  CryptoSecretGenerator,
+  MemoryApiKeyRepository,
+} from "./api-key/mod.ts";
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
@@ -115,6 +125,9 @@ export interface AppServices {
   namespaces_http: NamespaceHttpHandler;
   namespace_panel: NamespacePanelPresenter;
   page_management_panel: PageManagementPanelPresenter;
+  api_key_repository: ApiKeyRepository;
+  api_keys: ApiKeyManager & ApiKeyBearerResolver;
+  api_keys_http: ApiKeyHttpHandler;
   session: SessionManager;
   session_transport: SessionTransport;
   request_context: RequestContextHandler;
@@ -134,6 +147,8 @@ export interface AppServiceOptions {
   readonly page_repository?: PageAggregateRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
+  /** API-key persistence stays behind the repository interface. */
+  readonly api_key_repository?: ApiKeyRepository;
   /** Provider implementations are supplied at the composition boundary. */
   readonly authentication_strategies?: readonly AuthenticationStrategy[];
   /** Selects static or explicitly allowlisted request-derived callbacks. */
@@ -205,6 +220,15 @@ export function create_app_services(
     pages,
     namespaces,
   });
+  const api_key_repository = options.api_key_repository ??
+    new MemoryApiKeyRepository();
+  const api_keys = new ApiKeyService({
+    repository: api_key_repository,
+    clock,
+    id_generator: new CryptoIdGenerator(),
+    secret_generator: new CryptoSecretGenerator(),
+  });
+  const api_keys_http = new ApiKeyHttpAdapter({ api_keys });
   const session_repository = options.session_repository ??
     new MemorySessionRepository();
   const session = new SessionService({
@@ -256,6 +280,9 @@ export function create_app_services(
     namespaces_http,
     namespace_panel,
     page_management_panel,
+    api_key_repository,
+    api_keys,
+    api_keys_http,
     session,
     session_transport,
     request_context,
