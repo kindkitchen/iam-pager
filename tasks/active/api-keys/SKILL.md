@@ -15,8 +15,10 @@ Browser owners manage keys (CSRF + strong If-Match); the one-time
 single key-accessible operation ([[004.log]]). The web projection is live at
 `/site/api-keys`: presenter and request builders in
 `lib/ui/api-key-panel.ts`, island with generate/copy-once/edit/revoke/
-revoke-all UX ([[005.log]]).
+revoke-all UX ([[005.log]]). Durable persistence is done: shared repository
+conformance suite, `DenoKvApiKeyRepository` with owner-generation revoke-all,
+and the `IAM_PAGER_API_KEY_STORAGE_BACKEND` factory inheriting durable
+ownership ([[006.log]]).
 
-Next from [[003.plan]]: link 1 specification documents, link 3 Deno KV
-repository + conformance + storage factories, link 5 API principal resolver
-over page/namespace operations, link 7 closure.
+Next from [[003.plan]]: link 1 specification documents, link 5 API principal
+resolver over page/namespace operations, link 7 closure.

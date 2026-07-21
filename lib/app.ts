@@ -91,12 +91,15 @@ import {
   RequestContextMiddleware,
 } from "./request-context.ts";
 import {
+  type ApiKeyRepositoryFactory,
+  DefaultApiKeyRepositoryFactory,
   DefaultOwnershipRepositoryFactory,
   DefaultPageAggregateRepositoryFactory,
   DefaultSessionRepositoryFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
   type PageAggregateRepositoryFactory,
+  parse_api_key_storage_config,
   parse_ownership_storage_config,
   parse_page_storage_config,
   parse_session_storage_config,
@@ -170,6 +173,8 @@ export interface ConfiguredAppServiceOptions {
   readonly session_repository_factory?: SessionRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
   readonly page_repository_factory?: PageAggregateRepositoryFactory;
+  /** Override only at an outer composition or test boundary. */
+  readonly api_key_repository_factory?: ApiKeyRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -315,6 +320,10 @@ export async function create_configured_app_services(
     environment,
     ownership_storage_config,
   );
+  const api_key_storage_config = parse_api_key_storage_config(
+    environment,
+    ownership_storage_config,
+  );
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
   const ownership_repositories = await (
@@ -330,10 +339,14 @@ export async function create_configured_app_services(
     options.page_repository_factory ??
       new DefaultPageAggregateRepositoryFactory()
   ).create(page_storage_config);
+  const api_key_repository = await (
+    options.api_key_repository_factory ?? new DefaultApiKeyRepositoryFactory()
+  ).create(api_key_storage_config);
   return create_app_services({
     ownership_repositories,
     session_repository,
     page_repository,
+    api_key_repository,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),

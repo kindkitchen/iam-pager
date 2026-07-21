@@ -1,5 +1,6 @@
 export * from "./ownership-storage.ts";
 export * from "./session-storage.ts";
+export * from "./api-key-storage.ts";
 export * from "./page-storage.ts";
 export * from "./kv-gateway.ts";
 export * from "./kv-toolbox-gateway.ts";

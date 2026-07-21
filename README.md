@@ -156,6 +156,7 @@ set:
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
+IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv
 ```
 
 For a self-hosted database, also set the shared path:
@@ -165,8 +166,8 @@ IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/iam-pager.kv
 ```
 
 On Deno Deploy, leave the path unset to use the attached database. Durable
-sessions and pages require durable ownership so a session or protected page
-cannot outlive its user and namespace claim.
+sessions, pages, and API keys require durable ownership so a session, protected
+page, or API key cannot outlive its user and namespace claim.
 
 ## Authentication configuration
 

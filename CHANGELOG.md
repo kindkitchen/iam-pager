@@ -2,6 +2,14 @@
 
 ## 2026-07-22
 
+- Added durable API-key persistence: a strict `DenoKvApiKeyRepository` with
+  atomic create/update/revoke commits and an owner-generation bump for
+  linearizable, unbounded revoke-all; one shared repository conformance suite
+  now runs against both the memory reference and Deno KV. Durable keys are
+  selected with `IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv` through a new
+  storage factory that inherits the ownership database, so key owner IDs cannot
+  outlive durable identities. Malformed stored records fail closed.
+
 - Added the owner API-key management page at `/site/api-keys`: generate keys
   with permission and expiry controls, one-time bearer reveal with a copy
   shortcut, inline edit, revision-bound revoke, and confirmed revoke-all. The
