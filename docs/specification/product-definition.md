@@ -1,86 +1,66 @@
 # Product definition
 
-## PD-IDEA — Idea
+## PD-GOAL — Goal
 
-`iam-pager` is a content-sharing site built around deterministic URLs. A person
-associates content with a namespace and, optionally, a page name. A visitor who
-opens that URL receives the content directly rather than first entering the
-site.
+`iam-pager` is a content-sharing service built around deterministic URLs. A
+publisher associates supported content with a namespace and optional page name.
+A visitor opening that locator receives the content directly rather than first
+entering the site.
 
-The platform does not decide what a group of pages means or how they relate.
-That is left to the author. A page may contain HTML, text, an image, a PDF, or
-another supported format, and it may be displayed or downloaded as appropriate
-for that format.
+The platform does not define what pages mean or how several pages relate. A page
+may represent any author-chosen purpose within the supported content and safety
+rules.
 
-The app has two connected directions:
+## PD-DIRECTIONS — Product directions
 
-- sharing and exploring content;
-- managing content through an authenticated, profile-oriented site.
+The product has two connected surfaces:
 
-## PD-CORE — Core experience
+1. publish, resolve, share, and explore content through stable application and
+   HTTP behavior;
+2. manage namespaces and pages through an authenticated, profile-oriented site.
 
-A publisher chooses a namespace and optional page name, provides supported
-content, and receives a direct URL. A visitor can open that URL without going
-through the site UI. The site remains available for wrapped viewing, public
-exploration, and management. One logical page may expose related delivery
-endpoints for the same content; those endpoints do not become separate managed
-or explored pages.
+The site is one representation of the application. It must not become the source
+of publishing, access, management, or exploration rules.
 
-An authenticated creator can reserve a unique namespace and manage its default
-and named pages. Reservation protects those pages from other creators and gives
-the owner a stable place for create, update, rename, duplicate, access, and
-delete operations.
+## PD-GUEST — Guest publishing
 
-Even an unauthenticated guest may publish content. Guest publishing uses the
-same basic content and locator idea but has stricter limits and no namespace
-reservation. Content at a guest locator may be replaced by another guest or by
-an authenticated creator using the same namespace.
+Guest publishing is a constrained form of normal publishing, not the product's
+main purpose. A guest can publish a public trial page in an unreserved namespace
+but receives no reservation, discovery, durability, or overwrite guarantee.
+Another guest may replace that locator, and a creator may reserve the namespace
+and take it over.
 
-## PD-PDF — PDF page
+## PD-CREATOR — Creator control
 
-PDF is the first binary content type. One uploaded PDF content asset backs one
-logical page with at least two delivery behaviors:
+Google sign-in establishes an application user. A creator can reserve unique
+namespaces and control their default and named pages. Reservation prevents guest
+or cross-user mutation. Managed pages support create, inspect, update, access,
+tag, rename, duplicate, bulk access/delete, and deletion operations under exact
+revision checks.
 
-- one configured endpoint can provide browser-native inline viewing;
-- another configured endpoint can return the same bytes as a named attachment.
+## PD-PAGE — One logical page
 
-The publisher chooses each valid endpoint locator and its delivery behavior. A
-name such as `example.pdf` has no special product meaning. Delivery behavior
-belongs to an endpoint binding, not to a second physical copy of the PDF, a
-filename guess, or content-specific locator generation in the page service. The
-site embeds the canonical inline endpoint with the browser-native viewer and
-retains explicit Back, direct preview, attachment download, and unsupported-
-browser fallback links. PDF.js, generated thumbnails, text extraction, and
-generic raw-binary publication remain later choices.
+A logical page has one management and exploration identity even when one content
+asset is available at several locators. Every endpoint has an explicit delivery
+profile. Neither a filename nor a path suffix decides whether content is shown
+inline or downloaded.
 
-## PD-VISITORS — Visitors and exploration
+PDF demonstrates this model: the same uploaded bytes can back a browser-preview
+endpoint and an attachment endpoint without creating two managed pages.
 
-A visitor can:
+## PD-VISITOR — Visitor experience
 
-- open a known public page URL and receive its content directly;
-- inspect a public page inside a thin site wrapper;
-- continue to the raw content, the creator's default page, or the creator's
-  other public pages;
-- explore public pages by page name, author namespace, tags, and text content
-  when that content can reasonably be indexed as text.
+Visitors can open known public content directly, inspect it through a thin site
+wrapper, and browse public creator pages by namespace, page name, and tag.
+Private pages are available only to their creator's authorized session. Trial
+pages remain known-locator only.
 
-Private authenticated pages are available only to their creator's authorized
-session.
+## PD-SCOPE — Current boundary
 
-## PD-MVP — Initial boundary
+The current product supports first-party Markdown and PDF publication, direct
+delivery, namespace ownership, creator management, wrapped public views, and
+bounded public exploration.
 
-The first coherent app proves that supported content can be published and
-retrieved predictably through namespace-based URLs. It includes direct delivery,
-a basic publishing surface, clear public or private behavior, and enough site UI
-to inspect and manage pages.
-
-Guest publishing is a limited variation of the publishing flow, not the purpose
-of the product. Public exploration supports namespace and page-name browsing and
-search plus exact-tag filtering; text extraction remains later. Advanced
-management is API-accessible after basic create, update, and delete behavior,
-and the creator site now projects its filters, tags, rename, duplicate, and
-explicit per-page-result bulk controls.
-
-External storage providers are later scope. They are valuable because page
-formats and sizes vary, but first-party content must establish the page and
-locator behavior first.
+External storage, generic file hosting, full-text indexing, quotas, rate limits,
+guest expiry, account deletion, and permanent-storage guarantees are not part of
+the current boundary.

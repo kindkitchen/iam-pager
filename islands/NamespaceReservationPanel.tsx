@@ -26,7 +26,7 @@ export interface NamespaceReservationPanelProps {
   initial_reservations: readonly NamespacePanelReservation[];
 }
 
-/** Creator panel: owned namespaces plus the reserve form (DS-PROTECT). */
+/** Creator panel for owned namespaces and reservation. */
 export default function NamespaceReservationPanel(
   props: NamespaceReservationPanelProps,
 ) {

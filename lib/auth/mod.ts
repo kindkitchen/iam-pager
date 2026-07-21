@@ -50,7 +50,6 @@ export {
 } from "./http.ts";
 export {
   compose_google_gauth,
-  compose_google_gauth_service,
   type EnvironmentSource,
   GOOGLE_AUTH_CLIENT_ID_ENV,
   GOOGLE_AUTH_CLIENT_SECRET_ENV,

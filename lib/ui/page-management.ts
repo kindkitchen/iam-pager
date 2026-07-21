@@ -77,7 +77,7 @@ export interface CreatorPageManagementPresenterOptions {
  * Keeps session decisions and managed listing outside UI components: guests
  * get a hidden panel, creators get their first page of rows plus the trusted
  * CSRF token, and the island continues through the same `/api/pages`
- * contracts (DS-PROTECT).
+ * contracts.
  */
 export class CreatorPageManagementPresenter
   implements PageManagementPanelPresenter {

@@ -571,25 +571,3 @@ Deno.test("ambiguous native manifest outcomes retain payloads that may be visibl
     kv.close();
   }
 });
-
-Deno.test("KV content assets remain isolated from the legacy raw page keyspace", async () => {
-  const kv = await Deno.openKv(":memory:");
-  try {
-    const legacy_key: Deno.KvKey = [
-      "iam-pager",
-      "pages",
-      "by-id",
-      "legacy-page",
-    ];
-    const legacy_value = { schema_version: 1, marker: "legacy" };
-    await kv.set(legacy_key, legacy_value);
-
-    const created = await repository(kv, ["isolated-payload"])
-      .create_content_asset(make_asset("isolated", { marker: "new" }));
-    assert(created.ok);
-    assertEquals((await kv.get(legacy_key)).value, legacy_value);
-    assertEquals(await stored_payload_ids(kv), new Set(["isolated-payload"]));
-  } finally {
-    kv.close();
-  }
-});

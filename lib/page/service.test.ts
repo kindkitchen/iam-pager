@@ -8,18 +8,19 @@ import {
 import { type MdPageData, MdPageHandler } from "../content/md-page.ts";
 import { pdf_media_type, PdfHandler } from "../content/pdf.ts";
 import { LocatorEngine } from "../locator/engine.ts";
+import type { Locator } from "../locator/model.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
 import type { RandomNameGenerator } from "../random-name.ts";
+import type { PageAggregate } from "./aggregate.ts";
 import {
   max_bulk_managed_pages,
   type PageClock,
   type PageIdGenerator,
-  type PageRepository,
 } from "./interfaces.ts";
-import { MemoryPageRepository } from "./memory-repository.ts";
+import { MemoryPageAggregateRepository } from "./memory-aggregate-repository.ts";
+import type { PageAccess, PageContent, PageTag } from "./model.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
-import { make_page_content } from "./repository-conformance.ts";
 import { PageService } from "./service.ts";
 
 const guest = { kind: "guest" } as const;
@@ -85,15 +86,127 @@ class SequenceClock implements PageClock {
   }
 }
 
+type MaterializedTestPage = PageAggregate & { readonly content: PageContent };
+
+/** Test-only aggregate seeding and materialization; production uses PageService. */
+class TestPageAggregateRepository extends MemoryPageAggregateRepository {
+  #next_asset_id = 0;
+
+  async find_by_id(page_id: string): Promise<MaterializedTestPage | null> {
+    const page = await this.find_page_aggregate_by_id(page_id);
+    return page === null ? null : await this.#materialize(page);
+  }
+
+  async find_by_locator(
+    locator: Locator,
+  ): Promise<MaterializedTestPage | null> {
+    const resolved = await this.resolve_page_endpoint(locator);
+    return resolved === null ? null : await this.#materialize(resolved.page);
+  }
+
+  async put_trial(request: {
+    page_id: string;
+    locator: Locator;
+    content: PageContent;
+    now: Date;
+  }) {
+    const content_asset_id = await this.#store_content(
+      request.content,
+      request.now,
+    );
+    return await this.put_trial_page_aggregate({
+      page_id: request.page_id,
+      endpoint_set: {
+        canonical: {
+          locator: request.locator,
+          delivery_profile: "inline",
+        },
+        alternates: [],
+      },
+      content_asset_id,
+      now: request.now,
+    });
+  }
+
+  async create_managed(request: {
+    page_id: string;
+    locator: Locator;
+    owner_user_id: string;
+    access: PageAccess;
+    tags?: readonly PageTag[];
+    content: PageContent;
+    now: Date;
+  }) {
+    const content_asset_id = await this.#store_content(
+      request.content,
+      request.now,
+    );
+    return await this.create_managed_page_aggregate({
+      page_id: request.page_id,
+      endpoint_set: {
+        canonical: {
+          locator: request.locator,
+          delivery_profile: "inline",
+        },
+        alternates: [],
+      },
+      owner_user_id: request.owner_user_id,
+      access: request.access,
+      tags: request.tags,
+      content_asset_id,
+      now: request.now,
+    });
+  }
+
+  async #store_content(
+    content: PageContent,
+    created_at: Date,
+  ): Promise<string> {
+    const content_asset_id = `test-asset-${++this.#next_asset_id}`;
+    const created = await this.create_content_asset({
+      content_asset_id,
+      content_type: content.content_type,
+      data: content.data,
+      meta: content.meta,
+      created_at,
+    });
+    if (!created.ok) throw new Error("test asset identity collided");
+    return content_asset_id;
+  }
+
+  async #materialize(page: PageAggregate): Promise<MaterializedTestPage> {
+    const asset = await this.find_content_asset_by_id(page.content_asset_id);
+    if (asset === null) throw new Error("test page asset is missing");
+    return {
+      ...structuredClone(page),
+      content: {
+        content_type: asset.content_type,
+        data: structuredClone(asset.data),
+        meta: structuredClone(asset.meta),
+      },
+    };
+  }
+}
+
+function make_page_content(marker: string): PageContent {
+  return {
+    content_type: "md-page",
+    data: { md: marker, html: `<p>${marker}</p>` },
+    meta: {
+      media_type: "text/html; charset=utf-8",
+      size_bytes: marker.length,
+    },
+  };
+}
+
 async function make_fixture(options: {
   ids?: string[];
   dates?: Date[];
   max_page_id_attempts?: number;
   names?: string[];
   max_page_name_attempts?: number;
-  legacy_repository?: boolean;
 } = {}) {
-  const repository = new MemoryPageRepository();
+  const repository = new TestPageAggregateRepository();
   const namespaces = new MemoryNamespaceRepository();
   await namespaces.reserve({ namespace: "Mine", owner_user_id: owner.user_id });
   await namespaces.reserve({
@@ -105,9 +218,7 @@ async function make_fixture(options: {
       strategies: [new PathSlugStrategy()],
       forbidden_namespaces: ["site", "api", "auth"],
     }),
-    repository: options.legacy_repository
-      ? legacy_repository_only(repository)
-      : repository,
+    repository,
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler(), new PdfHandler()],
     page_id_generator: new SequenceIds(options.ids),
@@ -117,24 +228,6 @@ async function make_fixture(options: {
     max_page_name_attempts: options.max_page_name_attempts,
   });
   return { service, repository, namespaces };
-}
-
-function legacy_repository_only(
-  repository: MemoryPageRepository,
-): PageRepository {
-  return {
-    find_by_locator: repository.find_by_locator.bind(repository),
-    find_by_id: repository.find_by_id.bind(repository),
-    list_managed: repository.list_managed.bind(repository),
-    list_public: repository.list_public.bind(repository),
-    explore_public: repository.explore_public.bind(repository),
-    put_trial: repository.put_trial.bind(repository),
-    create_managed: repository.create_managed.bind(repository),
-    replace_managed: repository.replace_managed.bind(repository),
-    rename_managed: repository.rename_managed.bind(repository),
-    duplicate_managed: repository.duplicate_managed.bind(repository),
-    delete_managed: repository.delete_managed.bind(repository),
-  };
 }
 
 function trial_request(namespace = "free", md = "# Trial") {
@@ -610,60 +703,6 @@ Deno.test("PageService trial endpoint commands reject cross-page conflicts atomi
   );
   assert(
     (await service.deliver({ namespace: "Free", page_name: "two" }, guest)).ok,
-  );
-});
-
-Deno.test("PageService legacy persistence rejects unsupported endpoint sets without loss", async () => {
-  const { service } = await make_fixture({ legacy_repository: true });
-  assertEquals(
-    await service.create_managed({
-      actor: owner,
-      endpoint_set: {
-        canonical: {
-          locator: { namespace: "Mine", page_name: "preview" },
-          delivery_profile: "inline",
-        },
-        alternates: [{
-          locator: { namespace: "Mine", page_name: "download" },
-          delivery_profile: "attachment",
-        }],
-      },
-      access: "private",
-      content: {
-        content_type: "pdf",
-        input: { bytes: pdf_bytes(), filename: "legacy.pdf" },
-      },
-    }),
-    { ok: false, reason: "endpoint_set_unsupported" },
-  );
-});
-
-Deno.test("PageService retains the raw repository compatibility path", async () => {
-  const { service } = await make_fixture({
-    ids: ["legacy-managed"],
-    dates: [t1, t2],
-    legacy_repository: true,
-  });
-  const created = await service.create_managed(
-    managed_request("legacy", "public"),
-  );
-  assert(created.ok);
-  const updated = await service.update_managed({
-    actor: owner,
-    page_id: created.page.page_id,
-    expected_revision: 1,
-    patch: { content: { content_type: "md-page", input: { md: "# Next" } } },
-  });
-  assert(updated.ok);
-  assertEquals(updated.page.revision, 2);
-  const listed = await service.list_managed({ actor: owner, limit: 10 });
-  assert(listed.ok);
-  assertEquals(listed.pages.map((page) => page.page_id), ["legacy-managed"]);
-  assert(
-    (await service.deliver(
-      { namespace: "Mine", page_name: "legacy" },
-      guest,
-    )).ok,
   );
 });
 
@@ -1813,7 +1852,7 @@ Deno.test("PageService retries generated id collisions and reports bounded exhau
 });
 
 Deno.test("PageService rejects invalid dependencies and generated values", async () => {
-  const repository = new MemoryPageRepository();
+  const repository = new TestPageAggregateRepository();
   const namespaces = new MemoryNamespaceRepository();
   const base = {
     engine: new LocatorEngine({ strategies: [new PathSlugStrategy()] }),

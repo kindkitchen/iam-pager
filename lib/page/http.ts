@@ -1043,12 +1043,6 @@ function create_failure_response(
         result.reason,
         "page endpoints cannot be replaced",
       );
-    case "endpoint_set_unsupported":
-      return error_response(
-        503,
-        result.reason,
-        "configured page storage does not support endpoint sets",
-      );
     case "unknown_content_type":
       return error_response(
         422,
@@ -1134,12 +1128,6 @@ function update_failure_response(
         409,
         result.reason,
         "a managed page already claims an endpoint",
-      );
-    case "endpoint_set_unsupported":
-      return error_response(
-        503,
-        result.reason,
-        "configured page storage does not support endpoint sets",
       );
     case "unknown_content_type":
       return error_response(
@@ -1238,12 +1226,6 @@ function duplicate_failure_response(
         409,
         result.reason,
         "a managed page already claims an endpoint",
-      );
-    case "endpoint_set_unsupported":
-      return error_response(
-        503,
-        result.reason,
-        "configured page storage does not support endpoint sets",
       );
     case "page_name_generation_exhausted":
     case "page_id_generation_exhausted":

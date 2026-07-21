@@ -1,130 +1,73 @@
 # Experiences and scope
 
-## EX-DIRECT — Visitor opens a known page
+## EX-DIRECT — Open known content
 
-A visitor can open a namespace URL or a namespace-and-page URL directly. If a
-public page exists, the response contains the current content with the correct
-content type and download or display behavior.
+A visitor can open a valid default or named locator directly. Eligible content
+is returned with intentional status, media type, length, cache, isolation, and
+disposition headers and without the site's navigation shell.
 
-The direct response does not include the site's navigation or management UI. A
-missing or invalid page produces a clear not-found response that may link back
-to the site; it does not silently return the home page as if the content had
-been found.
+An invalid, absent, private, or unauthorized locator returns a real,
+non-disclosing missing response. Platform routes are never consumed as page
+locators.
 
-A private page is not disclosed to a visitor who only knows its URL and behaves
-as the missing page described above.
+## EX-WRAPPED — View through the site
 
-## EX-VIEW — Visitor uses the site view
+`/site/<locator>` presents an eligible page inside a thin platform wrapper. It
+provides content-type-appropriate preview or fallback, direct endpoint links,
+the creator's public default page when present, and a bounded list of other
+public pages in that namespace.
 
-A public page can also be opened inside a thin site wrapper. From there a
-visitor can:
+Creator HTML is confined to a sandboxed, no-referrer frame and never enters the
+platform DOM. PDF uses the browser's native inline viewer with explicit preview,
+download, Back, and unsupported-browser fallback links. Trial pages can be
+wrapped by known locator but never expose creator listings.
 
-- view or preview the content when the format permits it;
-- open the direct content response;
-- open the creator's default public page;
-- browse the creator's other public pages.
+## EX-EXPLORE — Find public creator pages
 
-Creator content remains visually and technically distinguishable from the
-platform's own controls: `/site/<locator>` labels and confines supported HTML in
-a sandboxed, no-referrer frame, while the wrapper alone owns navigation and
-related-page links. Unsupported content receives a metadata fallback and its
-direct-content link. Trial pages remain viewable by known locator but expose no
-creator listing; private and missing pages receive the same real 404.
+The site browses public managed pages and applies optional case-insensitive
+namespace/page-name substrings plus one exact canonical tag with AND semantics.
+Results are deterministic, bounded, and continued by an opaque cursor tied to
+the complete query.
 
-## EX-EXPLORE — Explorer finds public pages
+Private and trial pages are excluded by the page capability and repository, not
+by components. A public-to-private change disappears from the next query.
+Full-text content search and relevance ranking remain outside current scope.
 
-The site exposes a bounded browse list of public creator-backed pages. Its form
-narrows by a case-insensitive namespace substring, a page-name substring, one
-exact canonical tag, or an AND-combination. Results preserve the creator's
-locator casing and open the thin site view, from which direct content, the
-creator's default page when present, and other public pages remain available.
-Opaque continuation keeps the active search fields attached to the next result
-page.
+## EX-PUBLISH — Publish content
 
-Private pages and guest trials are excluded by the page capability and both
-storage implementations, not by the web component. A current public-to-private
-change removes a page from subsequent browse and search results immediately.
-Guest pages remain reachable only by known direct or site-view locators.
+The site and API accept the same locator, content, access, and endpoint intent
+through shared application services. Success returns direct links; failures are
+bounded and typed.
 
-The site form exposes tag filtering and matching rows show canonical tags.
-Text-content extraction and indexing remain later scope.
+A guest can create or replace only a public untagged trial in an unreserved
+namespace. An authenticated creator must own the namespace and send the current
+session CSRF token.
 
-## EX-PUBLISH — Publisher creates a page
+Markdown uses strict JSON. PDF uses exactly one bounded JSON metadata part and
+one bounded PDF file part. PDF endpoint intent includes a canonical inline
+binding and at least one attachment alternate. The publisher chooses every
+locator.
 
-A publishing flow accepts a namespace, an optional page name, supported content,
-and the required delivery metadata. It returns the resulting direct URL and a
-clear success or failure outcome. The same page behavior should be available
-through the site and a programmatic API.
+## EX-MANAGE — Manage creator pages
 
-Even a guest may publish, but with stricter amount, size, frequency, retention,
-and namespace limitations. A guest does not reserve the namespace, so content
-there may be replaced by another guest or by an authenticated creator using the
-same namespace. Guest pages do not enter site search or browsing; sharing the
-direct URL is the only way to reach them.
+A signed-in creator can reserve namespaces and then:
 
-## EX-PDF — Publisher creates and shares a PDF page
+- create default or named Markdown/PDF pages;
+- list and filter owned pages;
+- inspect bounded editable source or metadata;
+- replace content, access, tags, or a complete endpoint set;
+- rename within the namespace;
+- duplicate into fresh endpoints;
+- delete one page;
+- bulk-change access or delete explicit selections.
 
-The implemented PDF HTTP flow accepts one strictly bounded multipart PDF file
-and creates one logical page. The secondary site publishing form now exposes a
-Markdown/PDF choice, bounded filename/size feedback, explicit canonical and
-alternate locator/profile controls, and typed failures that keep the draft and
-selected file intact. Creator management now shows profile-derived preview and
-download links, bounded PDF metadata, and exact-revision replacement without a
-silent stale retry. The wrapped public view embeds the canonical inline endpoint
-with browser-native PDF support while keeping Back, direct-preview, download,
-and unsupported-browser fallback links available outside the viewer. A
-configured direct endpoint can return `application/pdf` for browser-native
-inline viewing. Another configured endpoint can return the same content asset
-with attachment disposition and a safe filename. The publisher chooses both
-locators; a `.pdf` suffix is only an ordinary possible name. The embedded native
-preview always retains explicit preview and download links and a fallback when
-the browser cannot display PDF inline.
+Every mutation uses server-derived identity, namespace authority, CSRF, and an
+exact page revision. Stale UI operations refresh affected rows but never retry a
+mutation silently.
 
-The creator manages one page rather than two copies. Access changes apply to
-both endpoints, renaming moves the complete endpoint set or fails without a
-partial move, content replacement changes what both endpoints deliver, and
-deletion removes both from resolution. Public exploration lists only the
-canonical page.
+## EX-PDF — Share one PDF several ways
 
-## EX-MANAGE — Authenticated creator manages pages
-
-A creator authenticates and selects an available unique namespace. Reserving it
-prevents guests and other creators from replacing pages in that namespace. Guest
-content already using the namespace does not prevent reservation.
-
-Within a reserved namespace, the creator can:
-
-- create, inspect, change, and delete a page;
-- change content and page name;
-- choose public or private access;
-- configure a default page for the namespace;
-- duplicate a page with a generated non-conflicting name;
-- search and filter managed pages by name, dates, views, and tags where those
-  fields are available;
-- select pages for bulk deletion or access changes;
-
-A name conflict within the reserved namespace is reported instead of replacing
-an authenticated page. The HTTP-independent core provides individual create,
-list, inspect, content/access/tag update, delete, revision-bound same-namespace
-rename, and generated-name duplicate operations. Tags are normalized into a
-bounded canonical set; managed lists can AND-combine page-name substring,
-access, and tag filters, and duplicate copies the selected source revision
-including tags to a fresh ID. Bounded raw bulk commands accept 1-100 distinct,
-explicit page/revision selections for one access target or deletion, then return
-an ordered success, stale, or non-disclosing missing result for each item;
-accepted items are independent rather than transactionally all-or-nothing.
-Memory and Deno KV enforce each mutation atomically. The API exposes
-create/update tags, managed filters, rename, duplicate, and both bulk commands
-through the same strict session/CSRF/revision boundary as earlier management.
-The site management panel projects those contracts with filter-bound
-continuation, content/tag editing, same-namespace rename, generated duplication,
-and an explicit selection of at most 100 visible current revisions for bulk
-access or deletion. It shows one outcome per selected page and refreshes
-revision conflicts without silently overwriting concurrent work.
-
-## EX-EXTERNAL — Creator connects external storage later
-
-A later version can let an authenticated creator connect a provider such as a
-GitHub repository or Google Drive and associate provider content with a page.
-The page URL should continue to behave like an `iam-pager` page even though the
-content is stored elsewhere.
+One PDF page can bind the same exact asset to configured inline and attachment
+locators. Management and exploration still show one page. Access changes apply
+to every endpoint, replacement changes all endpoint responses coherently, and
+deletion removes every locator.

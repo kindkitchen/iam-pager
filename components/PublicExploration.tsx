@@ -6,7 +6,7 @@ export interface PublicExplorationProps {
   readonly exploration: PublicExploration;
 }
 
-/** Thin site projection over the HTTP-independent DS-EXPLORE model. */
+/** Thin site projection over the HTTP-independent exploration model. */
 export function PublicExplorationPanel(
   { exploration }: PublicExplorationProps,
 ) {

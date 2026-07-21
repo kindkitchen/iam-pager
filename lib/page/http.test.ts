@@ -6,7 +6,7 @@ import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
 import type { AuthenticatedSession, Session } from "../session/model.ts";
 import type { PageClock, PageIdGenerator } from "./interfaces.ts";
-import { MemoryPageRepository } from "./memory-repository.ts";
+import { MemoryPageAggregateRepository } from "./memory-aggregate-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "./namespace-authority.ts";
 import {
   deliver_page_locator_path,
@@ -82,7 +82,7 @@ async function make_fixture() {
   const namespaces = new MemoryNamespaceRepository();
   await namespaces.reserve({ namespace: "Mine", owner_user_id: "owner-1" });
   await namespaces.reserve({ namespace: "Other", owner_user_id: "other-1" });
-  const repository = new MemoryPageRepository();
+  const repository = new MemoryPageAggregateRepository();
   const engine = new LocatorEngine({
     strategies: [new PathSlugStrategy()],
     forbidden_namespaces: ["site", "api", "auth"],
@@ -287,7 +287,10 @@ Deno.test("page HTTP prevents stale creator intent from becoming a trial", async
   );
   assertEquals(stale.status, 401);
   assertEquals((await stale.json()).error, "not_authenticated");
-  assertEquals(await repository.find_by_locator({ namespace: "Free" }), null);
+  assertEquals(
+    await repository.resolve_page_endpoint({ namespace: "Free" }),
+    null,
+  );
 });
 
 Deno.test("page HTTP managed create requires CSRF and presents management identity", async () => {
@@ -1259,7 +1262,7 @@ Deno.test("page HTTP rejects malformed PDF multipart before mutation", async () 
     assertEquals((await response.json()).error, test_case.error);
   }
   assertEquals(
-    await repository.find_by_locator({
+    await repository.resolve_page_endpoint({
       namespace: "Mine",
       page_name: "report-preview",
     }),

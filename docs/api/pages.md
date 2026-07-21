@@ -1,123 +1,93 @@
-# Page management API
+# Page API
 
-> Implementation status: this contract is composed into Fresh collection, item,
-> action, and bulk routes and backed by the selected page repository.
->
-> PDF publication and revision-bound replacement use strict bounded
-> `multipart/form-data` on the existing collection and item endpoints. Binary
-> bytes never enter JSON or application transport types. The publisher supplies
-> the complete same-namespace endpoint locator/profile set; HTTP never creates a
-> suffix or infers delivery behavior. PDF requires a canonical `inline` binding
-> and at least one `attachment` alternate. The same immutable asset is served at
-> every binding, with browser range support and endpoint-selected disposition.
-> PDF management inspection exposes only bounded filename/media-type/size/
-> version/replace metadata, never complete bytes. Explicit `deno-kv-v2` and
-> process-local memory support the full endpoint aggregate; retained `deno-kv`
-> fallback rejects non-compatible endpoint sets without truncating them. The
-> existing JSON `md-page` contract remains compatible.
+The API and site use the same HTTP-independent page service. All API responses
+use `Cache-Control: no-store`. JSON errors have this shape:
 
-All responses from this API use `Cache-Control: no-store`. JSON errors have the
-shape `{ "ok": false, "error": "...", "detail": "..." }`. Authentication is the
-existing browser session; external bearer/API credentials are not supported.
-Authenticated mutations require the exact session synchronizer token in
-`x-csrf-token`.
+```json
+{ "ok": false, "error": "stable_code", "detail": "bounded safe detail" }
+```
 
-Request JSON objects are strict. Unknown fields, missing required fields, arrays
-where objects are required, unsupported media types, malformed JSON, and bodies
-over 96 KiB are rejected before application services run. Owner and session IDs
-are never accepted or returned.
+Authentication uses the browser session. There are no external API bearer
+credentials. Authenticated mutations require the exact session synchronizer
+token in `x-csrf-token`; owner/user IDs are never accepted from clients.
 
-Managed page tags are optional arrays of at most ten strings. Input is trimmed
-and lowercased, duplicates collapse, and output is a sorted unique set. Each tag
-must be 1–32 ASCII characters, start and end with an alphanumeric character, and
-contain only alphanumerics, `-`, or `_`. Trial pages do not accept tags. Every
-page summary includes `tags`; trials always return an empty array.
+JSON objects and query strings are strict and bounded. Unknown fields, duplicate
+query fields, malformed input, unsupported media, and oversized requests fail
+before mutation. Ordinary JSON bodies are limited to 96 KiB.
 
-Every page summary also includes safe application-relative endpoint links:
+## Page representations
+
+Managed summaries contain:
 
 ```json
 {
+  "page_id": "opaque-id",
+  "locator": { "namespace": "Alice", "page_name": "notes" },
+  "path": "/Alice/notes",
   "endpoints": {
     "canonical": {
-      "locator": { "namespace": "Alice", "page_name": "notes/today" },
-      "path": "/Alice/notes/today",
+      "locator": { "namespace": "Alice", "page_name": "notes" },
+      "path": "/Alice/notes",
       "delivery_profile": "inline"
     },
-    "alternates": [
-      {
-        "locator": { "namespace": "Alice", "page_name": "notes/download" },
-        "path": "/Alice/notes/download",
-        "delivery_profile": "attachment"
-      }
-    ]
-  }
+    "alternates": []
+  },
+  "access": "private",
+  "content_type": "md-page",
+  "size_bytes": 1234,
+  "tags": ["notes"],
+  "created_at": "2026-07-19T12:00:00.000Z",
+  "updated_at": "2026-07-19T12:00:00.000Z",
+  "revision": 1,
+  "etag": "\"page-opaque-id-r1\"",
+  "management_url": "/api/pages/opaque-id"
 }
 ```
 
-The top-level summary `locator` and `path` remain canonical compatibility
-fields. `endpoints.canonical` is singular; alternates retain deterministic
-locator order. Paths are formatted by the locator boundary and must be local
-absolute paths, never caller-supplied URLs. The profile, not a filename suffix
-or content filename hint, selects inline versus attachment direct delivery.
-Current HTTP `md-page` commands produce one canonical inline link and no
-alternates. Transport-independent callers may instead supply complete endpoint
-intent.
+`locator` and `path` identify the canonical endpoint. `endpoints` is the
+complete one-to-eight-binding set in deterministic order. Paths are
+application-relative values formatted by the locator boundary. Tags are
+lowercase sorted unique values; trial pages have none.
 
-## Create or replace — `POST /api/pages`
+List output omits editable content. Inspection adds handler-approved input:
+Markdown source/CSS or bounded PDF filename, media type, size, version, and
+replaceability. PDF bytes and storage IDs are never returned.
+
+## Create — `POST /api/pages`
+
+### Markdown JSON
 
 ```json
 {
-  "locator": {
-    "namespace": "Alice",
-    "page_name": "notes/today"
-  },
+  "locator": { "namespace": "Alice", "page_name": "notes" },
   "access": "private",
   "tags": ["notes", "work"],
   "content": {
     "content_type": "md-page",
-    "input": {
-      "md": "# Notes",
-      "css": "body { color: navy; }"
-    }
+    "input": { "md": "# Notes", "css": "body { color: navy; }" }
   }
 }
 ```
 
-`page_name` and `tags` are optional; all other shown fields are required. A
-guest may create or replace only a public, untagged trial page in an unreserved
-namespace. Trial creation returns `201`; trial replacement returns `200`;
-`Location` is the direct path.
+`page_name` and `tags` are optional. A guest may create or replace only a
+public, untagged trial in an unreserved namespace. An authenticated request
+always attempts managed creation, requires CSRF, and must target an owned
+namespace; it never falls back to trial publication.
 
-An authenticated session always attempts managed creation and must send
-`x-csrf-token`. Its namespace must already be owned by that creator. Creation
-can atomically replace a trial at the locator but conflicts with another managed
-page. It returns `201`, a management `Location`, and an `ETag`. A request that
-still sends a creator CSRF header after its session has become guest returns
-`401`; it never falls back to trial publishing.
+Create returns `201`; trial replacement returns `200`. Success includes
+`outcome`, page summary, direct `path`/absolute `url`, `Location`, and, for a
+managed page, `ETag` plus `management_url`.
 
-Success includes `outcome`, an owner-safe `page` summary, exact direct `path`
-and absolute `url`. Managed success also includes `management_url`.
+### PDF multipart
 
-Relevant failures are `400` invalid shape/JSON, `401` stale creator intent,
-`403` invalid CSRF/private trial/forbidden authority, `409` unreserved creator
-namespace or existing managed page, `413` oversized, `415` unsupported media,
-`422` invalid locator/access/tags/content, and `503` exhausted server ID
-generation.
+PDF create uses `multipart/form-data` with an unquoted boundary of at most 70
+permitted characters. The stream-enforced body limit is 16 MiB plus 64 KiB and
+contains exactly two file parts:
 
-### PDF create — multipart `POST /api/pages`
+1. `metadata`, filename `metadata.json`, `application/json`, at most 16 KiB;
+2. `file`, portable non-empty filename, `application/pdf`, at most 16 MiB.
 
-A PDF request has `Content-Type: multipart/form-data` with one unquoted boundary
-of at most 70 permitted characters. Its complete body is limited to 16 MiB plus
-64 KiB and is read with a stream-enforced bound; `Content-Length` is only an
-early rejection hint. It contains exactly these two file parts, with no unknown
-or duplicate parts:
-
-1. `metadata`, filename `metadata.json`, `Content-Type: application/json`, at
-   most 16 KiB;
-2. `file`, a non-empty portable filename, `Content-Type: application/pdf`, at
-   most 16 MiB.
-
-The metadata JSON is strict UTF-8 and has this shape:
+Metadata is strict UTF-8 JSON:
 
 ```json
 {
@@ -138,128 +108,44 @@ The metadata JSON is strict UTF-8 and has this shape:
 }
 ```
 
-`tags` is optional. `endpoint_set.alternates` is required; the complete set must
-contain 2–8 unique ordinary locators in one case-insensitive namespace. The
-canonical profile must be `inline`, and at least one alternate must be
-`attachment`; additional supported inline or attachment alternates are allowed.
-The file part's declared type and filename extension do not establish validity:
-the PDF handler still applies the 16 MiB, portable-filename, header, version,
-xref, and terminal structure rules.
+The complete set has 2–8 unique same-namespace locators, a canonical inline
+binding, and at least one attachment alternate. No suffix is generated or
+interpreted. Declared file type/extension does not replace PDF validation.
+Authority, status, location, ETag, and conflict behavior match Markdown create.
 
-Guest versus managed authority, CSRF, namespace ownership, conflicts, status,
-`Location`, ETag, and response summary behavior are the same as JSON create.
-Malformed framing, fields, or metadata returns `400`; oversized total, metadata,
-or file data returns `413`; wrong request or part media types return `415`;
-invalid access/tags/endpoints/PDF content returns `422` without mutation.
-
-The first-party publishing form prepares this same two-part contract from its
-bounded picker and explicit endpoint controls. Filename, size, and endpoint
-feedback in the browser is advisory; this HTTP contract remains authoritative.
-The form neither generates a suffix nor derives a delivery profile from a path.
+Typical failures: `400` malformed shape, `401` stale creator intent, `403` CSRF
+or forbidden authority, `409` ownership/page/endpoint conflict, `413` oversized,
+`415` unsupported media, `422` invalid locator/access/tag/content/endpoint, and
+`503` identity generation exhaustion.
 
 ## List — `GET /api/pages`
 
-Requires an authenticated session. Optional query fields are:
+Requires authentication. Optional query fields:
 
-- `namespace`: an owned namespace filter;
-- `name`: a case-insensitive page-name substring, at most 100 characters;
-- `access`: exact `public` or `private`;
-- `tag`: one exact tag after canonical normalization;
+- `namespace`: exact owned namespace;
+- `name`: case-insensitive page-name substring, at most 100 characters;
+- `access`: `public` or `private`;
+- `tag`: exact canonical tag;
 - `limit`: canonical decimal `1`–`100`, default `50`;
-- `cursor`: the opaque unpadded continuation returned by the previous page.
+- `cursor`: opaque continuation from the same normalized filter scope.
 
-All supplied filters use AND semantics. A continuation is bound to their exact
-normalized scope. Duplicate or unknown query fields and oversized queries are
-rejected. An invalid name/access/tag filter returns `400`; a namespace not owned
-by the caller returns the same `404` shape as a missing resource.
-
-```json
-{
-  "ok": true,
-  "pages": [
-    {
-      "page_id": "opaque-id",
-      "locator": { "namespace": "Alice", "page_name": "notes/today" },
-      "path": "/Alice/notes/today",
-      "endpoints": {
-        "canonical": {
-          "locator": { "namespace": "Alice", "page_name": "notes/today" },
-          "path": "/Alice/notes/today",
-          "delivery_profile": "inline"
-        },
-        "alternates": []
-      },
-      "access": "private",
-      "content_type": "md-page",
-      "size_bytes": 1234,
-      "tags": ["notes", "work"],
-      "created_at": "2026-07-19T12:00:00.000Z",
-      "updated_at": "2026-07-19T12:00:00.000Z",
-      "revision": 1,
-      "etag": "\"page-opaque-id-r1\"",
-      "management_url": "/api/pages/opaque-id"
-    }
-  ],
-  "next_cursor": null
-}
-```
-
-List output contains neither editable source nor stored derivations. Each
-managed summary includes the exact `etag` value accepted by `If-Match`.
+Filters use AND semantics. Success returns `pages` and `next_cursor`. A
+namespace not owned by the caller has the same shape as a missing resource.
 
 ## Inspect — `GET /api/pages/:page_id`
 
-Requires the authenticated owner. Missing, trial, other-owner, and
-no-longer-authorized IDs all return `404`. Success returns the summary plus safe
-editable input and a strong validator:
-
-```http
-ETag: "page-opaque-id-r1"
-```
-
-```json
-{
-  "ok": true,
-  "page": {
-    "page_id": "opaque-id",
-    "locator": { "namespace": "Alice", "page_name": "notes/today" },
-    "path": "/Alice/notes/today",
-    "endpoints": {
-      "canonical": {
-        "locator": { "namespace": "Alice", "page_name": "notes/today" },
-        "path": "/Alice/notes/today",
-        "delivery_profile": "inline"
-      },
-      "alternates": []
-    },
-    "access": "private",
-    "content_type": "md-page",
-    "size_bytes": 1234,
-    "tags": ["notes", "work"],
-    "created_at": "2026-07-19T12:00:00.000Z",
-    "updated_at": "2026-07-19T12:00:00.000Z",
-    "revision": 1,
-    "etag": "\"page-opaque-id-r1\"",
-    "management_url": "/api/pages/opaque-id",
-    "content": {
-      "content_type": "md-page",
-      "input": { "md": "# Notes", "css": "body { color: navy; }" }
-    }
-  }
-}
-```
-
-Derived HTML and storage fields are never returned.
+Requires the authenticated owner. Missing, trial, foreign, and no-longer-
+authorized IDs all return `404`. Success returns the complete inspection and a
+strong page/revision `ETag`.
 
 ## Update — `PATCH /api/pages/:page_id`
 
-Requires the authenticated owner, exact `x-csrf-token`, and exactly one strong
-`If-Match` value from inspect/create/update. The patch must contain `access`,
-`tags`, `content`, or a combination; omitted fields remain unchanged. An empty
-tag array clears all tags.
+Requires owner session, CSRF, and exactly one strong `If-Match` from a previous
+managed representation. JSON PATCH accepts `access`, `tags`, `content`, or a
+combination; omitted fields remain unchanged and an empty tag array clears tags.
 
 ```json
-{ "access": "public", "tags": ["published", "notes"] }
+{ "access": "public", "tags": ["published"] }
 ```
 
 ```json
@@ -271,64 +157,50 @@ tag array clears all tags.
 }
 ```
 
-Success returns `200`, the complete inspection representation, and the next
-ETag. Missing `If-Match` returns `428`; malformed, weak, wildcard, multiple, or
-non-canonical validators return `400`; a different-page or stale validator
-returns `412`. Missing/non-owner pages return `404`, and invalid
-content/access/tags return `422`.
+PDF replacement uses the same exact two-part multipart boundary and always
+includes a new file. Metadata requires the complete `endpoint_set` and may
+include `access` and `tags`; omitted metadata is preserved. Content and endpoint
+changes commit once at the supplied revision.
 
-PDF replacement uses the same exact two-part multipart contract and always
-includes a replacement `file`. Its strict metadata object requires the complete
-`endpoint_set` and accepts optional `access` and `tags`; omitted metadata fields
-are preserved. Repeating the current set replaces only the PDF bytes and
-filename, while a changed set is applied atomically. This explicit requirement
-also prevents multipart from converting a one-endpoint Markdown page into an
-incomplete PDF publication. CSRF and `If-Match` are validated before the body
-can mutate the page. One successful request advances the revision once; a stale
-retry returns `412` and cannot publish a partial asset or endpoint set. JSON
-PATCH remains the compatible metadata and `md-page` update path.
+Success returns the complete inspection and next ETag. Missing preconditions
+return `428`, malformed validators `400`, a stale/different-page validator
+`412`, missing/foreign pages `404`, conflicts `409`, and invalid input `422`.
 
 ## Delete — `DELETE /api/pages/:page_id`
 
-Requires the same authenticated owner, CSRF, and `If-Match` preconditions as
-PATCH and accepts no body. Success returns `204`. Stale validators return `412`;
-a repeated delete and non-owner access return `404`.
+Requires owner session, CSRF, exact `If-Match`, and no body. Success returns
+`204` and removes every page endpoint. Stale intent returns `412`; repeated or
+foreign deletion returns `404`.
 
 ## Rename — `POST /api/pages/:page_id/rename`
 
-Requires the authenticated owner, `x-csrf-token`, one exact source `If-Match`,
-and a strict JSON body. Supply `page_name` to move within the current namespace;
-omit it with `{}` to make the page that namespace's default page.
+Requires owner session, CSRF, and exact `If-Match`. The strict JSON body
+contains `page_name`; `{}` makes the page its namespace default.
 
 ```json
 { "page_name": "archive/notes" }
 ```
 
 Success returns `200`, `outcome` (`renamed`, `replaced_trial`, or `unchanged`),
-the complete inspection representation, and its current `ETag`. Page identity,
-content, access, tags, and creation time are retained. Another managed page at
-the destination returns `409 page_exists`; invalid names return `422`; stale
-source revisions return `412`. Missing and non-owner sources return the same
-`404`.
+the inspection, and ETag. Identity, content, access, tags, and creation time
+stay stable. Another managed destination returns `409`; invalid names `422`;
+stale source `412`.
 
 ## Duplicate — `POST /api/pages/:page_id/duplicate`
 
-Requires the authenticated owner, `x-csrf-token`, and one exact source
-`If-Match`. The request is bodyless. The server chooses a bounded generated
-available name in the source namespace and copies the exact source snapshot
-without changing it.
+Requires owner session, CSRF, exact `If-Match`, and no body. For a one-inline-
+endpoint page, the service chooses a bounded available name and copies the exact
+source revision to a fresh page ID at revision 1 while sharing immutable content
+safely. Pages with richer endpoint sets require explicit destination endpoint
+intent through the application capability and are not duplicated by this
+bodyless HTTP command.
 
-Success returns `201`, `outcome` (`created` or `replaced_trial`), the new
-complete inspection representation at revision 1, its `ETag`, and a management
-`Location`. Stale source revisions return `412`; missing and non-owner sources
-return `404`; bounded name or ID generation exhaustion returns `503`.
+Success returns `201`, `outcome`, inspection, ETag, and management `Location`.
+Stale/missing sources and bounded name/ID exhaustion are typed failures.
 
-## Bulk access — `POST /api/pages/bulk/access`
+## Bulk commands
 
-Requires the authenticated owner and `x-csrf-token`. Because each selected page
-has its own source revision, this command does not use one HTTP `If-Match`.
-Instead, its strict body contains an exact target access and 1–100 distinct
-page/revision pairs:
+`POST /api/pages/bulk/access`:
 
 ```json
 {
@@ -340,139 +212,31 @@ page/revision pairs:
 }
 ```
 
-The complete shape, access value, IDs, positive safe revisions, distinctness,
-and count are validated before mutation. An accepted command returns `200` and
-one result in selection order. Items then apply independently:
+`POST /api/pages/bulk/delete` uses the same `selection` without `access`.
 
-```json
-{
-  "ok": true,
-  "results": [
-    {
-      "page_id": "page-a",
-      "ok": true,
-      "page": {
-        "page_id": "page-a",
-        "locator": { "namespace": "Alice", "page_name": "notes" },
-        "path": "/Alice/notes",
-        "endpoints": {
-          "canonical": {
-            "locator": { "namespace": "Alice", "page_name": "notes" },
-            "path": "/Alice/notes",
-            "delivery_profile": "inline"
-          },
-          "alternates": []
-        },
-        "access": "public",
-        "content_type": "md-page",
-        "size_bytes": 1234,
-        "tags": ["notes"],
-        "created_at": "2026-07-19T12:00:00.000Z",
-        "updated_at": "2026-07-19T12:05:00.000Z",
-        "revision": 4,
-        "etag": "\"page-page-a-r4\"",
-        "management_url": "/api/pages/page-a"
-      }
-    },
-    {
-      "page_id": "page-b",
-      "ok": false,
-      "error": "revision_conflict"
-    }
-  ]
-}
-```
+Both require authentication and CSRF. The complete 1–100-item selection must
+contain distinct valid page IDs and positive revisions before any mutation.
+Accepted items execute independently in order and return one success,
+`revision_conflict`, `revision_exhausted` (access only), or non-disclosing
+`not_found` result. One item failure does not roll back another.
 
-Item errors are `revision_conflict`, `revision_exhausted`, or non-disclosing
-`not_found`. One item failure does not roll back another. Invalid access or a
-selection rejected as a whole returns `422` and performs no mutation.
+## Public exploration
 
-## Bulk delete — `POST /api/pages/bulk/delete`
-
-Uses the same authentication, CSRF, selection shape, prevalidation, ordered
-execution, and independent revision discipline as bulk access:
-
-```json
-{
-  "selection": [
-    { "page_id": "page-a", "expected_revision": 4 },
-    { "page_id": "page-b", "expected_revision": 7 }
-  ]
-}
-```
-
-An accepted command returns `200` even when an individual item fails:
-
-```json
-{
-  "ok": true,
-  "results": [
-    { "page_id": "page-a", "ok": true },
-    { "page_id": "page-b", "ok": false, "error": "not_found" }
-  ]
-}
-```
-
-Item errors are `revision_conflict` or non-disclosing `not_found`. An invalid
-selection returns `422` before mutation.
-
-## Creator site projection
-
-The authenticated creator panel is a secondary projection of these contracts,
-not a separate management implementation. Its initial server model and every API
-row carry locator, complete endpoint links, canonical tags, revision, and exact
-ETag. The canonical path remains the main row link and configured alternates are
-shown explicitly. Name, access, and exact-tag filters remain attached to
-continuation requests. Content and a comma-separated tag draft save through one
-revision-bound PATCH; empty tags clear the set. Rename sends an omitted
-`page_name` for the default page, while Markdown duplicate remains bodyless.
-
-A PDF row derives explicit preview and download actions only from returned
-endpoint profiles. Inspection validates and renders the bounded filename,
-`application/pdf` media type, exact size, PDF version, and replace capability;
-it never places bytes in UI state. Replacement repeats the complete current
-endpoint set in multipart metadata, sends one newly selected PDF, and binds CSRF
-plus the row's exact ETag. A `412` refreshes the row and bounded metadata while
-keeping the selected replacement, but does not retry. The shared failure
-presenter distinguishes endpoint, PDF, request-size, authority, stale-revision,
-and deployment-availability outcomes and does not render unknown response
-detail.
-
-Bulk controls select at most 100 currently visible rows and derive the explicit
-`page_id`/`expected_revision` pairs at submission time. The panel validates the
-ordered response before changing state and shows one outcome per item.
-Successful rows update or leave the active filter, missing rows disappear, and
-revision conflicts are inspected again; the browser never retries a stale
-mutation.
-
-## Public tag exploration
-
-Public exploration remains a site GET surface rather than a management JSON
-endpoint. `/` and `/site` accept optional `namespace` and `page` substring
-fields plus one exact `tag`; all supplied fields use AND semantics. The opaque
-`cursor` retains the complete filter scope. Only public managed pages are
-eligible, and the rendered rows expose their canonical tags and complete direct
-endpoint links without page IDs, revisions, access fields, or owner identity.
+`/` and `/site` accept optional `namespace` and `page` substring fields, one
+exact `tag`, and opaque `cursor`. Public results contain no page ID, revision,
+access field, or owner identity. Private and trial pages are excluded by the
+page repository capability.
 
 ## Direct delivery
 
-The management URL is separate from every direct endpoint path. Public trial and
-managed pages are directly readable through canonical or alternate bindings. A
-private managed page is directly readable only by its stored creator's current
-session; guest, logged-out creator, and another user receive the ordinary
-missing-page response. The catch-all Fresh route derives the actor from the
-resolved session and uses the same composed page service as management. After
-access checks, the resolved endpoint's stored profile exclusively selects
-`Content-Disposition: inline` or `attachment`; safe suggested filenames are
-encoded only for attachment delivery.
+Every configured endpoint path is separate from management URLs. Public pages
+and known trial locators are directly readable. A private page is readable only
+by its creator's current session; everyone else receives the ordinary missing
+response.
 
-PDF delivery returns fixed `application/pdf`, `nosniff`, `no-store`, exact
-length, an opaque strong `ETag`, and `Accept-Ranges: bytes`. A request without a
-range returns the bounded complete body with `200`. Exactly one `bytes` range is
-accepted, including closed, open-ended, and suffix forms; a satisfiable range
-returns `206` with exact `Content-Range` and length. Malformed, multiple, empty,
-reversed, or unsatisfiable ranges return bodyless `416` with
-`Content-Range: bytes */<size>`. `If-Range` applies a range only when it exactly
-matches the current ETag; otherwise the current complete `200` representation is
-returned. Matching `If-None-Match` returns `304`. Inline and attachment
-endpoints have byte-identical payload and validator values at one revision.
+After authority checks, the stored endpoint profile selects `inline` or
+`attachment`. PDF responses use `application/pdf`, `nosniff`, `no-store`, exact
+length, one strong ETag per page revision, and `Accept-Ranges: bytes`. They
+support a complete `200`, matching `304`, one satisfiable `206`, and bodyless
+`416`; `If-Range` mismatch falls back to the complete current response. Inline
+and attachment endpoints return byte-identical content and validators.

@@ -6,7 +6,7 @@ import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
 import type { PageManagementPanel as PageManagementPanelModel } from "../lib/ui/page-management.ts";
 import type { PublicExploration } from "../lib/ui/public-exploration.ts";
 import { page_publish_authorization } from "../lib/ui/page-publish.ts";
-import { FourWordRandomNameGenerator } from "../lib/ui/random-name.ts";
+import { FourWordRandomNameGenerator } from "../lib/random-name.ts";
 import type {
   SiteNavigation,
   SiteNavigationAction,

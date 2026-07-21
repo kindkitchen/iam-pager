@@ -23,13 +23,12 @@ import {
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
-  MemoryPageRepository,
+  MemoryPageAggregateRepository,
   type PageAggregateRepository,
   type PageDeliverer,
   PageHttpAdapter,
   type PageHttpApplication,
   type PageHttpHandler,
-  type PageRepository,
   PageService,
   type PublicPageExplorer,
   type PublicPageLister,
@@ -79,11 +78,11 @@ import {
 } from "./request-context.ts";
 import {
   DefaultOwnershipRepositoryFactory,
-  DefaultPageRepositoryFactory,
+  DefaultPageAggregateRepositoryFactory,
   DefaultSessionRepositoryFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
-  type PageRepositoryFactory,
+  type PageAggregateRepositoryFactory,
   parse_ownership_storage_config,
   parse_page_storage_config,
   parse_session_storage_config,
@@ -101,7 +100,7 @@ export const forbidden_namespaces: readonly string[] = ["site", "api", "auth"];
 /** Everything the web layer needs; routes stay thin adapters over this. */
 export interface AppServices {
   engine: LocatorEngine;
-  page_repository: PageAggregateRepository | PageRepository;
+  page_repository: PageAggregateRepository;
   pages:
     & PageHttpApplication
     & PageDeliverer
@@ -131,8 +130,8 @@ export interface AppServiceOptions {
   readonly session_cookie_mode?: SessionCookieMode;
   /** Referentially linked repositories are supplied as one composition unit. */
   readonly ownership_repositories?: OwnershipRepositories;
-  /** Page persistence stays behind the aggregate or compatibility interface. */
-  readonly page_repository?: PageAggregateRepository | PageRepository;
+  /** Page persistence stays behind the logical aggregate interface. */
+  readonly page_repository?: PageAggregateRepository;
   /** Session persistence remains independent from its HTTP transport. */
   readonly session_repository?: SessionRepository;
   /** Provider implementations are supplied at the composition boundary. */
@@ -150,7 +149,7 @@ export interface ConfiguredAppServiceOptions {
   /** Override only at an outer composition or test boundary. */
   readonly session_repository_factory?: SessionRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
-  readonly page_repository_factory?: PageRepositoryFactory;
+  readonly page_repository_factory?: PageAggregateRepositoryFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -174,7 +173,7 @@ export function create_app_services(
     forbidden_namespaces,
   });
   const page_repository = options.page_repository ??
-    new MemoryPageRepository();
+    new MemoryPageAggregateRepository();
   const ownership_repositories = options.ownership_repositories ?? {
     identity_repository: new MemoryIdentityRepository(new CryptoIdGenerator()),
     namespace_repository: new MemoryNamespaceRepository(),
@@ -291,7 +290,8 @@ export async function create_configured_app_services(
     options.session_repository_factory ?? new DefaultSessionRepositoryFactory()
   ).create(session_storage_config);
   const page_repository = await (
-    options.page_repository_factory ?? new DefaultPageRepositoryFactory()
+    options.page_repository_factory ??
+      new DefaultPageAggregateRepositoryFactory()
   ).create(page_storage_config);
   return create_app_services({
     ownership_repositories,

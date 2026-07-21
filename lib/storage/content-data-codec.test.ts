@@ -4,28 +4,9 @@ import {
   V8ContentDataCodec,
 } from "./content-data-codec.ts";
 
-const prototype_fixture = Uint8Array.from(
-  atob(
-    "/w9vIgVieXRlc1wBBAAB/v8iCGZpbGVuYW1lIgpy6XN1bekucGRmIgtwZGZfdmVyc2lvbiIDMi4wewM=",
-  ),
-  (character) => character.charCodeAt(0),
-);
-
-Deno.test("V8 content codec retains the prototype payload format under an explicit version", () => {
-  const codec = new V8ContentDataCodec();
-  const value = {
-    bytes: Uint8Array.of(0, 1, 254, 255),
-    filename: "résumé.pdf",
-    pdf_version: "2.0",
-  };
-
-  assertEquals(codec.encoding_version, content_data_encoding_v8_1);
-  assertEquals(codec.encode(value), prototype_fixture);
-  assertEquals(codec.decode(prototype_fixture), value);
-});
-
 Deno.test("V8 content codec round-trips detached Markdown and PDF data", () => {
   const codec = new V8ContentDataCodec();
+  assertEquals(codec.encoding_version, content_data_encoding_v8_1);
   const markdown = {
     md: "# Durable",
     html: "<h1>Durable</h1>",

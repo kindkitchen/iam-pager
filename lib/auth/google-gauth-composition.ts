@@ -401,16 +401,3 @@ async function compose_original_google_gauth_service(
     }).pipe(Effect.provide(layer)),
   );
 }
-
-/** Compatibility surface for callers needing only the provider service. */
-export async function compose_google_gauth_service(
-  config: GoogleAuthConfig,
-): Promise<GAuthService> {
-  const service = (await compose_google_gauth(config)).service;
-  if (service === null) {
-    throw new TypeError(
-      "dynamic local Google authentication requires callback-specific resolution",
-    );
-  }
-  return service;
-}
