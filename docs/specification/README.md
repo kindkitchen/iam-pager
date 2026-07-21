@@ -11,7 +11,7 @@ code, tests, and future tasks without depending on section order.
 | [experiences-and-scope.md](experiences-and-scope.md)                           | Visitor, guest, and creator behavior                            |
 | [capabilities.md](capabilities.md)                                             | Application interfaces and outcomes                             |
 | [quality-and-technical-requirements.md](quality-and-technical-requirements.md) | Architecture, storage, HTTP, security, limits, and verification |
-| [session-and-authentication.md](session-and-authentication.md)                 | Session and Google authentication invariants                    |
+| [session-and-authentication.md](session-and-authentication.md)                 | Session, Google authentication, and API-key invariants          |
 | [open-scope-and-risks.md](open-scope-and-risks.md)                             | Deliberately unimplemented scope and active risks               |
 
 ## SP-CORE — Product shape
@@ -22,6 +22,8 @@ code, tests, and future tasks without depending on section order.
 - The site provides publishing, wrapped viewing, public exploration, and creator
   management as projections of shared application logic.
 - Authentication lets creators reserve namespaces and protect pages.
+- Creators may issue scoped API keys that automate the owner API without
+  becoming browser sessions.
 - Guests may publish public, undiscoverable trial pages without ownership.
 - A logical content item is independent of its non-empty locator-reference set;
   one or many explicit delivery endpoints may expose the same current asset

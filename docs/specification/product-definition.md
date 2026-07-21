@@ -38,6 +38,11 @@ or cross-user mutation. Managed pages support create, inspect, update, access,
 tag, rename, duplicate, bulk access/delete, and deletion operations under exact
 revision checks.
 
+A creator may also issue scoped API keys for automation. A key acts only on its
+owner's behalf within explicit `read`/`write`/`delete` grants over the page and
+namespace APIs; issuing, editing, and revoking keys remains a browser-session
+capability.
+
 ## PD-PAGE — One logical page
 
 A logical page has one content, management, and exploration identity independent

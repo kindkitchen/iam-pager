@@ -34,9 +34,9 @@ permission lists are always explicit and in canonical `read, write, delete`
 order.
 
 Keys authorize the page and namespace operations under `/api/**`
-([the page API contract](pages.md) maps each operation to its required
-permission). Key management itself stays browser-owned: the sole key-accessible
-management operation is bearer revoke-all below.
+([the API authentication reference](authentication.md) maps each operation to
+its required permission). Key management itself stays browser-owned: the sole
+key-accessible management operation is bearer revoke-all below.
 
 ## Key metadata
 
@@ -128,7 +128,6 @@ It is the only key operation reachable with a bearer:
 | `DELETE /api/api-keys` (revoke-all) | yes + CSRF            | `delete` |
 
 Bearer authorization of the page and namespace APIs (`read`/`write`/`delete`
-mapped onto every existing owner operation) is specified in the task chain and
-lands with the API principal resolver; until then those APIs remain
-browser-session-only and guest trial publication remains a browser-only
-capability. API keys have no guest behavior.
+mapped onto every owner operation) is specified in
+[the API authentication reference](authentication.md). Guest trial publication
+remains a browser-only capability; API keys have no guest behavior.

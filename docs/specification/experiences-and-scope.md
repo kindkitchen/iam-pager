@@ -72,6 +72,20 @@ Every mutation uses server-derived identity, namespace authority, CSRF, and an
 exact page revision. Stale UI operations refresh affected rows but never retry a
 mutation silently.
 
+## EX-AUTOMATE — Automate with API keys
+
+A signed-in creator can manage API keys at `/site/api-keys`: generate a key with
+explicit permissions and optional expiry, copy the bearer exactly once, edit or
+revoke individual keys, and revoke everything after explicit confirmation. The
+page is one projection of the `/api/api-keys` capability; removing it removes no
+key behavior.
+
+A key authenticates the page and namespace APIs under its granted
+`read`/`write`/`delete` permissions without CSRF. It never authenticates the
+site, browser authentication routes, or direct-content delivery, and a
+key-authenticated create is always managed — trial publication stays a guest
+browser capability.
+
 ## EX-PDF — Share one PDF several ways
 
 One PDF page can bind the same exact asset to one or more configured inline and

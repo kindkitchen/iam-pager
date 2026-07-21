@@ -7,7 +7,9 @@ use `Cache-Control: no-store`. JSON errors have this shape:
 { "ok": false, "error": "stable_code", "detail": "bounded safe detail" }
 ```
 
-Two credentials authenticate this API; owner/user IDs are never accepted from
+Two credentials authenticate this API — see
+[the API authentication reference](authentication.md) for the complete
+resolution rules and permission matrix; owner/user IDs are never accepted from
 clients:
 
 - **Browser session.** Authenticated mutations require the exact session

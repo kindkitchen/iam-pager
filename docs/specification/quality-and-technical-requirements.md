@@ -113,12 +113,21 @@ binary content is not implied.
 
 ## QT-AUTHORITY — Security
 
-- Browser identity comes only from the resolved server session.
+- Browser identity comes only from the resolved server session; API identity
+  comes only from the resolved bearer principal.
 - Namespace ownership is resolved server-side for every mutation.
-- Authenticated mutations require the session synchronizer token.
+- Authenticated browser mutations require the session synchronizer token;
+  API-key mutations require the mapped explicit permission instead and never
+  carry CSRF.
+- A present `Authorization` header is authoritative: invalid bearers fail with
+  one non-disclosing challenge and never fall back to the cookie, and no session
+  cookie is issued for a bearer request.
+- API-key bearers exist only in the successful create response; persistence
+  keeps hashes, and keys never authenticate site, auth, or direct-content
+  routes.
 - Managed page changes require exact strong revision ETags at HTTP boundaries.
-- OAuth state and bearer credentials are generated with 256 bits of entropy;
-  persistence stores only hashes.
+- OAuth state, session bearers, and API-key bearers are generated with 256 bits
+  of entropy; persistence stores only hashes.
 - Authentication rotates the bearer; logout revokes it and creates an unrelated
   guest session.
 - Callback URLs come from validated configuration or a full HTTPS request-host
@@ -134,8 +143,10 @@ Request objects are strict and bounded. Unknown fields, duplicate query fields,
 unsupported media, malformed JSON/multipart, and oversized input fail before
 mutation. Owner IDs are never accepted or returned.
 
-Authenticated create/update/delete/action requests use browser session identity,
-CSRF, and exact revisions. JSON creation and update can submit the same explicit
+Authenticated create/update/delete/action requests use browser session identity
+plus CSRF, or an API-key principal plus its mapped permission
+([the API authentication reference](../api/authentication.md) fixes the matrix);
+both use exact revisions. JSON creation and update can submit the same explicit
 endpoint-set shape used by multipart content; content-only replacement preserves
 that set. List cursors are opaque and bound to normalized filter scope.
 Management lists omit editable content; inspection returns only handler-approved
@@ -174,4 +185,6 @@ Deno KV implementations. Coverage must include:
 - strict JSON/multipart, CSRF, ETag, and range handling;
 - public-query privacy and cursor isolation;
 - identical PDF bytes under endpoint-specific disposition;
+- API-key lifecycle, one-time bearer exposure, bearer precedence without cookie
+  fallback, and the permission matrix across every API operation;
 - presenter/component boundaries that keep logic outside the web layer.
