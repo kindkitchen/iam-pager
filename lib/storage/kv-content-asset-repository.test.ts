@@ -1,10 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ContentAsset } from "../content/asset.ts";
 import { PdfHandler } from "../content/pdf.ts";
-import {
-  content_data_encoding_v8_1,
-  V8ContentDataCodec,
-} from "./content-data-codec.ts";
 import type { KvGateway } from "./kv-gateway.ts";
 import {
   content_asset_manifest_key,
@@ -253,7 +249,7 @@ function with_ambiguous_native_commit(gateway: KvGateway): KvGateway {
   });
 }
 
-Deno.test("KV content assets preserve immutable identities and strict manifests", async () => {
+Deno.test("KV content assets preserve immutable values across reconstruction", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
     const subject = repository(kv, ["payload-one"]);
@@ -262,24 +258,6 @@ Deno.test("KV content assets preserve immutable identities and strict manifests"
     (input.data as { marker: string }).marker = "mutated-in-flight";
     const created = await creating;
     assert(created.ok);
-
-    const encoded = new V8ContentDataCodec().encode({ marker: "original" });
-    assertEquals(
-      (await kv.get(content_asset_manifest_key("asset-1"))).value,
-      {
-        schema_version: 1,
-        data_encoding: content_data_encoding_v8_1,
-        content_asset_id: "asset-1",
-        payload_id: "payload-one",
-        payload_byte_length: encoded.byteLength,
-        payload_sha256: await sha256(encoded),
-        content_type: "test-content",
-        media_type: "application/octet-stream",
-        size_bytes: 1,
-        download_filename: "asset-1.bin",
-        created_at: created_at.toISOString(),
-      },
-    );
 
     (created.asset.data as { marker: string }).marker = "mutated-result";
     assertEquals(
@@ -517,8 +495,7 @@ Deno.test("KV content asset reads reject corrupt chunks, manifests, hashes, and 
       malformed_bytes,
     );
     const malformed_manifest: StoredContentAssetManifest = {
-      schema_version: 1,
-      data_encoding: content_data_encoding_v8_1,
+      data_encoding: "v8",
       content_asset_id: "bad-codec",
       payload_id: "payload-bad-codec",
       payload_byte_length: malformed_bytes.byteLength,
@@ -526,7 +503,7 @@ Deno.test("KV content asset reads reject corrupt chunks, manifests, hashes, and 
       content_type: "test-content",
       media_type: "application/octet-stream",
       size_bytes: 1,
-      created_at: created_at.toISOString(),
+      created_at,
     };
     await kv.set(content_asset_manifest_key("bad-codec"), malformed_manifest);
     await assertRejects(

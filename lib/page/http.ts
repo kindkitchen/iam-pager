@@ -3,6 +3,7 @@ import {
   is_json_media_type,
   read_bounded_request_text,
 } from "../http/request-body.ts";
+import { prefixed, strict_object } from "../http/strict-object.ts";
 import type { Session } from "../session/model.ts";
 import { max_page_list_cursor_length } from "./cursor.ts";
 import type { PageEndpointSetIntent } from "./endpoint.ts";
@@ -736,35 +737,6 @@ function decode_content_command(
       input: content.value.input,
     },
   };
-}
-
-function strict_object(
-  input: unknown,
-  fields: readonly string[],
-): DecodeResult<Record<string, unknown>> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return { ok: false, detail: "value must be an object" };
-  }
-  const value = input as Record<string, unknown>;
-  const required = fields.filter((field) => !field.endsWith("?"));
-  const allowed = fields.map((field) => field.replace(/\?$/, ""));
-  const keys = Object.keys(value);
-  const unknown = keys.find((key) => !allowed.includes(key));
-  if (unknown !== undefined) {
-    return { ok: false, detail: `unknown field: ${unknown}` };
-  }
-  const missing = required.find((field) => !Object.hasOwn(value, field));
-  if (missing !== undefined) {
-    return { ok: false, detail: `missing field: ${missing}` };
-  }
-  return { ok: true, value };
-}
-
-function prefixed(
-  result: { ok: false; detail: string },
-  prefix: string,
-): { ok: false; detail: string } {
-  return { ok: false, detail: `${prefix}: ${result.detail}` };
 }
 
 function decode_list_query(request_url: string): DecodeResult<{

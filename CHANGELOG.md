@@ -2,6 +2,14 @@
 
 ## 2026-07-21
 
+- Removed about 3,100 more repository lines without changing product behavior:
+  consolidated cursor, repository-query, strict-object, base64url,
+  storage-record, and storage-selection logic; made Deno KV persist one current
+  native record format with no schema-version compatibility branches; removed
+  test-only implementation counters, repeated composition coverage, duplicate
+  site-route code, and unused type/import dependencies. The focused 442-test
+  suite, checks, and production build pass; the compact task baseline remains
+  the only task.
 - Replaced 28 closed delivery-task histories with one current project baseline,
   removing intermediate and rejected states while retaining completed behavior,
   architectural boundaries, open scope, and verification context. `tasks/` fell

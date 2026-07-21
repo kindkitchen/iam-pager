@@ -41,8 +41,8 @@ implementation must provide:
 - deterministic cursor pagination;
 - safe trial takeover and concurrent winner behavior.
 
-The memory implementation is the reference. Deno KV stores a strict page
-envelope, endpoint claims, owner/public projections, and manifest-backed
+The memory implementation is the reference. Deno KV stores a strict current page
+aggregate, endpoint claims, owner/public projections, and manifest-backed
 content. Every page visibility mutation uses one native atomic commit. Binary
 payloads are staged through the project-owned `KvGateway`, reconstructed and
 verified before manifest publication, and reverified on read by length, SHA-256,
@@ -67,8 +67,9 @@ IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
 ```
 
 All Deno KV adapters use the ownership database path or attached default
-database. Changing backend or path does not copy data. Record decoders reject
-unknown, malformed, or incoherent storage values.
+database. Changing backend or path does not copy data. Storage has one current
+format rather than version-compatibility branches; record decoders reject
+unknown, malformed, or incoherent values.
 
 ## QT-ROUTING — HTTP routing and delivery
 

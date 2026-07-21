@@ -1,5 +1,5 @@
 import type { KvRecordGateway } from "../storage/kv-gateway.ts";
-import { ownership_database_schema_version } from "../storage/schema-versions.ts";
+import { is_exact_record, is_valid_stored_date } from "../storage/record.ts";
 import type { IdentityRepository, UserIdGenerator } from "./interfaces.ts";
 import {
   clone_identity,
@@ -18,9 +18,7 @@ import {
   is_authentication_strategy_id,
 } from "./model.ts";
 
-const storage_schema_version = ownership_database_schema_version;
 const max_profile_update_attempts = 16;
-// Key paths stay stable across value-schema upgrades so uniqueness cannot fork.
 const user_prefix: Deno.KvKey = ["iam-pager", "identities", "users"];
 const provider_identity_prefix: Deno.KvKey = [
   "iam-pager",
@@ -28,23 +26,8 @@ const provider_identity_prefix: Deno.KvKey = [
   "by-provider",
 ];
 
-interface StoredApplicationUser {
-  readonly schema_version: 1;
-  readonly user_id: string;
-  readonly created_at: string;
-}
-
-interface StoredExternalIdentity {
-  readonly schema_version: 1;
-  readonly user_id: string;
-  readonly strategy_id: string;
-  readonly provider_subject: string;
-  readonly email: string;
-  readonly display_name?: string;
-  readonly picture_url?: string;
-  readonly created_at: string;
-  readonly updated_at: string;
-}
+type StoredApplicationUser = ApplicationUser;
+type StoredExternalIdentity = ExternalIdentity;
 
 function user_key(user_id: string): Deno.KvKey {
   return [...user_prefix, user_id];
@@ -57,96 +40,52 @@ function provider_identity_key(
   return [...provider_identity_prefix, strategy_id, provider_subject];
 }
 
-function serialize_user(user: ApplicationUser): StoredApplicationUser {
-  return {
-    schema_version: storage_schema_version,
-    user_id: user.user_id,
-    created_at: user.created_at.toISOString(),
-  };
-}
-
-function serialize_identity(
-  identity: ExternalIdentity,
-): StoredExternalIdentity {
-  return {
-    schema_version: storage_schema_version,
-    user_id: identity.user_id,
-    strategy_id: identity.strategy_id,
-    provider_subject: identity.provider_subject,
-    email: identity.email,
-    ...(identity.display_name === undefined
-      ? {}
-      : { display_name: identity.display_name }),
-    ...(identity.picture_url === undefined
-      ? {}
-      : { picture_url: identity.picture_url }),
-    created_at: identity.created_at.toISOString(),
-    updated_at: identity.updated_at.toISOString(),
-  };
-}
-
-function stored_date(value: unknown): Date {
-  if (typeof value !== "string") {
-    throw new TypeError("invalid stored identity record");
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime()) || date.toISOString() !== value) {
-    throw new TypeError("invalid stored identity record");
-  }
-  return date;
-}
-
 function deserialize_user(value: unknown): ApplicationUser {
-  if (typeof value !== "object" || value === null) {
+  if (!is_exact_record(value, ["user_id", "created_at"])) {
     throw new TypeError("invalid stored identity record");
   }
-  const stored = value as Record<string, unknown>;
+  const stored = value as unknown as ApplicationUser;
   if (
-    stored.schema_version !== storage_schema_version ||
-    typeof stored.user_id !== "string" || stored.user_id.length === 0
+    typeof stored.user_id !== "string" || stored.user_id === "" ||
+    !is_valid_stored_date(stored.created_at)
   ) {
     throw new TypeError("invalid stored identity record");
   }
-  return {
-    user_id: stored.user_id,
-    created_at: stored_date(stored.created_at),
-  };
+  return clone_user(stored as ApplicationUser);
 }
 
 function deserialize_identity(value: unknown): ExternalIdentity {
-  if (typeof value !== "object" || value === null) {
-    throw new TypeError("invalid stored identity record");
-  }
-  const stored = value as Record<string, unknown>;
   if (
-    stored.schema_version !== storage_schema_version ||
-    typeof stored.user_id !== "string" || stored.user_id.length === 0 ||
-    typeof stored.strategy_id !== "string" ||
-    !is_authentication_strategy_id(stored.strategy_id) ||
-    typeof stored.provider_subject !== "string" ||
-    stored.provider_subject.length === 0 ||
-    typeof stored.email !== "string" || stored.email.length === 0 ||
-    (stored.display_name !== undefined &&
-      typeof stored.display_name !== "string") ||
-    (stored.picture_url !== undefined && typeof stored.picture_url !== "string")
+    !is_exact_record(value, [
+      "user_id",
+      "strategy_id",
+      "provider_subject",
+      "email",
+      "created_at",
+      "updated_at",
+    ], ["display_name", "picture_url"])
   ) {
     throw new TypeError("invalid stored identity record");
   }
-  const created_at = stored_date(stored.created_at);
-  const updated_at = stored_date(stored.updated_at);
-  if (updated_at < created_at) {
+  const stored = value as unknown as ExternalIdentity;
+  if (
+    typeof stored.user_id !== "string" || stored.user_id === "" ||
+    typeof stored.strategy_id !== "string" ||
+    !is_authentication_strategy_id(stored.strategy_id) ||
+    typeof stored.provider_subject !== "string" ||
+    stored.provider_subject === "" ||
+    typeof stored.email !== "string" || stored.email === "" ||
+    (stored.display_name !== undefined &&
+      typeof stored.display_name !== "string") ||
+    (stored.picture_url !== undefined &&
+      typeof stored.picture_url !== "string") ||
+    !is_valid_stored_date(stored.created_at) ||
+    !is_valid_stored_date(stored.updated_at) ||
+    stored.updated_at < stored.created_at
+  ) {
     throw new TypeError("invalid stored identity record");
   }
-  return {
-    user_id: stored.user_id,
-    strategy_id: stored.strategy_id,
-    provider_subject: stored.provider_subject,
-    email: stored.email,
-    display_name: stored.display_name as string | undefined,
-    picture_url: stored.picture_url as string | undefined,
-    created_at,
-    updated_at,
-  };
+  return clone_identity(stored as ExternalIdentity);
 }
 
 /**
@@ -215,8 +154,8 @@ export class DenoKvIdentityRepository implements IdentityRepository {
       const commit = await this.#kv.native_atomic()
         .check(identity_entry)
         .check(user_entry)
-        .set(generated_user_key, serialize_user(records.user))
-        .set(identity_key, serialize_identity(records.identity))
+        .set(generated_user_key, clone_user(records.user))
+        .set(identity_key, clone_identity(records.identity))
         .commit();
       if (commit.ok) {
         return {
@@ -278,7 +217,7 @@ export class DenoKvIdentityRepository implements IdentityRepository {
       const updated = update_identity(identity, observation);
       const commit = await this.#kv.native_atomic()
         .check(identity_entry)
-        .set(identity_key, serialize_identity(updated))
+        .set(identity_key, clone_identity(updated))
         .commit();
       if (commit.ok) {
         return {

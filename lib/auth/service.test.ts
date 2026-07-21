@@ -180,7 +180,7 @@ Deno.test("authentication start selects a strategy and saves its server context"
 });
 
 Deno.test("authentication callback consumes state, saves identity, and rotates session", async () => {
-  const { authentication, google, identities, sessions } = make_fixture();
+  const { authentication, google, sessions } = make_fixture();
   const guest = await sessions.resolve();
   assertExists(guest.credential_to_set);
   const old_credential = guest.credential_to_set.value;
@@ -219,7 +219,6 @@ Deno.test("authentication callback consumes state, saves identity, and rotates s
     completed.value.session_resolution.credential_to_set.value,
     old_credential,
   );
-  assertEquals(identities.user_count, 1);
   assertEquals(google.complete_inputs, [{
     code: "provider-code",
     callback_url: "https://app.example/auth/google/callback",
@@ -271,7 +270,10 @@ Deno.test("provider callback failure burns the attempt and leaves the guest", as
     }),
     { ok: false, reason: "invalid_attempt" },
   );
-  assertEquals(identities.user_count, 0);
+  assertEquals(
+    await identities.find_by_strategy_subject("google", "google-subject"),
+    null,
+  );
   assertEquals(guest.session.kind, "guest");
 });
 

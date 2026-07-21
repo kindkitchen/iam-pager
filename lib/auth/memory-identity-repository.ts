@@ -86,14 +86,6 @@ export class MemoryIdentityRepository implements IdentityRepository {
       identity === undefined ? null : clone_identity(identity),
     );
   }
-
-  get user_count(): number {
-    return this.#users.size;
-  }
-
-  get identity_count(): number {
-    return this.#identities.size;
-  }
 }
 
 function identity_key(strategy_id: string, provider_subject: string): string {

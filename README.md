@@ -87,7 +87,8 @@ Important boundaries:
   status mapping, and response headers; Fresh routes stay thin.
 
 Memory and Deno KV implement the same repository interfaces and share
-implementation-neutral conformance suites. Page visibility changes commit the
+implementation-neutral conformance suites. Deno KV stores one strict current
+record format without compatibility branches. Page visibility changes commit the
 page, all endpoint claims, and owner/public projections atomically. Content is
 staged and verified before any page can reference it.
 

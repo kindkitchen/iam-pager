@@ -13,13 +13,13 @@ import {
   DefaultOwnershipRepositoryFactory,
   OWNERSHIP_DENO_KV_PATH_ENV,
   OWNERSHIP_STORAGE_BACKEND_ENV,
-  type OwnershipStorageEnvironmentSource,
   parse_ownership_storage_config,
+  type StorageEnvironmentSource,
 } from "./ownership-storage.ts";
 
 function environment(
   values: Readonly<Record<string, string>>,
-): OwnershipStorageEnvironmentSource {
+): StorageEnvironmentSource {
   return { get: (name) => values[name] };
 }
 
