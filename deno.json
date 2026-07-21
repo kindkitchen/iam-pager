@@ -8,6 +8,7 @@
     "dev": "IAM_PAGER_SESSION_COOKIE_MODE=local IAM_PAGER_GOOGLE_AUTH_MODE=local IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI=http://localhost:5173/auth/google/callback IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL=http://localhost:5173/auth/google/mock-consent vite",
     "build": "vite build",
     "start": "deno run -A server.ts",
+    "smoke:not-found": "deno run --allow-net scripts/check-not-found.ts",
     "update": "deno run -A -r jsr:@fresh/update .",
     "verify": {
       "description": "Run developer checks before push or review",

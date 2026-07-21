@@ -8,5 +8,5 @@ Deno.test("not-found page offers exploration as the primary destination", () => 
   assertStringIncludes(html, "This page wandered off.");
   assertStringIncludes(html, 'href="/site/explore"');
   assertStringIncludes(html, "Explore public pages");
-  assertStringIncludes(html, 'href="/site"');
+  assertStringIncludes(html, 'href="/site">Go home</a>');
 });
