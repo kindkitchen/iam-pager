@@ -5,12 +5,6 @@ export * from "./endpoint.ts";
 export * from "./aggregate.ts";
 export * from "./aggregate-interfaces.ts";
 export * from "./memory-aggregate-repository.ts";
-export {
-  make_content_asset,
-  type PageAggregateConformanceSubject,
-  type PageAggregateRepositoryConformanceOptions,
-  test_page_aggregate_repository_conformance,
-} from "./aggregate-repository-conformance.ts";
 export * from "./delivery-http.ts";
 export * from "./etag.ts";
 export * from "./generators.ts";

@@ -76,10 +76,6 @@ export {
 } from "./google-mock-consent-http.ts";
 export { MemoryIdentityRepository } from "./memory-identity-repository.ts";
 export { DenoKvIdentityRepository } from "./kv-identity-repository.ts";
-export {
-  type IdentityRepositoryConformanceOptions,
-  test_identity_repository_conformance,
-} from "./identity-repository-conformance.ts";
 export { AuthenticationStrategyRegistry } from "./strategy-registry.ts";
 export {
   AuthenticationService,
