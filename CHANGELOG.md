@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Added the `api-keys` specification-first implementation task: browser owners
+  manage scoped, expiring keys; standard Bearer principals can exercise mapped
+  owner API capabilities but only revoke all keys; persistence, HTTP, web, and
+  regression work follow as independently tested links.
 - Improved creator publishing namespace controls: owned namespaces are rendered
   as non-editable selectors, newly reserved namespaces become available without
   a reload, and selector styling now matches the path editor.
