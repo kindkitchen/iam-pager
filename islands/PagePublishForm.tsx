@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { PageEditor } from "../components/PageEditor.tsx";
 import { PdfFileSelection } from "../components/PdfFileSelection.tsx";
 import {
@@ -29,6 +29,10 @@ import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
 } from "../lib/random-name.ts";
+import {
+  namespace_reserved_event_type,
+  type NamespaceReservedEventDetail,
+} from "../lib/ui/namespace-panel.ts";
 
 type PublishState =
   | { status: "idle" }
@@ -64,11 +68,15 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     [],
   );
   const page_previewer = useMemo(() => new ClientPagePreviewer(), []);
-  const creator_namespaces = props.authorization.kind === "creator"
-    ? props.authorization.owned_namespaces
-    : [];
+  const [creator_namespaces, set_creator_namespaces] = useState<
+    readonly string[]
+  >(
+    props.authorization.kind === "creator"
+      ? props.authorization.owned_namespaces
+      : [],
+  );
   const initial_primary_namespace = props.authorization.kind === "creator"
-    ? (creator_namespaces[0] ?? "")
+    ? (props.authorization.owned_namespaces[0] ?? "")
     : props.initial_namespace;
   const [content_type, set_content_type] = useState<PageContentType>(
     props.initial_content_type ?? "md-page",
@@ -93,6 +101,40 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         : pdf_file_selection_presenter.present(describe_pdf_file(pdf_file)),
     [pdf_file],
   );
+
+  useEffect(() => {
+    if (props.authorization.kind !== "creator") return;
+
+    function add_reserved_namespace(event: Event) {
+      const detail = (event as CustomEvent<NamespaceReservedEventDetail>)
+        .detail;
+      if (typeof detail?.namespace !== "string" || detail.namespace === "") {
+        return;
+      }
+      set_creator_namespaces((current) =>
+        current.some((namespace) =>
+            namespace.toLowerCase() === detail.namespace.toLowerCase()
+          )
+          ? current
+          : [...current, detail.namespace]
+      );
+      set_primary((current) =>
+        current.namespace === ""
+          ? { ...current, namespace: detail.namespace }
+          : current
+      );
+    }
+
+    globalThis.addEventListener(
+      namespace_reserved_event_type,
+      add_reserved_namespace,
+    );
+    return () =>
+      globalThis.removeEventListener(
+        namespace_reserved_event_type,
+        add_reserved_namespace,
+      );
+  }, [props.authorization.kind]);
 
   function update_draft(update: () => void) {
     update();
@@ -252,6 +294,10 @@ export default function PagePublishForm(props: PagePublishFormProps) {
       ?.supported_delivery_profiles.includes("attachment") ?? false;
   const creator_without_namespace = props.authorization.kind === "creator" &&
     creator_namespaces.length === 0;
+  const current_authorization: PagePublishAuthorization =
+    props.authorization.kind === "creator"
+      ? { ...props.authorization, owned_namespaces: creator_namespaces }
+      : props.authorization;
   return (
     <section class="publish-panel" aria-labelledby="publish-heading">
       <div class="section-heading">
@@ -300,7 +346,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
           reference={primary}
           title="Primary path"
           is_pdf={supports_downloadable}
-          authorization={props.authorization}
+          authorization={current_authorization}
           on_change={update_primary}
           on_random_namespace={() =>
             update_primary({ namespace: generated_name(primary.namespace) })}
@@ -324,7 +370,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
                 reference={alias}
                 title={`Alias ${index + 1}`}
                 is_pdf={supports_downloadable}
-                authorization={props.authorization}
+                authorization={current_authorization}
                 on_change={(patch) =>
                   update_alias(alias.id, patch)}
                 on_random_namespace={() =>

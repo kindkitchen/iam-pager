@@ -1,6 +1,10 @@
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
-import type { NamespacePanelReservation } from "../lib/ui/namespace-panel.ts";
+import {
+  namespace_reserved_event_type,
+  type NamespacePanelReservation,
+  type NamespaceReservedEventDetail,
+} from "../lib/ui/namespace-panel.ts";
 
 interface ReserveSuccess {
   ok: true;
@@ -58,6 +62,12 @@ export default function NamespaceReservationPanel(
       set_reservations((current) => [...current, result.reservation]);
       set_namespace("");
       set_state({ status: "success", namespace: result.reservation.namespace });
+      globalThis.dispatchEvent(
+        new CustomEvent<NamespaceReservedEventDetail>(
+          namespace_reserved_event_type,
+          { detail: { namespace: result.reservation.namespace } },
+        ),
+      );
     } catch (error) {
       set_state({
         status: "error",

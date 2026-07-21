@@ -757,6 +757,7 @@ h2 {
 }
 
 .contextual-input input,
+.contextual-input select,
 .contextual-input textarea {
   border: 0;
   border-radius: 0;
@@ -764,6 +765,7 @@ h2 {
 }
 
 .contextual-input input:focus,
+.contextual-input select:focus,
 .contextual-input textarea:focus {
   outline: 0;
 }
