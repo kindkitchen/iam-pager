@@ -27,6 +27,7 @@ export function ManagePagesPage(
         ? (
           <PageManagementPanel
             csrf_token={page_management.csrf_token}
+            owned_namespaces={page_management.owned_namespaces}
             initial_pages={page_management.pages}
             initial_next_cursor={page_management.next_cursor}
           />

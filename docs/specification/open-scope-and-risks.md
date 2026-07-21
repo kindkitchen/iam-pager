@@ -44,22 +44,6 @@ state. Current active Markdown output uses isolation headers, and wrapped HTML
 uses a sandboxed no-referrer frame. No active content type may be added without
 an equivalent boundary.
 
-## OS-UI-REFERENCES — Locator and delivery projection gap
-
-The raw domain and API accept any non-empty locator-reference set whose profiles
-are supported by the selected content handler. The current site has deliberately
-not been changed with that contract: its PDF publisher still limits endpoint
-rows to eight, requires a preferred inline locator plus an attachment alternate,
-and requires one namespace. Public and management PDF presenters recognize only
-that same pairing. Markdown publishing still uses the implicit one-inline
-locator shorthand, PDF replacement unnecessarily resubmits endpoints, and API
-failure presentation retains obsolete endpoint-count/namespace errors. API-valid
-one-locator, attachment-preferred, cross-namespace, larger in-memory, or
-future-profile sets can therefore be submitted through raw capabilities while
-the site may reject them, omit actions, or show only a generic fallback. UI
-generalization is separate follow-up work; the UI must consume server-declared
-format/profile capabilities rather than recreate these rules.
-
 ## OS-OPERATIONS — Deployment
 
 Memory repositories are unreliable across restarts or multiple instances. Deno

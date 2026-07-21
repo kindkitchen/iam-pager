@@ -28,7 +28,7 @@ export function PublicExplorationPanel(
         </p>
       </div>
 
-      <form class="public-exploration-form" action="/site" method="GET">
+      <form class="public-exploration-form" action="/site/explore" method="GET">
         <label>
           Namespace contains
           <input
@@ -61,7 +61,7 @@ export function PublicExplorationPanel(
         </label>
         <div class="public-exploration-form-actions">
           <button type="submit">Explore</button>
-          {exploration.is_search && <a href="/site">Clear search</a>}
+          {exploration.is_search && <a href="/site/explore">Clear search</a>}
         </div>
       </form>
 

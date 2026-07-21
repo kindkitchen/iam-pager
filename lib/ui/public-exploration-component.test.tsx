@@ -32,7 +32,7 @@ Deno.test("public exploration component renders GET search and safe result links
       tags: ["news", "release"],
       updated_at: new Date("2026-07-19T02:00:00.000Z"),
     }],
-    next_path: "/site?namespace=Alice&page=notes&tag=news&cursor=next",
+    next_path: "/site/explore?namespace=Alice&page=notes&tag=news&cursor=next",
     error: null,
   };
 
@@ -40,7 +40,8 @@ Deno.test("public exploration component renders GET search and safe result links
     <PublicExplorationPanel exploration={exploration} />,
   );
 
-  assertStringIncludes(html, 'action="/site"');
+  assertStringIncludes(html, 'action="/site/explore"');
+  assertStringIncludes(html, 'href="/site/explore"');
   assertStringIncludes(html, 'method="GET"');
   assertStringIncludes(html, 'name="namespace" value="Alice"');
   assertStringIncludes(html, 'name="page" value="notes"');

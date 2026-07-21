@@ -9,14 +9,15 @@ function body(error: string, detail = "server detail") {
 
 Deno.test("page API failures distinguish endpoint and authority outcomes", () => {
   assertEquals(
-    presenter.present(422, body("namespace_mismatch"), {
+    presenter.present(507, body("endpoint_capacity_exceeded"), {
       operation: "publish",
       content_type: "pdf",
     }),
     {
       kind: "endpoint",
-      code: "namespace_mismatch",
-      message: "Every PDF endpoint must use the canonical namespace.",
+      code: "endpoint_capacity_exceeded",
+      message:
+        "The selected storage cannot atomically save this many references.",
     },
   );
   assertEquals(

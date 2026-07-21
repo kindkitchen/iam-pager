@@ -96,29 +96,23 @@ export class TypedPageApiFailurePresenter implements PageApiFailurePresenter {
           code,
           "One endpoint cannot be mapped to a page path.",
         );
-      case "invalid_endpoint_count":
-        return failure(
-          "endpoint",
-          code,
-          "Configure the supported number of PDF endpoints.",
-        );
-      case "namespace_mismatch":
-        return failure(
-          "endpoint",
-          code,
-          "Every PDF endpoint must use the canonical namespace.",
-        );
       case "duplicate_locator":
         return failure(
           "endpoint",
           code,
-          "Every PDF endpoint must use a unique path.",
+          "Every reference must use a unique path.",
         );
       case "unsupported_delivery_profile":
         return failure(
           "endpoint",
           code,
           "One endpoint uses a delivery option this content does not support.",
+        );
+      case "endpoint_capacity_exceeded":
+        return failure(
+          "endpoint",
+          code,
+          "The selected storage cannot atomically save this many references.",
         );
       case "page_exists":
       case "endpoint_conflict":

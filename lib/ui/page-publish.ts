@@ -1,14 +1,26 @@
+import type { DeliveryProfile } from "../content/model.ts";
 import { is_safe_page_path } from "../page/endpoint.ts";
 import type { NamespacePanel } from "./namespace-panel.ts";
 
 /** Safe page-publishing authority presented to the island; no session IDs. */
 export type PagePublishAuthorization =
   | { readonly kind: "guest" }
-  | { readonly kind: "creator"; readonly csrf_token: string };
+  | {
+    readonly kind: "creator";
+    readonly csrf_token: string;
+    readonly owned_namespaces: readonly string[];
+  };
 
-export interface PagePublishDraft {
+/** One user-entered locator reference before trimming and API projection. */
+export interface PagePublishReferenceDraft {
   readonly namespace: string;
   readonly page_name: string;
+  readonly delivery_profile: DeliveryProfile;
+}
+
+export interface PagePublishDraft {
+  readonly primary: PagePublishReferenceDraft;
+  readonly aliases: readonly PagePublishReferenceDraft[];
   readonly markdown: string;
   readonly css: string;
 }
@@ -20,9 +32,21 @@ export interface PagePublishSuccess {
 export interface PreparedPagePublishRequest {
   readonly headers: Headers;
   readonly body: {
-    readonly locator: {
-      readonly namespace: string;
-      readonly page_name?: string;
+    readonly endpoint_set: {
+      readonly canonical: {
+        readonly locator: {
+          readonly namespace: string;
+          readonly page_name?: string;
+        };
+        readonly delivery_profile: "inline";
+      };
+      readonly alternates: readonly {
+        readonly locator: {
+          readonly namespace: string;
+          readonly page_name?: string;
+        };
+        readonly delivery_profile: "inline";
+      }[];
     };
     readonly access: "public";
     readonly content: {
@@ -32,12 +56,18 @@ export interface PreparedPagePublishRequest {
   };
 }
 
-/** Reuses the already-authorized namespace presenter without exposing session. */
+/** Reuses the authorized namespace presenter without exposing session identity. */
 export function page_publish_authorization(
   namespace_panel: NamespacePanel,
 ): PagePublishAuthorization {
   return namespace_panel.kind === "creator"
-    ? { kind: "creator", csrf_token: namespace_panel.csrf_token }
+    ? {
+      kind: "creator",
+      csrf_token: namespace_panel.csrf_token,
+      owned_namespaces: namespace_panel.reservations.map((reservation) =>
+        reservation.namespace
+      ),
+    }
     : { kind: "guest" };
 }
 
@@ -58,13 +88,11 @@ export function page_publish_success_from_api(
   return { path: record.path };
 }
 
-/** Maps editable state to the explicit page API contract without mutating it. */
+/** Maps editable state to the explicit multi-reference page API contract. */
 export function prepare_page_publish_request(
   draft: PagePublishDraft,
   authorization: PagePublishAuthorization,
 ): PreparedPagePublishRequest {
-  const namespace = draft.namespace.trim();
-  const page_name = draft.page_name.trim();
   const headers = new Headers({ "content-type": "application/json" });
   if (authorization.kind === "creator") {
     headers.set("x-csrf-token", authorization.csrf_token);
@@ -72,9 +100,9 @@ export function prepare_page_publish_request(
   return {
     headers,
     body: {
-      locator: {
-        namespace,
-        ...(page_name === "" ? {} : { page_name }),
+      endpoint_set: {
+        canonical: markdown_binding(draft.primary),
+        alternates: draft.aliases.map(markdown_binding),
       },
       access: "public",
       content: {
@@ -85,5 +113,17 @@ export function prepare_page_publish_request(
         },
       },
     },
+  };
+}
+
+function markdown_binding(reference: PagePublishReferenceDraft) {
+  const namespace = reference.namespace.trim();
+  const page_name = reference.page_name.trim();
+  return {
+    locator: {
+      namespace,
+      ...(page_name === "" ? {} : { page_name }),
+    },
+    delivery_profile: "inline" as const,
   };
 }
