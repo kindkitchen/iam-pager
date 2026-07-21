@@ -13,7 +13,7 @@ policy.
 
 Deno KV records remain until application deletion, session expiry, or operator
 action. Failed content staging can leave unreachable payloads; no sweeper
-exists. Changing storage backend or path does not copy data.
+exists.
 
 ## OS-CONTENT — Additional content
 
@@ -51,6 +51,4 @@ KV must be selected explicitly where continuity matters. Local Google mode
 grants fake authentication and is safe only on loopback or narrowly designated
 preview hosts.
 
-Storage records fail closed on unknown or corrupt shapes. Storage has one
-current format and no migration or rollback machinery; changing that format
-requires an explicit deployment decision once retained data matters.
+Storage records fail closed on unknown or corrupt shapes.

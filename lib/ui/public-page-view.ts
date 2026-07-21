@@ -129,10 +129,10 @@ export class CreatorPublicPageViewPresenter implements PublicPageViewPresenter {
 
 function preview_from_payload(
   page: PublicPageSummary,
-  payload: DeliveryPayload | null,
+  payload: DeliveryPayload,
 ): PublicContentPreview {
   if (
-    payload !== null && typeof payload.body === "string" &&
+    typeof payload.body === "string" &&
     payload.media_type.toLowerCase().startsWith("text/html")
   ) {
     return { kind: "html", document: payload.body };

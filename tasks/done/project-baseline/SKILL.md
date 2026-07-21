@@ -7,6 +7,6 @@ tags: [product, architecture, baseline]
 relates: []
 ---
 
-The current project state is consolidated in [[002.summary]]. It records the
-implemented product, interface boundaries, focused persistence and verification,
-and deliberate open scope. There are no open tasks.
+The project state is consolidated in [[001.summary]]. It records the implemented
+product, interface boundaries, persistence, verification, and deliberate open
+scope. There are no open tasks or retained delivery histories.
