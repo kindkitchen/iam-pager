@@ -1,6 +1,6 @@
 import { deserialize, serialize } from "node:v8";
 
-/** Manifest value for the retained V8 structured-clone payload format. */
+/** Manifest value for the V8 structured-clone payload format. */
 export const content_data_encoding_v8_1 = "v8-1" as const;
 
 export interface ContentDataCodec {
@@ -9,7 +9,7 @@ export interface ContentDataCodec {
   decode(bytes: Uint8Array): unknown;
 }
 
-/** Versioned codec compatible with the superseded prototype's V8 payloads. */
+/** Versioned codec for structured content payloads. */
 export class V8ContentDataCodec implements ContentDataCodec {
   readonly encoding_version = content_data_encoding_v8_1;
 

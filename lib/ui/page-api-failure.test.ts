@@ -88,19 +88,7 @@ Deno.test("page API failures distinguish PDF, size, and stale outcomes", () => {
   );
 });
 
-Deno.test("page API failures hide unknown detail and type deployment failures", () => {
-  assertEquals(
-    presenter.present(
-      503,
-      body("endpoint_set_unsupported", "adapter keyspace /private/path"),
-      { operation: "publish", content_type: "pdf" },
-    ),
-    {
-      kind: "availability",
-      code: "endpoint_set_unsupported",
-      message: "PDF endpoint publishing is not available in this deployment.",
-    },
-  );
+Deno.test("page API failures hide unknown detail and type server failures", () => {
   assertEquals(
     presenter.present(
       418,

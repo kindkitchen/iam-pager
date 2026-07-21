@@ -4,7 +4,7 @@ import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
 import type { PageClock, PageIdGenerator } from "../page/interfaces.ts";
-import { MemoryPageRepository } from "../page/memory-repository.ts";
+import { MemoryPageAggregateRepository } from "../page/memory-aggregate-repository.ts";
 import { RepositoryNamespaceAuthorityResolver } from "../page/namespace-authority.ts";
 import { WebPdfMultipartDecoder } from "../page/pdf-http.ts";
 import { PageService } from "../page/service.ts";
@@ -76,7 +76,7 @@ async function make_fixture(options: { page_size?: number } = {}) {
   });
   const pages = new PageService({
     engine: new LocatorEngine({ strategies: [new PathSlugStrategy()] }),
-    repository: new MemoryPageRepository(),
+    repository: new MemoryPageAggregateRepository(),
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler()],
     page_id_generator: new SequenceIds(),

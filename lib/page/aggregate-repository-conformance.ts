@@ -4,7 +4,7 @@ import type { PageAggregate } from "./aggregate.ts";
 import type { PageAggregateRepository } from "./aggregate-interfaces.ts";
 import type { PageEndpointBinding, PageEndpointSet } from "./endpoint.ts";
 
-/** Backwards-compatible conformance name for the named repository contract. */
+/** Repository subject exercised by the shared conformance suite. */
 export type PageAggregateConformanceSubject = PageAggregateRepository;
 
 export interface PageAggregateRepositoryConformanceOptions {

@@ -46,7 +46,7 @@ export interface SitePublicExplorationPresenterOptions {
 }
 
 /**
- * Web-independent DS-EXPLORE projection. Search and visibility stay in the
+ * Web-independent exploration projection. Search and visibility stay in the
  * page capability; this presenter only supplies visitor-safe labels and links
  * for the site's GET form and continuation.
  */

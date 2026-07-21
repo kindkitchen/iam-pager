@@ -90,7 +90,7 @@ export interface PageManagementPanelProps {
 }
 
 /**
- * Creator management panel (DS-MANAGE): projects filtering, tag/content edits,
+ * Creator management panel: projects filtering, tag/content edits,
  * rename, duplicate, explicit selection, bulk access, and bulk deletion onto
  * the strict revision-bound API. All management rules remain outside the UI.
  */

@@ -18,7 +18,7 @@ export interface NamespaceHttpRequestContext {
 }
 
 /**
- * HTTP boundary for namespace ownership (DS-PROTECT, QT-API). Reservation
+ * HTTP boundary for namespace ownership. Reservation
  * rules stay in `NamespaceReservationManager`; this surface only enforces
  * the JSON contract, session and CSRF requirements, and typed mapping.
  */

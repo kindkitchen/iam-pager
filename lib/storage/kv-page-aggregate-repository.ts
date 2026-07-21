@@ -62,7 +62,7 @@ import {
   type KvContentAssetRepositoryOptions,
 } from "./kv-content-asset-repository.ts";
 
-export const page_aggregate_storage_schema_version = 2 as const;
+export const page_aggregate_storage_schema_version = 1 as const;
 export const page_aggregate_max_attempts = 16;
 /** Proven worst case with eight source endpoints and eight eight-endpoint trials. */
 export const max_page_aggregate_atomic_checks = 87;
@@ -70,20 +70,10 @@ export const max_page_aggregate_atomic_checks = 87;
 export const page_aggregate_atomic_check_headroom = 100 -
   max_page_aggregate_atomic_checks;
 
-export type ImportPageAggregateOutcome = "created" | "unchanged";
-
-/** Storage-local import capability used only by the retained manual migration. */
-export interface PageAggregateMigrationRepository {
-  import_page_aggregate(
-    page: PageAggregate,
-  ): Promise<ImportPageAggregateOutcome>;
-  verify_imported_page_aggregate(page: PageAggregate): Promise<void>;
-}
-
 export const page_aggregate_storage_prefix: Deno.KvKey = [
   "iam-pager",
   "page-aggregates",
-  "v2",
+  "v1",
 ];
 export const page_aggregate_by_id_prefix: Deno.KvKey = [
   ...page_aggregate_storage_prefix,
@@ -110,7 +100,7 @@ interface StoredPageEndpointBinding {
 
 /** Authoritative page record. Payload bytes live only behind the asset manifest. */
 export interface StoredPageAggregateEnvelope {
-  readonly schema_version: 2;
+  readonly schema_version: 1;
   readonly page_id: string;
   readonly canonical: StoredPageEndpointBinding;
   readonly alternates: readonly StoredPageEndpointBinding[];
@@ -126,7 +116,7 @@ export interface StoredPageAggregateEnvelope {
 
 /** Revision-bearing endpoint, owner, and public projection value. */
 export interface StoredPageAggregatePointer {
-  readonly schema_version: 2;
+  readonly schema_version: 1;
   readonly page_id: string;
   readonly revision: number;
 }
@@ -153,10 +143,6 @@ function invalid_stored_page_aggregate(): never {
 
 function invariant_violation(): never {
   throw new Error("page aggregate repository invariant violated");
-}
-
-function migration_conflict(reason: string): never {
-  throw new Error(`page aggregate migration conflict: ${reason}`);
 }
 
 function clone<T>(value: T): T {
@@ -330,14 +316,6 @@ function page_pointer(page: PageAggregate): StoredPageAggregatePointer {
     page_id: page.page_id,
     revision: page.revision,
   };
-}
-
-function page_aggregates_equal(
-  left: PageAggregate,
-  right: PageAggregate,
-): boolean {
-  return JSON.stringify(serialize_envelope(left)) ===
-    JSON.stringify(serialize_envelope(right));
 }
 
 function deserialize_pointer(value: unknown): StoredPageAggregatePointer {
@@ -528,8 +506,7 @@ function matches_exploration(
  * Manifest-backed durable aggregate repository. One native Deno KV commit owns
  * every page, endpoint claim, owner row, and public row visibility mutation.
  */
-export class KvPageAggregateRepository
-  implements PageAggregateRepository, PageAggregateMigrationRepository {
+export class KvPageAggregateRepository implements PageAggregateRepository {
   readonly #kv: KvGateway;
   readonly #assets: KvContentAssetRepository;
 
@@ -557,74 +534,6 @@ export class KvPageAggregateRepository
     this.#require_page_id(page_id);
     const snapshot = await this.#read_snapshot(page_id);
     return snapshot === null ? null : clone(snapshot.page);
-  }
-
-  async import_page_aggregate(
-    supplied_page: PageAggregate,
-  ): Promise<ImportPageAggregateOutcome> {
-    const page = clone(supplied_page);
-    const violation = page_aggregate_violation(page);
-    require(violation === null, violation ?? "invalid page aggregate");
-    const indexes = visibility_index_values(page);
-    const keys = [
-      page_aggregate_storage_key(page.page_id),
-      ...indexes.map((index) => index.key),
-    ];
-
-    for (let attempt = 0; attempt < page_aggregate_max_attempts; attempt += 1) {
-      const entries = await this.#get_entries(keys);
-      if (entries[0].versionstamp !== null) {
-        await this.verify_imported_page_aggregate(page);
-        return "unchanged";
-      }
-      if (entries.slice(1).some((entry) => entry.versionstamp !== null)) {
-        return migration_conflict("destination index is already claimed");
-      }
-      const asset_entry = await this.#assets.find_content_asset_manifest_entry(
-        page.content_asset_id,
-      );
-      if (asset_entry === null) {
-        return migration_conflict("content asset manifest is absent");
-      }
-      const checks = this.#merge_checks([...entries, asset_entry]);
-      if (checks === null) continue;
-      const committed = await this.#commit(checks, (atomic) => {
-        atomic.set(entries[0].key, serialize_envelope(page));
-        for (const index of indexes) atomic.set(index.key, index.value);
-        return atomic;
-      });
-      if (committed) return "created";
-    }
-
-    try {
-      await this.verify_imported_page_aggregate(page);
-      return "unchanged";
-    } catch {
-      throw new Error(
-        "page aggregate migration import contention exhausted retries",
-      );
-    }
-  }
-
-  async verify_imported_page_aggregate(
-    supplied_page: PageAggregate,
-  ): Promise<void> {
-    const page = clone(supplied_page);
-    const violation = page_aggregate_violation(page);
-    require(violation === null, violation ?? "invalid page aggregate");
-    const asset_entry = await this.#assets.find_content_asset_manifest_entry(
-      page.content_asset_id,
-    );
-    if (asset_entry === null) {
-      return migration_conflict("content asset manifest is absent");
-    }
-    const snapshot = await this.#read_snapshot(page.page_id);
-    if (snapshot === null) {
-      return migration_conflict("destination page is absent");
-    }
-    if (!page_aggregates_equal(snapshot.page, page)) {
-      return migration_conflict("destination page differs from source");
-    }
   }
 
   async resolve_page_endpoint(

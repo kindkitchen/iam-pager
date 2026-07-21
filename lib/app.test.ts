@@ -38,7 +38,7 @@ import {
   type OwnershipRepositoryFactory,
   type OwnershipStorageConfig,
   PAGE_STORAGE_BACKEND_ENV,
-  type PageRepositoryFactory,
+  type PageAggregateRepositoryFactory,
   type PageStorageConfig,
   SESSION_STORAGE_BACKEND_ENV,
   type SessionRepositoryFactory,
@@ -435,10 +435,10 @@ Deno.test("configured composition selects referentially safe session storage", a
   );
 });
 
-Deno.test("configured composition selects referentially safe v2 page storage", async () => {
+Deno.test("configured composition selects referentially safe durable page storage", async () => {
   const selected_page_repository = new MemoryPageAggregateRepository();
   let selected_config: PageStorageConfig | undefined;
-  const page_repository_factory: PageRepositoryFactory = {
+  const page_repository_factory: PageAggregateRepositoryFactory = {
     create: (config) => {
       selected_config = config;
       return Promise.resolve(selected_page_repository);
@@ -452,7 +452,7 @@ Deno.test("configured composition selects referentially safe v2 page storage", a
       "http://localhost:5173/auth/google/mock-consent",
     [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
     [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
-    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv-v2",
+    [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
   };
 
   const services = await create_configured_app_services(
@@ -472,7 +472,7 @@ Deno.test("configured composition selects referentially safe v2 page storage", a
   );
 
   assertEquals(selected_config, {
-    backend: "deno-kv-v2",
+    backend: "deno-kv",
     path: "/data/iam-pager.kv",
   });
   assertStrictEquals(services.page_repository, selected_page_repository);

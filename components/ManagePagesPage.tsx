@@ -11,10 +11,7 @@ export interface ManagePagesPageProps {
   readonly page_management: PageManagementPanelModel;
 }
 
-/**
- * Prototype navigation split: creator page management as its own navigable
- * page instead of one panel stacked on the landing.
- */
+/** Creator page management as a dedicated site view. */
 export function ManagePagesPage(
   { navigation, breadcrumb, page_management }: ManagePagesPageProps,
 ) {

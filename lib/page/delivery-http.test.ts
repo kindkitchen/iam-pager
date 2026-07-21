@@ -7,8 +7,6 @@ import {
   page_actor_from_session,
 } from "./delivery-http.ts";
 import type { DeliverPageResult, PageDeliverer } from "./interfaces.ts";
-import type { PageRecord } from "./model.ts";
-
 Deno.test("direct delivery actor derives only from resolved session authority", () => {
   const now = new Date("2026-07-19T12:00:00.000Z");
   const guest: Session = {
@@ -41,26 +39,8 @@ const engine = new LocatorEngine({
 });
 const guest_actor = { kind: "guest" } as const;
 
-function page_with_meta(
-  media_type: string,
-  size_bytes: number,
-): PageRecord {
-  const now = new Date("2026-07-19T12:00:00.000Z");
-  return {
-    page_id: "page-1",
-    locator: { namespace: "Ada", page_name: "notes" },
-    stewardship: { kind: "trial" },
-    access: "public",
-    tags: [],
-    revision: 1,
-    content: {
-      content_type: "test",
-      data: null,
-      meta: { media_type, size_bytes },
-    },
-    created_at: now,
-    updated_at: now,
-  };
+function page_with_size(size_bytes: number) {
+  return { page_id: "page-1", revision: 1, size_bytes };
 }
 
 function fixed_deliverer(result: DeliverPageResult): PageDeliverer {
@@ -83,10 +63,7 @@ Deno.test("direct delivery maps active content to intentional isolated headers",
     engine,
     fixed_deliverer({
       ok: true,
-      page: page_with_meta(
-        "text/html; charset=utf-8",
-        new TextEncoder().encode(body).byteLength,
-      ),
+      page: page_with_size(new TextEncoder().encode(body).byteLength),
       endpoint: delivery_endpoint(),
       payload: { body, media_type: "text/html; charset=utf-8" },
     }),
@@ -116,7 +93,7 @@ Deno.test("direct delivery encodes attachment filenames without active isolation
     engine,
     fixed_deliverer({
       ok: true,
-      page: page_with_meta("text/plain; charset=utf-8", 7),
+      page: page_with_size(7),
       endpoint: delivery_endpoint("attachment"),
       payload: {
         body: "payload",
@@ -143,7 +120,7 @@ Deno.test("direct delivery disposition follows the endpoint rather than filename
     engine,
     fixed_deliverer({
       ok: true,
-      page: page_with_meta("application/octet-stream", 7),
+      page: page_with_size(7),
       endpoint: delivery_endpoint("inline"),
       payload: {
         body: "payload",
@@ -161,7 +138,7 @@ Deno.test("direct delivery disposition follows the endpoint rather than filename
     engine,
     fixed_deliverer({
       ok: true,
-      page: page_with_meta("application/octet-stream", 7),
+      page: page_with_size(7),
       endpoint: delivery_endpoint("attachment"),
       payload: { body: "payload", media_type: "application/octet-stream" },
     }),
@@ -179,7 +156,7 @@ Deno.test("direct PDF delivery supports validators and strict single byte ranges
   const body = new TextEncoder().encode("0123456789");
   const result: DeliverPageResult = {
     ok: true,
-    page: page_with_meta("application/pdf", body.byteLength),
+    page: page_with_size(body.byteLength),
     endpoint: delivery_endpoint("attachment"),
     payload: {
       body,

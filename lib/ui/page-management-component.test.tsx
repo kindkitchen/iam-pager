@@ -2,7 +2,7 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { render as render_to_string } from "preact-render-to-string";
 import PageManagementPanel from "../../islands/PageManagementPanel.tsx";
 
-Deno.test("creator management component renders DS-MANAGE controls and safe rows", () => {
+Deno.test("creator management component renders controls and safe rows", () => {
   const html = render_to_string(
     <PageManagementPanel
       csrf_token={"c".repeat(43)}

@@ -11,27 +11,14 @@ import {
   page_sort_key,
   type PageSortKey,
 } from "./cursor.ts";
-import type { PageRecord } from "./model.ts";
-
 function make_record(
   namespace: string,
   page_name: string | undefined,
   page_id: string,
-): PageRecord {
+) {
   return {
     page_id,
     locator: page_name === undefined ? { namespace } : { namespace, page_name },
-    stewardship: { kind: "trial" },
-    access: "public",
-    tags: [],
-    revision: 1,
-    content: {
-      content_type: "md-page",
-      data: { md: "x", html: "<p>x</p>" },
-      meta: { media_type: "text/html; charset=utf-8", size_bytes: 1 },
-    },
-    created_at: new Date("2026-07-19T00:00:00.000Z"),
-    updated_at: new Date("2026-07-19T00:00:00.000Z"),
   };
 }
 

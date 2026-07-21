@@ -40,7 +40,7 @@ export async function deliver_page_locator_path(
   const etag = await direct_delivery_etag(page.page_id, page.revision);
   const headers = new Headers({
     "content-type": payload.media_type,
-    "content-length": String(page.content.meta.size_bytes),
+    "content-length": String(page.size_bytes),
     "cache-control": "no-store",
     "content-disposition": content_disposition(
       endpoint.delivery_profile,
@@ -72,7 +72,7 @@ export async function deliver_page_locator_path(
   }
 
   if (is_pdf_binary_payload(payload.media_type, payload.body)) {
-    if (payload.body.byteLength !== page.content.meta.size_bytes) {
+    if (payload.body.byteLength !== page.size_bytes) {
       return text_response(500, "page content is not deliverable", request_id);
     }
     headers.set("accept-ranges", "bytes");

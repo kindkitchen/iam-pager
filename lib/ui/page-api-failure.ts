@@ -181,12 +181,6 @@ export class TypedPageApiFailurePresenter implements PageApiFailurePresenter {
           code,
           "This page content type is not supported.",
         );
-      case "endpoint_set_unsupported":
-        return failure(
-          "availability",
-          code,
-          "PDF endpoint publishing is not available in this deployment.",
-        );
       case "page_unavailable":
       case "page_id_generation_exhausted":
       case "page_name_generation_exhausted":

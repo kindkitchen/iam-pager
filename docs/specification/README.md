@@ -1,36 +1,29 @@
 # Project specification
 
-Section markers use a short file prefix and a stable descriptive word, such as
-`DA-LOCATOR`. Tasks can cite these markers without depending on section order.
+These documents define the current product and its implementation boundaries.
+They are requirements, not a delivery log. Stable section labels can be cited by
+code, tests, and future tasks without depending on section order.
 
-## SP-SHAPE — Product shape
+| Document                                                                       | Purpose                                                         |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| [product-definition.md](product-definition.md)                                 | Goal, users, and scope                                          |
+| [domain-and-addressing.md](domain-and-addressing.md)                           | Page, locator, asset, endpoint, access, and lifecycle rules     |
+| [experiences-and-scope.md](experiences-and-scope.md)                           | Visitor, guest, and creator behavior                            |
+| [capabilities.md](capabilities.md)                                             | Application interfaces and outcomes                             |
+| [quality-and-technical-requirements.md](quality-and-technical-requirements.md) | Architecture, storage, HTTP, security, limits, and verification |
+| [session-and-authentication.md](session-and-authentication.md)                 | Session and Google authentication invariants                    |
+| [open-scope-and-risks.md](open-scope-and-risks.md)                             | Deliberately unimplemented scope and active risks               |
 
-- A person publishes content at a deterministic locator made from a namespace
-  and an optional page name.
-- Direct access returns the content itself without the management site's visual
-  shell.
-- The site supports public exploration, wrapped page viewing, and authenticated
-  content management.
-- Authentication reserves a namespace and protects its pages.
-- Content can have different formats and sizes; external storage is a later
-  extension of that need.
-- A logical page may expose more than one delivery endpoint for the same stored
-  content, while retaining one management and exploration identity.
-- PDF is the next selected content expansion: user-configured inline and
-  attachment endpoints may serve the same bytes at independently chosen valid
-  locators.
-- Even a guest may publish, but with stricter limits and without a reserved
-  namespace or overwrite protection.
+## SP-CORE — Product shape
 
-## SP-MAP — Documents
-
-| File                                                                           | Purpose                                          |
-| ------------------------------------------------------------------------------ | ------------------------------------------------ |
-| [product-definition.md](product-definition.md)                                 | Product idea, users, MVP, and boundaries         |
-| [experiences-and-scope.md](experiences-and-scope.md)                           | Visitor, explorer, publisher, and creator flows  |
-| [domain-and-addressing.md](domain-and-addressing.md)                           | Pages, namespaces, locators, content, and access |
-| [capabilities.md](capabilities.md)                                             | Functions the app exposes                        |
-| [quality-and-technical-requirements.md](quality-and-technical-requirements.md) | Important technical behavior and constraints     |
-| [session-and-authentication.md](session-and-authentication.md)                 | Session lifecycle boundaries and current status  |
-| [open-questions-and-risks.md](open-questions-and-risks.md)                     | MVP decisions and nearby implementation risks    |
-| [delivery-slices.md](delivery-slices.md)                                       | App-focused increments for building the product  |
+- Content is published at a deterministic namespace and optional page-name
+  locator.
+- Direct access returns content, not the management site's shell.
+- The site provides publishing, wrapped viewing, public exploration, and creator
+  management as projections of shared application logic.
+- Authentication lets creators reserve namespaces and protect pages.
+- Guests may publish public, undiscoverable trial pages without ownership.
+- A logical page can expose several explicit delivery endpoints over one content
+  asset while remaining one managed and explored item.
+- Markdown and PDF are the supported content types; broader formats and external
+  storage remain later scope.

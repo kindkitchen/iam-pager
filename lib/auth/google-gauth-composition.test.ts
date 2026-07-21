@@ -1,7 +1,6 @@
-import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   compose_google_gauth,
-  compose_google_gauth_service,
   type EnvironmentSource,
   GOOGLE_AUTH_CLIENT_ID_ENV,
   GOOGLE_AUTH_CLIENT_SECRET_ENV,
@@ -275,12 +274,13 @@ Deno.test("original gauth composition resolves an allowlisted dynamic callback s
 });
 
 Deno.test("original gauth composition creates a Google authorization request without network or real credentials", async () => {
-  const service = await compose_google_gauth_service({
+  const { service } = await compose_google_gauth({
     mode: "original",
     redirect_uri: "https://pager.example/auth/google/callback",
     client_id: "test-client-id",
     client_secret: "not-a-real-secret",
   });
+  assert(service !== null);
   const result = await new GoogleGAuthStrategy(service).begin({
     state: "original-state",
     callback_url: "https://pager.example/auth/google/callback",

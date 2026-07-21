@@ -30,7 +30,7 @@ import { default_page_style_preset } from "../lib/ui/page-style-presets.ts";
 import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
-} from "../lib/ui/random-name.ts";
+} from "../lib/random-name.ts";
 
 type PublishState =
   | { status: "idle" }

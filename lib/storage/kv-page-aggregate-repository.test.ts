@@ -168,7 +168,7 @@ function with_atomic_check_counter(
   });
 }
 
-Deno.test("KV page aggregates survive repository reconstruction with exact v2 projections", async () => {
+Deno.test("KV page aggregates survive repository reconstruction with exact projections", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
     const writer = new KvPageAggregateRepository(new KvToolboxGateway(kv));
@@ -203,7 +203,7 @@ Deno.test("KV page aggregates survive repository reconstruction with exact v2 pr
     const envelopes = await list_entries(kv, page_aggregate_by_id_prefix);
     assertEquals(envelopes.length, 1);
     assertEquals(envelopes[0].value, {
-      schema_version: 2,
+      schema_version: 1,
       page_id: "page-1",
       canonical: {
         namespace: "Alice",
@@ -236,7 +236,6 @@ Deno.test("KV page aggregates survive repository reconstruction with exact v2 pr
       (await list_entries(kv, page_aggregate_public_prefix)).length,
       1,
     );
-    assertEquals((await list_entries(kv, ["iam-pager", "pages"])).length, 0);
   } finally {
     kv.close();
   }
@@ -274,7 +273,7 @@ Deno.test("KV page aggregates fail closed on malformed envelopes and index drift
       "preview",
     ];
     await kv.set(endpoint_key, {
-      schema_version: 2,
+      schema_version: 1,
       page_id: "other-page",
       revision: 1,
     });

@@ -22,7 +22,7 @@ export interface MdPageLimits {
   max_css_bytes: number;
 }
 
-/** Current prototype limits; callers may inject a different policy later. */
+/** Default Markdown limits; callers may inject a different policy. */
 export const default_md_page_limits: Readonly<MdPageLimits> = {
   max_md_bytes: 64 * 1024,
   max_css_bytes: 16 * 1024,
@@ -38,10 +38,7 @@ function escape_css(css: string): string {
   return css.replaceAll("<", "\\3c ");
 }
 
-/**
- * First content type (001.draft): markdown in, sanitized html derived at
- * publish time, optional css applied during raw representation.
- */
+/** Markdown in, sanitized HTML derived at publish time, optional CSS. */
 export class MdPageHandler
   implements ContentTypeHandler<MdPageInput, MdPageData> {
   readonly content_type = "md-page";

@@ -159,7 +159,7 @@ export function decode_page_list_cursor(
   };
 }
 
-/** Complete filter scope carried by a DS-MANAGE continuation cursor. */
+/** Complete filter scope carried by a managed-page cursor. */
 export interface ManagedPageListCursorScope {
   namespace: string | null;
   page_name_query: string | null;
@@ -255,7 +255,7 @@ export function decode_managed_page_list_cursor(
   return { namespace_key, default_rank, page_name_key, page_id };
 }
 
-/** Query scope carried by a DS-EXPLORE continuation cursor. */
+/** Query scope carried by a public-exploration cursor. */
 export interface PageExplorationCursorScope {
   namespace_query: string | null;
   page_name_query: string | null;
@@ -268,7 +268,7 @@ export function encode_page_exploration_cursor(
   scope: PageExplorationCursorScope,
 ): string {
   return encode_base64url(JSON.stringify({
-    kind: "explore-v2",
+    kind: "explore",
     namespace_key: last.namespace_key,
     default_rank: last.default_rank,
     page_name_key: last.page_name_key,
@@ -320,7 +320,7 @@ export function decode_page_exploration_cursor(
   if (
     keys.length !== expected_keys.length ||
     !expected_keys.every((key) => keys.includes(key)) ||
-    record.kind !== "explore-v2" ||
+    record.kind !== "explore" ||
     record.namespace_query !== scope.namespace_query ||
     record.page_name_query !== scope.page_name_query ||
     record.tag !== scope.tag

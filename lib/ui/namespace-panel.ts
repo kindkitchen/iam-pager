@@ -34,7 +34,7 @@ export interface CreatorNamespacePanelPresenterOptions {
 /**
  * Keeps session decisions, reservation loading, and path building outside UI
  * components: guests get a hidden panel, creators get trusted form inputs and
- * already-formatted direct paths (DS-PROTECT).
+ * already-formatted direct paths.
  */
 export class CreatorNamespacePanelPresenter implements NamespacePanelPresenter {
   readonly #namespaces: NamespaceReservationManager;

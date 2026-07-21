@@ -1,184 +1,122 @@
 # Domain and addressing
 
-## DA-NAMESPACE — Namespace
-
-A namespace is the creator-controlled scope of a page locator. An authenticated
-creator can reserve a unique namespace, after which only that creator can manage
-pages within it. An account may support additional reserved namespaces later.
-
-Even a guest may use a namespace, but does not reserve it. Guest content may be
-replaced by another guest or by an authenticated creator who uses the same
-namespace. Guest publishing cannot replace content in an already reserved
-namespace.
-
-Namespace and page-name validation must be consistent during publishing and
-lookup.
-
-## DA-PAGE — Page
-
-A page is one logical management and exploration identity with one current
-content asset and the metadata needed to deliver and manage it. It has one
-canonical locator and may have additional endpoint bindings for alternate
-delivery behavior. Those bindings are representations of the same page, not
-independent pages.
-
-A page can be named or can be the namespace's default page. Its content can
-change without requiring a new canonical locator. Managed pages have an opaque
-stable management ID that is separate from locator and endpoint identity; it is
-not part of a direct URL and remains stable across content, endpoint, or access
-changes. For protected pages, changing the page name must not collide with
-another page or any reserved endpoint binding in the same namespace.
-
-A page is either a public, unowned trial or a managed page whose creator is
-recorded only by server-owned storage. Managed pages may be public or private.
-Their current representation has a positive revision, and
-content/access/tag/endpoint changes or deletion must match that revision so
-concurrent intent cannot be silently overwritten.
-
-## DA-ENDPOINT — Page delivery endpoint
-
-A delivery endpoint binds a locator to one logical page and one delivery
-profile. The profile states behavior such as `inline` or `attachment`; direct
-HTTP maps that stored behavior to headers. The publisher supplies each endpoint
-locator as ordinary locator intent. A suffix such as `.pdf` carries no special
-meaning and is neither generated nor interpreted by content or delivery logic.
-
-One endpoint is canonical and a page may have at most seven alternates. The
-canonical endpoint is explicitly designated and may use any profile supported by
-the content type; it is not implicitly the inline endpoint. Alternate endpoints
-do not receive their own page ID, revision, tags, access, management row, or
-exploration row. Page authority and visibility are checked after endpoint
-resolution against the one logical page.
-
-Every binding belongs to the canonical locator's same case-insensitive namespace
-and every locator is unique inside the set. Canonical and alternate locators may
-each be default or named. Add, change, remove, canonical change, and display-
-casing change submit the complete one-to-eight-binding set against the exact
-page revision. Alternate input order is not semantic. Storage checks all old and
-new claims and publishes the page, revision, and complete binding set or none.
-
-## DA-CONTENT-ASSET — Stored content identity
-
-A content asset is an immutable stored payload plus validated type-specific
-metadata. A page points to its current asset; multiple endpoint bindings, and
-later multiple page snapshots, may reference the same asset. Replacing content
-creates or selects another asset and atomically changes the page reference, so
-all endpoints expose one current payload. Physical byte duplication is an
-adapter choice and is not required by product semantics.
-
-An asset is not publicly resolvable without an eligible page endpoint. Removing
-a page or replacing its asset may leave an unreferenced staged asset for bounded
-cleanup, but must never expose incomplete content or delete bytes still
-referenced elsewhere.
-
 ## DA-LOCATOR — Locator
 
-A locator is composed of:
+A locator contains:
 
-- a namespace;
-- an optional page name, whose absence addresses the namespace's default page.
+- one namespace;
+- an optional page name; omission addresses the namespace's default page.
 
-The locator model is independent of its public URL mapping. A deployment may map
-the namespace to a path component, a subdomain, or another route shape without
-changing publishing, lookup, search, or ownership behavior. The HTTP mapping
-must still avoid conflicts with site assets, management routes, and API routes.
+The model is independent of URL mapping. The current web adapter maps it to
+`/<namespace>[/<page-name>]`, but another adapter may use a different shape
+without changing publishing, ownership, search, or resolution rules.
 
-Namespace, page-name, and endpoint-locator uniqueness are case-insensitive.
-Displayed and returned values preserve the publisher-supplied casing. Internal
-representation is not specified. Alternate endpoint locators participate in
-collision checks even though they remain absent from page search and management
-lists.
+Locator identity is case-insensitive; accepted publisher casing is preserved for
+display. `site`, `api`, and `auth` are reserved namespaces. Publishing and
+lookup must use the same validation boundary.
 
-A valid locator resolves to one current page response. Deterministic means that
-resolution is predictable; it does not mean the content can never change.
+## DA-NAMESPACE — Namespace
 
-## DA-CONTENT — Content
+A reserved namespace belongs to one application user. Only that user can mutate
+managed pages in it. One user may reserve several namespaces.
 
-Content is the payload plus intrinsic metadata such as media type, size, and an
-optional safe suggested filename. It may be textual or binary. Inline versus
-attachment behavior belongs to the resolved endpoint rather than requiring a
-second content copy or changing the content asset.
+An unreserved namespace may contain guest trial pages. A guest does not acquire
+ownership, cannot write into a reserved namespace, and cannot stop another guest
+or a future owner from replacing a trial locator.
 
-"Raw" or "direct" content means the response is not wrapped in the site. It
-still uses normal HTTP behavior and any handling needed to stop creator content
-from gaining access to authenticated management sessions.
+## DA-PAGE — Logical page
 
-The product should support varied formats and size bands over time. The MVP must
-explicitly list the formats and limits it actually accepts rather than
-pretending every file can be displayed safely. `md-page` is implemented. The
-transport-independent `pdf` handler is also implemented with a 16 MiB bound,
-fixed `application/pdf` media type, detached immutable bytes, bounded safe
-filename metadata, and both inline and attachment profile support. Generic
-application commands now accept user-configured complete endpoint intent for
-creation, revision-bound replacement, and duplication; either profile may use
-any valid, non-conflicting locator. The concrete PDF HTTP boundary now requires
-a canonical inline binding and at least one attachment alternate, accepts the
-binary through strict bounded multipart rather than JSON, and serves strict
-single ranges. Generic raw-binary handling remains later.
+A page is one managed and explored item with:
 
-## DA-ACCESS — Access
+- an opaque stable page ID, separate from every public locator;
+- one current immutable content-asset reference;
+- one complete endpoint set;
+- trial or managed stewardship;
+- public or private access;
+- zero to ten canonical tags;
+- a positive revision and creation/update timestamps.
 
-The original access model is intentionally simple:
+A rename or endpoint change keeps the page ID. Alternate endpoints do not gain
+their own ID, revision, tags, access, management row, or exploration row.
 
-- public content can be opened by visitors and can appear in exploration;
-- private content can be opened only through its creator's authorized session.
+Trial pages are public and unowned. Managed pages record their owner only in
+server-controlled storage and may be public or private.
 
-Guest pages are publicly deliverable but never appear in exploration; a visitor
-must know the direct URL to open one for raw preview.
+## DA-ENDPOINT — Delivery endpoint
 
-Public does not imply that the platform created or endorses the content.
+An endpoint binds a locator to one page and one delivery profile: `inline` or
+`attachment`. The content handler declares which profiles it supports.
 
-## DA-TAGS — Managed page tags
+An endpoint set has one structurally canonical binding and zero to seven
+alternates. All bindings:
 
-Tags are page metadata, not locator identity or creator content. Managed pages
-may carry at most ten tags; trial pages carry none. Input is trimmed and
-lowercased, duplicates collapse, and storage uses a sorted unique set. Each tag
-is 1–32 ASCII characters, starts and ends with an alphanumeric character, and
-uses only alphanumerics, `-`, or `_`. Tag replacement is revision-bound; rename
-preserves tags and duplicate copies them from the exact source revision.
+- use valid, case-insensitively unique locators;
+- belong to the canonical locator's case-insensitive namespace;
+- preserve accepted publisher spelling;
+- participate in the same collision space;
+- resolve to the page's one current asset.
 
-Managed listing uses exact tag matching alongside page-name substring and access
-filters. Public exploration exposes tags only for eligible public managed pages
-and can require one exact tag. Tags never make a private or trial page publicly
-discoverable.
+Canonical does not imply inline. Alternate order is not semantic and storage
+orders it deterministically. Replacing an endpoint set supplies all bindings at
+an exact page revision and commits the page plus every old/new claim atomically.
+No path suffix has delivery meaning.
 
-## DA-LIFECYCLE — Replacement, rename, and deletion
+## DA-ASSET — Content asset
 
-Protected namespaces reject replacement by another actor. Their creators control
-content changes and deletion. A rename must reject conflicts and should tell the
-creator that old shared URLs may stop working. When a page has alternate
-endpoints, create and rename publish or move the complete endpoint set, access
-changes cover every endpoint, content replacement switches their shared asset,
-and deletion removes all endpoint visibility. Redirects and revision history are
-optional later behavior, not required for the first version.
+A content asset is an immutable validated payload with intrinsic metadata:
+content type, media type, size, and optional safe download filename. A page
+references one current asset; all its endpoints therefore expose one coherent
+payload.
 
-The implemented rename core is revision-bound and keeps the stable page ID while
-atomically replacing its case-insensitive locator and owner-list position inside
-the same namespace. Another managed page is a conflict; an older trial may be
-retired as it is during managed creation. Duplication leaves the source
-unchanged and creates revision 1 under a bounded server-generated available name
-and fresh ID from the exact expected source revision. Strict HTTP actions and
-the creator panel project both operations; the panel uses the displayed current
-revision and refreshes a stale source instead of retrying it.
+Content replacement stages a fresh asset before atomically switching the page
+reference. An asset has no public address without an eligible page endpoint.
+Deleting or replacing a page may leave an unreferenced asset, but must never
+publish incomplete data or remove data still referenced by another page.
 
-Duplication creates a fresh page and destination endpoint set but may safely
-reference the same immutable content asset. A later replacement changes only the
-mutated page's asset reference. The one-endpoint `md-page` compatibility command
-continues to generate one available canonical name; endpoint-aware application
-callers must supply a complete fresh destination set so aliases are never
-silently dropped.
+## DA-CONTENT — Supported content
 
-Authenticated storage should be durable enough for normal management use, but
-the app should not promise that content can never disappear under any
-circumstance. The practical retention and backup behavior should be stated when
-those systems are implemented.
+`md-page` stores Markdown source, sanitized derived HTML, and optional CSS. It
+supports inline delivery.
 
-The first optional durable boundary covers ownership records: Deno KV stores
-application users, provider identities, and namespace reservations together so a
-persisted claim always retains a resolvable owner after restart. Sessions and
-page content may separately opt into that same ownership database; durable
-sessions or durable content with process-local ownership are rejected, so a
-persisted page in a reserved namespace always retains its resolvable reservation
-and owner. There is currently no application expiry or deletion for ownership
-records and no automatic migration between memory, database paths, or backends.
-Without the content opt-in, pages remain process-local.
+`pdf` stores detached bytes and bounded filename/version metadata. It supports
+inline and attachment delivery. Validation requires at most 16 MiB, a byte-zero
+PDF 1.0–1.7 or 2.0 header, and terminal `startxref`/`%%EOF` structure pointing
+to an xref table or xref-stream object. This is structural screening, not
+malware detection or sanitization.
+
+Delivery profile belongs to the endpoint, not the asset or filename.
+
+## DA-ACCESS — Visibility
+
+- Public managed pages can be delivered, wrapped, and explored.
+- Private managed pages can be delivered only to their creator's current
+  authenticated session and never appear in public queries.
+- Trial pages can be delivered or wrapped by known locator but never appear in
+  creator-backed exploration.
+
+Missing, invalid, private, and unauthorized visitor lookups are non-disclosing.
+
+## DA-TAGS — Tags
+
+Managed pages have at most ten tags. Each tag is lowercased and trimmed, is 1–32
+ASCII characters, starts and ends with an alphanumeric character, and uses only
+alphanumerics, `-`, or `_`. Duplicates collapse and storage sorts the set. Trial
+pages have no tags.
+
+Tag replacement is revision-bound. Rename preserves tags; duplicate copies them.
+Managed filtering and public exploration use exact canonical tag matching.
+
+## DA-LIFECYCLE — Mutation
+
+Managed content, access, tags, endpoints, rename, duplicate, and deletion use an
+exact expected revision. A successful mutation increments once; stale intent
+fails without mutation.
+
+Create may atomically replace trials occupying its planned endpoints but never a
+managed page. Endpoint movement is all-or-none. Duplicate creates a fresh page
+and endpoint set from one exact source revision and may share the source's
+immutable asset. Delete removes the page and every endpoint claim.
+
+Bulk access and deletion accept 1–100 distinct page/revision selections. The
+selection is validated before mutation; accepted items execute independently in
+input order and return one non-disclosing outcome each.

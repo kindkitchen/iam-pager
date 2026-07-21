@@ -50,7 +50,7 @@ export interface CreatorPublicPageViewPresenterOptions {
 }
 
 /**
- * Web-independent DS-VIEW projection. Creator content is kept as an opaque
+ * Web-independent public-view projection. Creator content is kept as an opaque
  * iframe document; only platform-owned metadata and links enter the wrapper's
  * DOM. Trial pages remain directly viewable but never gain creator listings.
  */

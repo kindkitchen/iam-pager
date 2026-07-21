@@ -10,7 +10,7 @@ export interface PublicPageViewProps {
   readonly view: PublicPageView;
 }
 
-/** Thin Fresh projection over the web-independent DS-VIEW presenter model. */
+/** Thin Fresh projection over the web-independent public-view model. */
 export function PublicPageViewPage(
   { navigation, breadcrumb, view }: PublicPageViewProps,
 ) {

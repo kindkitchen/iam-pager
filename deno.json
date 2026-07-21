@@ -16,18 +16,6 @@
     "hooks:install": {
       "description": "Install the tracked native pre-push hook",
       "command": "deno run --allow-run=git --allow-read --allow-write scripts/git-hooks/install.ts"
-    },
-    "pre-deploy": {
-      "description": "Deployment placeholder with no checks or database work",
-      "command": "echo \"pre-deploy: no automated checks; run deno task db:check manually when database schema changes\""
-    },
-    "db:check": {
-      "description": "Manually inspect one explicit database schema target",
-      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/database/schema.ts check"
-    },
-    "db:update": {
-      "description": "Manually apply retained migrations to one explicit database",
-      "command": "deno run --allow-env=DENO_KV_ACCESS_TOKEN --allow-net --allow-read --allow-write scripts/database/schema.ts update"
     }
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },
