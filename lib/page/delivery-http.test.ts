@@ -248,7 +248,7 @@ Deno.test("direct delivery keeps invalid, missing, and undeliverable outcomes ex
 
   const undeliverable = await deliver_page_locator_path(
     engine,
-    fixed_deliverer({ ok: false, reason: "unknown_content_type" }),
+    fixed_deliverer({ ok: false, reason: "corrupt" }),
     "/ada/notes",
     guest_actor,
   );

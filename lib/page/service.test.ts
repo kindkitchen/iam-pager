@@ -1595,46 +1595,6 @@ Deno.test("PageService projects one page with complete endpoint links and resolv
   assertEquals(delivered.endpoint, expected_endpoints.alternates[0]);
 });
 
-Deno.test("PageService authorizes private delivery before retired-handler disclosure", async () => {
-  const { service, repository } = await make_fixture();
-  await repository.create_managed({
-    page_id: "retired-private",
-    locator: { namespace: "Mine", page_name: "retired" },
-    owner_user_id: owner.user_id,
-    access: "private",
-    content: {
-      content_type: "retired",
-      data: {},
-      meta: { media_type: "text/plain", size_bytes: 0 },
-    },
-    now: t1,
-  });
-  assertEquals(
-    await service.deliver(
-      { namespace: "Mine", page_name: "retired" },
-      guest,
-    ),
-    { ok: false, reason: "not_found" },
-  );
-  assertEquals(
-    await service.deliver(
-      { namespace: "Mine", page_name: "retired" },
-      owner,
-    ),
-    { ok: false, reason: "unknown_content_type" },
-  );
-  assertEquals(
-    await service.update_managed({
-      actor: owner,
-      page_id: "retired-private",
-      expected_revision: 1,
-      patch: { access: "public" },
-    }),
-    { ok: false, reason: "unknown_content_type" },
-  );
-  assertEquals((await repository.find_by_id("retired-private"))?.revision, 1);
-});
-
 Deno.test("PageService public view resolves eligible pages and hides the rest", async () => {
   const { service } = await make_fixture({
     ids: ["default-1", "public-1", "private-1", "trial-1"],

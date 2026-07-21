@@ -1055,9 +1055,7 @@ function list_failure_response(
 function inspect_failure_response(
   result: Exclude<InspectManagedPageResult, { ok: true }>,
 ): Response {
-  return result.reason === "not_found"
-    ? error_response(404, "not_found", "page was not found")
-    : error_response(500, "page_unavailable", "page cannot be represented");
+  return error_response(404, result.reason, "page was not found");
 }
 
 function update_failure_response(
@@ -1158,12 +1156,6 @@ function rename_failure_response(
         result.reason,
         "a managed page already exists at this locator",
       );
-    case "unknown_content_type":
-      return error_response(
-        500,
-        "page_unavailable",
-        "page cannot be represented",
-      );
   }
 }
 
@@ -1178,12 +1170,6 @@ function duplicate_failure_response(
         412,
         "precondition_failed",
         "page representation has changed",
-      );
-    case "unknown_content_type":
-      return error_response(
-        500,
-        "page_unavailable",
-        "page cannot be represented",
       );
     case "endpoint_set_required":
     case "forbidden_namespace":

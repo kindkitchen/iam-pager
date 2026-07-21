@@ -113,6 +113,5 @@ available action.
 
 Sessions default to process memory. Durable sessions require the same durable
 ownership database as users, identities, and namespace claims. Otherwise a
-surviving session could reference a missing user. Backend/path changes do not
-copy sessions. Page persistence is independently selected under the same durable
-ownership requirement.
+surviving session could reference a missing user. Page persistence is
+independently selected under the same durable ownership requirement.

@@ -190,11 +190,18 @@ Deno.test("public default page does not link to itself", async () => {
 
 Deno.test("trial views stay out of creator listings", async () => {
   const pages = new FakePublicPages();
-  const trial = summary("Free", undefined, "trial");
+  const trial = {
+    ...summary("Free", undefined, "trial"),
+    content_type: "example-binary",
+    media_type: "application/octet-stream",
+  };
   pages.views.set(locator_key(trial.locator), {
     ok: true,
     page: trial,
-    payload: null,
+    payload: {
+      media_type: "application/octet-stream",
+      body: new Uint8Array(42),
+    },
   });
   const presenter = new CreatorPublicPageViewPresenter({ pages });
 
@@ -205,7 +212,7 @@ Deno.test("trial views stay out of creator listings", async () => {
     direct_path: "/Free",
     preview: {
       kind: "fallback",
-      media_type: "text/html; charset=utf-8",
+      media_type: "application/octet-stream",
       size_bytes: 42,
     },
     default_page: null,

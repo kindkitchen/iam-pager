@@ -87,10 +87,10 @@ Important boundaries:
   status mapping, and response headers; Fresh routes stay thin.
 
 Memory and Deno KV implement the same repository interfaces and share
-implementation-neutral conformance suites. Deno KV stores one strict current
-record format without compatibility branches. Page visibility changes commit the
-page, all endpoint claims, and owner/public projections atomically. Content is
-staged and verified before any page can reference it.
+implementation-neutral conformance suites. Deno KV rejects malformed records.
+Page visibility changes commit the page, all endpoint claims, and owner/public
+projections atomically. Content is staged and verified before any page can
+reference it.
 
 See [the project specification](docs/specification/README.md) and
 [the page API contract](docs/api/pages.md).
@@ -141,8 +141,7 @@ IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/iam-pager.kv
 
 On Deno Deploy, leave the path unset to use the attached database. Durable
 sessions and pages require durable ownership so a session or protected page
-cannot outlive its user and namespace claim. Selecting a backend or changing its
-path does not copy data.
+cannot outlive its user and namespace claim.
 
 ## Authentication configuration
 

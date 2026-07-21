@@ -67,9 +67,7 @@ IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
 ```
 
 All Deno KV adapters use the ownership database path or attached default
-database. Changing backend or path does not copy data. Storage has one current
-format rather than version-compatibility branches; record decoders reject
-unknown, malformed, or incoherent values.
+database. Record decoders reject unknown, malformed, or incoherent values.
 
 ## QT-ROUTING — HTTP routing and delivery
 
@@ -152,9 +150,8 @@ authority, endpoint profiles, or API success.
 
 ## QT-VERIFY — Regression boundary
 
-Tests should protect current behavior, not removed release transitions. Shared
-conformance must run against memory and Deno KV implementations. Coverage must
-include:
+Tests protect current behavior. Shared conformance must run against memory and
+Deno KV implementations. Coverage must include:
 
 - default/named locators and route collisions;
 - trial replacement and namespace protection;

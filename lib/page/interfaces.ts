@@ -187,7 +187,7 @@ export interface InspectManagedPageRequest {
 
 export type InspectManagedPageResult =
   | { ok: true; page: ManagedPageInspection }
-  | { ok: false; reason: "not_found" | "unknown_content_type" };
+  | { ok: false; reason: "not_found" };
 
 export interface UpdateManagedPageRequest {
   actor: UserPageActor;
@@ -300,8 +300,7 @@ export type RenameManagedPageResult =
       | "revision_conflict"
       | "revision_exhausted"
       | "invalid_page_name"
-      | "page_exists"
-      | "unknown_content_type";
+      | "page_exists";
   };
 
 export interface DuplicateManagedPageRequest {
@@ -323,7 +322,6 @@ export type DuplicateManagedPageResult =
     reason:
       | "not_found"
       | "revision_conflict"
-      | "unknown_content_type"
       | "endpoint_set_required"
       | "page_exists"
       | PageEndpointCommandFailureReason
@@ -335,8 +333,7 @@ export type ViewPublicPageResult =
   | {
     ok: true;
     page: PublicPageSummary;
-    /** Rendered content when its handler remains available; null is fallback. */
-    payload: DeliveryPayload | null;
+    payload: DeliveryPayload;
   }
   | { ok: false; reason: "not_found" };
 
@@ -380,10 +377,7 @@ export type DeliverPageResult =
     endpoint: PageEndpointLink;
     payload: DeliveryPayload;
   }
-  | {
-    ok: false;
-    reason: "not_found" | "unknown_content_type" | "corrupt";
-  };
+  | { ok: false; reason: "not_found" | "corrupt" };
 
 export interface TrialPagePublisher {
   publish_trial(

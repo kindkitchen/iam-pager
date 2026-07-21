@@ -391,7 +391,7 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
-    return this.#inspection(page);
+    return { ok: true, page: this.#inspection(page) };
   }
 
   async update_managed(
@@ -424,12 +424,7 @@ export class PageService
     if (page.revision === Number.MAX_SAFE_INTEGER) {
       return { ok: false, reason: "revision_exhausted" };
     }
-    // The successful response is an inspection representation. Refuse before
-    // mutation when retained content has no handler, rather than committing an
-    // access-only change and only then discovering that source cannot render.
-    if (!this.#handlers.has(page.content.content_type)) {
-      return { ok: false, reason: "unknown_content_type" };
-    }
+    this.#require_handler(page.content.content_type);
     let content: PageContent | undefined;
     if (request.patch.content !== undefined) {
       const prepared = this.#prepare_content(request.patch.content);
@@ -461,7 +456,7 @@ export class PageService
       has_endpoints && endpoint_set === undefined && !has_access && !has_tags &&
       !has_content
     ) {
-      return this.#inspection(page);
+      return { ok: true, page: this.#inspection(page) };
     }
 
     const replaced = await this.#replace_managed_record({
@@ -480,7 +475,7 @@ export class PageService
       }
       return { ok: false, reason: replaced.reason };
     }
-    return this.#inspection(replaced.page);
+    return { ok: true, page: this.#inspection(replaced.page) };
   }
 
   async bulk_change_managed_access(
@@ -571,7 +566,6 @@ export class PageService
       return { ok: false, reason: "revision_conflict" };
     }
     const current_inspection = this.#inspection(existing);
-    if (!current_inspection.ok) return current_inspection;
     const current_locator = existing.endpoint_set.canonical.locator;
     const locator: Locator = request.page_name === undefined
       ? { namespace: current_locator.namespace }
@@ -580,7 +574,7 @@ export class PageService
       return {
         ok: true,
         outcome: "unchanged",
-        page: current_inspection.page,
+        page: current_inspection,
       };
     }
     const current_endpoint_set = this.#endpoint_set(existing);
@@ -595,9 +589,10 @@ export class PageService
       if (planned.reason === "duplicate_locator") {
         return { ok: false, reason: "page_exists" };
       }
-      return planned.reason === "invalid_locator"
-        ? { ok: false, reason: "invalid_page_name" }
-        : { ok: false, reason: "unknown_content_type" };
+      if (planned.reason === "invalid_locator") {
+        return { ok: false, reason: "invalid_page_name" };
+      }
+      throw new Error(`stored page endpoint invariant: ${planned.reason}`);
     }
     if (existing.revision === Number.MAX_SAFE_INTEGER) {
       return { ok: false, reason: "revision_exhausted" };
@@ -615,10 +610,11 @@ export class PageService
       }
       return { ok: false, reason: renamed.reason };
     }
-    const inspection = this.#inspection(renamed.page);
-    return inspection.ok
-      ? { ok: true, outcome: renamed.outcome, page: inspection.page }
-      : inspection;
+    return {
+      ok: true,
+      outcome: renamed.outcome,
+      page: this.#inspection(renamed.page),
+    };
   }
 
   async duplicate_managed(
@@ -636,15 +632,14 @@ export class PageService
     if (source.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
-    const source_inspection = this.#inspection(source);
-    if (!source_inspection.ok) return source_inspection;
+    const handler = this.#require_handler(source.content.content_type);
     const source_locator = source.endpoint_set.canonical.locator;
 
     if (request.endpoint_set !== undefined) {
-      const planned = this.#prepare_endpoint_intent(
-        request.endpoint_set,
-        source.content.content_type,
-      );
+      const planned = this.#endpoint_planner.plan({
+        endpoint_set: request.endpoint_set,
+        supported_delivery_profiles: handler.supported_delivery_profiles,
+      });
       if (!planned.ok) return planned;
       if (
         planned.endpoint_set.canonical.locator.namespace.toLowerCase() !==
@@ -667,10 +662,11 @@ export class PageService
           now,
         });
         if (duplicated.ok) {
-          const inspection = this.#inspection(duplicated.page);
-          return inspection.ok
-            ? { ok: true, outcome: duplicated.outcome, page: inspection.page }
-            : inspection;
+          return {
+            ok: true,
+            outcome: duplicated.outcome,
+            page: this.#inspection(duplicated.page),
+          };
         }
         if (
           duplicated.reason === "not_found" ||
@@ -686,7 +682,6 @@ export class PageService
     }
 
     const source_endpoint_set = this.#endpoint_set(source);
-    const handler = this.#handlers.get(source.content.content_type)!;
     if (
       source_endpoint_set.alternates.length !== 0 ||
       source_endpoint_set.canonical.delivery_profile !== "inline" ||
@@ -735,14 +730,11 @@ export class PageService
           now,
         });
         if (duplicated.ok) {
-          const inspection = this.#inspection(duplicated.page);
-          return inspection.ok
-            ? {
-              ok: true,
-              outcome: duplicated.outcome,
-              page: inspection.page,
-            }
-            : inspection;
+          return {
+            ok: true,
+            outcome: duplicated.outcome,
+            page: this.#inspection(duplicated.page),
+          };
         }
         if (duplicated.reason === "not_found") {
           return { ok: false, reason: "not_found" };
@@ -830,10 +822,11 @@ export class PageService
       return { ok: false, reason: "not_found" };
     }
     const handler = this.#handlers.get(page.content.content_type);
+    if (handler === undefined) return { ok: false, reason: "not_found" };
     return {
       ok: true,
       page: this.#public_summary(page),
-      payload: handler === undefined ? null : handler.render(page.content.data),
+      payload: handler.render(page.content.data),
     };
   }
 
@@ -903,7 +896,7 @@ export class PageService
     const page = resolved.page;
     const handler = this.#handlers.get(page.content.content_type);
     if (handler === undefined) {
-      return { ok: false as const, reason: "unknown_content_type" as const };
+      return { ok: false as const, reason: "corrupt" as const };
     }
     if (
       !handler.supported_delivery_profiles.includes(
@@ -1347,19 +1340,27 @@ export class PageService
       : null;
   }
 
-  #inspection(page: MaterializedPage): InspectManagedPageResult {
-    const handler = this.#handlers.get(page.content.content_type);
-    if (handler === undefined) {
-      return { ok: false, reason: "unknown_content_type" };
-    }
-    const inspection: ManagedPageInspection = {
+  #inspection(page: MaterializedPage): ManagedPageInspection {
+    const handler = this.#require_handler(page.content.content_type);
+    return {
       ...this.#summary(page),
       content: {
         content_type: page.content.content_type,
         input: handler.to_management(page.content.data),
       },
     };
-    return { ok: true, page: inspection };
+  }
+
+  #require_handler(
+    content_type: string,
+  ): ContentTypeHandler<unknown, unknown> {
+    const handler = this.#handlers.get(content_type);
+    if (handler === undefined) {
+      throw new Error(
+        `stored page content type has no handler: ${content_type}`,
+      );
+    }
+    return handler;
   }
 
   #public_summary(page: MaterializedPage): PublicPageSummary {
