@@ -69,6 +69,27 @@ upgrade, and revokes authenticated access on CSRF-bound logout.
 `SessionTransport` maps the bearer to a cookie independently from repository
 storage.
 
+## CP-APIKEY — API-key capability
+
+`ApiKeyManager` owns the transport-independent key lifecycle: bounded create
+with one-time bearer exposure, owner list/inspect, revision-bound metadata
+replacement, immediate individual revoke, and atomic owner revoke-all.
+`ApiKeyBearerResolver` maps a presented bearer to an active key principal or
+nothing. `ApiKeyRepository` persists only hashes, metadata, owner indexes, and
+revocation state; memory and Deno KV satisfy one conformance suite. Label,
+permission, expiry, owner-isolation, and revision rules live in these
+interfaces, not in HTTP or UI.
+
+## CP-API-AUTH — API principal capability
+
+`ApiRequestAuthenticator` resolves every `/api/**` request to exactly one guest,
+browser-user, or API-key principal; a present `Authorization` header is
+authoritative and fails closed without cookie fallback. `ApiOperationPolicy`
+decides each operation: guests are rejected, browser mutations require the
+synchronizer token, and key requests require the mapped explicit permission.
+Page and namespace HTTP adapters consume these interfaces and add no
+authorization rules of their own.
+
 ## CP-AUTH — Authentication capability
 
 `AuthenticationStrategy` abstracts provider begin/complete behavior.

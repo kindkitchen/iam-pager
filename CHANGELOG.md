@@ -2,6 +2,18 @@
 
 ## 2026-07-22
 
+- Closed the API-key specification and regression boundary. The specifications
+  now carry the API-key invariants (`SA-APIKEY`, `CP-APIKEY`, `CP-API-AUTH`,
+  `EX-AUTOMATE`, plus updated `PD-CREATOR`, `QT-AUTHORITY`, `QT-API`,
+  `QT-VERIFY`, `OS-LIMITS`, and `SP-CORE`), a new `docs/api/authentication.md`
+  fixes cookie-versus-Bearer resolution, CSRF policy, stable errors, and the
+  complete permission matrix, and the stale "until the resolver lands" claim in
+  the API-key contract is gone. README gained a bearer usage example with
+  permission semantics and a security warning. A new contract-matrix test drives
+  every page, namespace, and key-management endpoint with guest, browser owner,
+  mapped-permission key, under-privileged key, revoked key, and invalid bearer
+  principals.
+
 - Authorized API-key bearers over the existing page and namespace API. A new
   `lib/api-auth/` module resolves every `/api/**` request to a guest,
   browser-user, or API-key principal (`ApiRequestAuthenticator`) and applies the

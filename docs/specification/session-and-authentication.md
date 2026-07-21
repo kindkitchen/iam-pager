@@ -102,6 +102,29 @@ Every local-mode matched host permits fake sign-in and must exclude production.
 The local consent route validates exact state, scope, and same-origin callback
 before rendering gauth's screen. It is unavailable in original mode.
 
+## SA-APIKEY — API-key credential
+
+An API key is an owner automation credential for `/api/**` only. It is not a
+session: it has no cookie, CSRF token, OAuth attempt, idle renewal, or site or
+direct-content authority. A bearer is `iamp_` plus 43 base64url characters (256
+random bits), returned exactly once at creation; persistence keeps only its
+SHA-256 lookup hash, metadata, owner index, and revocation state.
+
+Keys carry explicit `read`/`write`/`delete` grants. The `all` shorthand must
+appear alone and expands to the complete current explicit set at write time,
+never silently to future permissions. Expiry is an optional exact instant;
+expired keys stay browser-manageable but stop authenticating. Metadata updates
+are revision-bound with strong ETags.
+
+A present `Authorization` header is authoritative on `/api/**`: bearer requests
+never resolve, renew, or create a browser session and receive an ephemeral guest
+view; malformed, unknown, expired, and revoked bearers share one non-disclosing
+`401` challenge without cookie fallback. Key management is browser-owned; bearer
+revoke-all under the `delete` permission is the single key-accessible management
+operation and revokes the calling key atomically with every sibling. The exact
+wire contract is [the API authentication reference](../api/authentication.md)
+and [the API-key API](../api/api-keys.md).
+
 ## SA-PRESENTATION — Site navigation
 
 `SiteNavigationPresenter` receives the typed server session and returns a
@@ -113,5 +136,6 @@ available action.
 
 Sessions default to process memory. Durable sessions require the same durable
 ownership database as users, identities, and namespace claims. Otherwise a
-surviving session could reference a missing user. Page persistence is
-independently selected under the same durable ownership requirement.
+surviving session could reference a missing user. Page and API-key persistence
+are independently selected under the same durable ownership requirement, so a
+key cannot outlive its owner.

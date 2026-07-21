@@ -5,11 +5,11 @@ behavior.
 
 ## OS-LIMITS — Capacity and retention
 
-Total stored size, page count, publishing frequency, and guest expiry are not
-implemented. The service must choose and explain whether a reached limit rejects
-a new publication or removes existing content. Authenticated content must not be
-described as permanently durable without an explicit backup and retention
-policy.
+Total stored size, page count, publishing frequency, API-key request rate
+limits, and guest expiry are not implemented. The service must choose and
+explain whether a reached limit rejects a new publication or removes existing
+content. Authenticated content must not be described as permanently durable
+without an explicit backup and retention policy.
 
 Deno KV records remain until application deletion, session expiry, or operator
 action. Failed content staging can leave unreachable payloads; no sweeper

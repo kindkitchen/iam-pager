@@ -123,7 +123,8 @@ check budget, while the memory implementation accepts larger request-bounded
 sets.
 
 See [the project specification](docs/specification/README.md),
-[the page API contract](docs/api/pages.md), and
+[the page API contract](docs/api/pages.md),
+[the API authentication reference](docs/api/authentication.md), and
 [the API-key contract](docs/api/api-keys.md).
 
 ## Local development
@@ -198,6 +199,41 @@ IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 The request URL must match completely. `Origin` and `Referer` are never callback
 authorities. Local mode with a host pattern grants fake authentication on every
 matched host and must exclude production.
+
+## API keys
+
+Signed-in creators generate API keys at `/site/api-keys` (or via
+`POST /api/api-keys` from an authenticated browser session). The `iamp_...`
+bearer is shown exactly once; only its hash is stored and it cannot be recovered
+— rotation is create-new then delete-old.
+
+A key authenticates `/api/**` requests through the `Authorization` header:
+
+```sh
+curl -H "Authorization: Bearer iamp_..." https://example.com/api/pages
+
+curl -X POST https://example.com/api/pages \
+  -H "Authorization: Bearer iamp_..." \
+  -H "content-type: application/json" \
+  -d '{"locator":{"namespace":"Robot","page_name":"status"},
+       "access":"public",
+       "content":{"content_type":"md-page","input":{"md":"# Up"}}}'
+```
+
+Permissions are explicit `read`, `write`, and `delete` grants (`all` expands to
+the current explicit set at creation). Key requests carry no CSRF token; each
+operation requires its mapped permission, and domain rules — namespace
+ownership, revision `If-Match`, request bounds — are unchanged. Keys never
+authenticate site routes, `/auth/**`, or direct-content URLs, and key management
+itself stays browser-owned except bearer revoke-all (`DELETE /api/api-keys` with
+the `delete` grant, which also revokes the calling key). The full matrix is in
+[the API authentication reference](docs/api/authentication.md).
+
+**Security:** treat a bearer like a password. Send it only in the
+`Authorization` header over HTTPS — never in URLs, query strings, request
+bodies, cookies, or logs. Grant the narrowest permissions, set an expiry where
+practical, and revoke immediately on suspicion; an explicit invalid bearer is
+rejected without any cookie fallback.
 
 ## Build and run
 
