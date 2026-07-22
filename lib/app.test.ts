@@ -12,6 +12,13 @@ import {
   MemoryIdentityRepository,
 } from "./auth/mod.ts";
 import {
+  GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV,
+  GOOGLE_DRIVE_MODE_ENV,
+  GOOGLE_DRIVE_REDIRECT_URI_ENV,
+  MemoryStorageConnectionRepository,
+  MemoryStorageOAuthAttemptRepository,
+} from "./external-storage/mod.ts";
+import {
   type AppServices,
   create_app_services,
   create_configured_app_services,
@@ -40,6 +47,8 @@ import {
   SESSION_STORAGE_BACKEND_ENV,
   type SessionRepositoryFactory,
   type SessionStorageConfig,
+  type StorageConnectionRepositoriesFactory,
+  type StorageConnectionStorageConfig,
 } from "./storage/mod.ts";
 
 const text_encoder = new TextEncoder();
@@ -49,6 +58,11 @@ const local_google_environment: Readonly<Record<string, string>> = {
   [GOOGLE_AUTH_REDIRECT_URI_ENV]: "http://localhost:5173/auth/google/callback",
   [GOOGLE_AUTH_MOCK_CONSENT_URL_ENV]:
     "http://localhost:5173/auth/google/mock-consent",
+  [GOOGLE_DRIVE_MODE_ENV]: "local",
+  [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
+    "http://localhost:5173/auth/storage/google-drive/callback",
+  [GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV]:
+    "http://localhost:5173/auth/storage/google-drive/mock-consent",
 };
 
 function pdf_bytes(): Uint8Array {
@@ -229,6 +243,7 @@ Deno.test("configured composition selects every persistence interface together",
   let session_config: SessionStorageConfig | undefined;
   let page_config: PageStorageConfig | undefined;
   let api_key_config: ApiKeyStorageConfig | undefined;
+  let storage_connection_config: StorageConnectionStorageConfig | undefined;
   const ownership_repository_factory: OwnershipRepositoryFactory = {
     create: (config) => {
       ownership_config = config;
@@ -253,6 +268,19 @@ Deno.test("configured composition selects every persistence interface together",
       return Promise.resolve(api_key_repository);
     },
   };
+  const storage_connection_repository = new MemoryStorageConnectionRepository();
+  const storage_oauth_attempt_repository =
+    new MemoryStorageOAuthAttemptRepository();
+  const storage_connection_repositories_factory:
+    StorageConnectionRepositoriesFactory = {
+      create: (config) => {
+        storage_connection_config = config;
+        return Promise.resolve({
+          connection_repository: storage_connection_repository,
+          oauth_attempt_repository: storage_oauth_attempt_repository,
+        });
+      },
+    };
   const values = {
     ...local_google_environment,
     [OWNERSHIP_STORAGE_BACKEND_ENV]: "deno-kv",
@@ -268,6 +296,7 @@ Deno.test("configured composition selects every persistence interface together",
       session_repository_factory,
       page_repository_factory,
       api_key_repository_factory,
+      storage_connection_repositories_factory,
     },
   );
   const durable = { backend: "deno-kv", path: "/data/iam-pager.kv" } as const;
@@ -275,10 +304,19 @@ Deno.test("configured composition selects every persistence interface together",
   assertEquals(session_config, durable);
   assertEquals(page_config, durable);
   assertEquals(api_key_config, durable);
+  assertEquals(storage_connection_config, durable);
   assertStrictEquals(services.identity_repository, identity_repository);
   assertStrictEquals(services.namespace_repository, namespace_repository);
   assertStrictEquals(services.page_repository, page_repository);
   assertStrictEquals(services.api_key_repository, api_key_repository);
+  assertStrictEquals(
+    services.storage_connection_repository,
+    storage_connection_repository,
+  );
+  assertStrictEquals(
+    services.storage_oauth_attempt_repository,
+    storage_oauth_attempt_repository,
+  );
 });
 
 Deno.test("configured local Google flow upgrades its guest session", async () => {
@@ -357,6 +395,119 @@ Deno.test("configured local Google flow upgrades its guest session", async () =>
   assertEquals(
     response_cookie_header(callback.response) === guest_cookie,
     false,
+  );
+});
+
+Deno.test("configured local Drive flow connects and disconnects offline", async () => {
+  const services = await create_configured_app_services({
+    get: (name) => local_google_environment[name],
+  });
+  const now = new Date("2026-07-22T12:00:00.000Z");
+  const context = {
+    request_id: "request-drive",
+    session: {
+      kind: "authenticated" as const,
+      session_id: "session-drive",
+      session_version: 1,
+      user_id: "user-drive",
+      csrf_token: "c".repeat(43),
+      created_at: now,
+      last_seen_at: now,
+      authenticated_at: now,
+      idle_expires_at: new Date("2026-08-22T12:00:00.000Z"),
+      absolute_expires_at: new Date("2026-10-22T12:00:00.000Z"),
+    },
+  };
+  const start_request = new Request(
+    "http://localhost:5173/auth/storage/google-drive/start",
+  );
+  const started = await services.google_drive_connections_http.start(
+    start_request,
+    context,
+  );
+  assertEquals(started.status, 303);
+  const consent_url = started.headers.get("location");
+  assertExists(consent_url);
+  const consent = services.google_drive_mock_consent_http.handle(
+    new Request(consent_url),
+  );
+  assertEquals(consent.status, 200);
+  const html = await consent.text();
+  const callback_url = decode_package_html(matched_html_value(
+    html,
+    /<form id="consent-form" method="GET" action="([^"]+)">/,
+  ));
+  const state = matched_html_value(
+    html,
+    /<input\s+id="state-input"[\s\S]*?value="([^"]+)"/,
+  );
+  const code = decode_package_html(matched_html_value(
+    html,
+    /<textarea name="code" id="code-json"[^>]*>([\s\S]*?)<\/textarea>/,
+  ));
+  const callback = await services.google_drive_connections_http.callback(
+    new Request(`${callback_url}?${new URLSearchParams({ code, state })}`),
+    context,
+  );
+  assertEquals(callback.status, 303);
+  const connection = await services.storage_connection_repository
+    .find_active_by_user_provider("user-drive", "google-drive");
+  assertExists(connection);
+  assertExists(
+    await services.storage_connection_repository.get_credentials(
+      connection.connection_id,
+    ),
+  );
+
+  const disconnected = await services.google_drive_connections_http.disconnect(
+    new Request(
+      "http://localhost:5173/auth/storage/google-drive/disconnect",
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf_token: context.session.csrf_token }),
+      },
+    ),
+    context,
+  );
+  assertEquals(disconnected.status, 303);
+  assertEquals(
+    (await services.storage_connection_repository.find_by_id(
+      connection.connection_id,
+    ))?.status,
+    "revoked",
+  );
+  assertEquals(
+    await services.storage_connection_repository.get_credentials(
+      connection.connection_id,
+    ),
+    null,
+  );
+});
+
+Deno.test("Drive HTTP routes require authentication and valid disconnect CSRF", async () => {
+  const services = await create_configured_app_services({
+    get: (name) => local_google_environment[name],
+  });
+  const guest = (await services.session.resolve()).session;
+  const context = { request_id: "request-guest", session: guest };
+  assertEquals(
+    (await services.google_drive_connections_http.start(
+      new Request("http://localhost:5173/auth/storage/google-drive/start"),
+      context,
+    )).status,
+    401,
+  );
+  assertEquals(
+    (await services.google_drive_connections_http.callback(
+      new Request(
+        `http://localhost:5173/auth/storage/google-drive/callback?state=${
+          "s".repeat(43)
+        }&code=code`,
+      ),
+      context,
+    )).status,
+    401,
   );
 });
 

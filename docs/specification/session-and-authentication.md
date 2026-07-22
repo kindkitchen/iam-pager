@@ -102,6 +102,27 @@ Every local-mode matched host permits fake sign-in and must exclude production.
 The local consent route validates exact state, scope, and same-origin callback
 before rendering gauth's screen. It is unavailable in original mode.
 
+## SA-GOOGLE-DRIVE — Storage consent
+
+Google Drive storage consent is not authentication. It has a separate gauth
+composition, OAuth client, environment namespace, callback URI, mock-consent
+route, and state persistence prefix. Start and callback require an already
+authenticated creator session and bind one-use hashed state to both its logical
+session ID and user ID. A callback never upgrades, rotates, or establishes a
+session.
+
+The authorization request uses `drive.file` as its only Drive permission plus
+the identity scopes required by gauth to verify the provider subject. It forces
+`access_type=offline` and `prompt=consent`. Tokens are persisted only through
+the storage-connection credential boundary; sign-in continues to discard its
+provider tokens. Reauthorization preserves a prior refresh token when Google
+returns only a new access token.
+
+Disconnect is a CSRF-protected POST. It attempts remote revocation with the
+refresh token when available and always revokes the local connection and
+destroys local credentials even if Google is unavailable. The local mock runs
+the complete connect/disconnect flow without network access.
+
 ## SA-APIKEY — API-key credential
 
 An API key is an owner automation credential for `/api/**` only. It is not a
@@ -137,6 +158,8 @@ available action.
 Sessions default to process memory. Durable sessions require the same durable
 ownership database as users, identities, and namespace claims. Otherwise a
 surviving session could reference a missing user. Page persistence is selected
-independently under the same durability requirement; API keys inherit the
-ownership backend by default so durable users never silently receive
-process-local keys.
+independently under the same durability requirement; API keys and storage
+connections inherit the ownership backend by default so durable users never
+silently receive process-local credentials. Durable token custody requires the
+external AES-GCM key, and one-use Drive attempts share that KV under a distinct
+prefix.

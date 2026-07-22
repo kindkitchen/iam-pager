@@ -37,6 +37,20 @@ import {
 import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
+  compose_google_drive_oauth,
+  GoogleDriveConnectionHttpAdapter,
+  type GoogleDriveConnectionHttpHandler,
+  GoogleDriveConnectionService,
+  GoogleDriveMockConsentHttpAdapter,
+  type GoogleDriveOAuthClient,
+  MemoryStorageConnectionRepository,
+  MemoryStorageOAuthAttemptRepository,
+  parse_google_drive_oauth_config,
+  type StorageConnectionRepository,
+  type StorageOAuthAttemptRepository,
+  UnavailableGoogleDriveOAuthClient,
+} from "./external-storage/mod.ts";
+import {
   MemoryPageAggregateRepository,
   type PageAggregateRepository,
   type PageDeliverer,
@@ -100,6 +114,7 @@ import {
   DefaultOwnershipRepositoryFactory,
   DefaultPageAggregateRepositoryFactory,
   DefaultSessionRepositoryFactory,
+  DefaultStorageConnectionRepositoriesFactory,
   type OwnershipRepositories,
   type OwnershipRepositoryFactory,
   type PageAggregateRepositoryFactory,
@@ -107,7 +122,9 @@ import {
   parse_ownership_storage_config,
   parse_page_storage_config,
   parse_session_storage_config,
+  parse_storage_connection_storage_config,
   type SessionRepositoryFactory,
+  type StorageConnectionRepositoriesFactory,
 } from "./storage/mod.ts";
 
 /**
@@ -148,6 +165,11 @@ export interface AppServices {
   authentication: AuthenticationOrchestrator;
   authentication_http: AuthenticationHttpHandler;
   google_mock_consent_http: GoogleMockConsentHttpHandler;
+  storage_connection_repository: StorageConnectionRepository;
+  storage_oauth_attempt_repository: StorageOAuthAttemptRepository;
+  google_drive_connections: GoogleDriveConnectionService;
+  google_drive_connections_http: GoogleDriveConnectionHttpHandler;
+  google_drive_mock_consent_http: GoogleDriveMockConsentHttpAdapter;
 }
 
 export interface AppServiceOptions {
@@ -168,6 +190,12 @@ export interface AppServiceOptions {
     AuthenticationCallbackUrlResolver;
   /** Present only with the loopback-only local Google preset. */
   readonly google_mock_consent_screen?: GoogleMockConsentScreen;
+  readonly storage_connection_repository?: StorageConnectionRepository;
+  readonly storage_oauth_attempt_repository?: StorageOAuthAttemptRepository;
+  readonly google_drive_oauth?: GoogleDriveOAuthClient;
+  readonly google_drive_callback_url_resolver?:
+    AuthenticationCallbackUrlResolver;
+  readonly google_drive_mock_consent_screen?: GoogleMockConsentScreen;
 }
 
 export interface ConfiguredAppServiceOptions {
@@ -179,6 +207,8 @@ export interface ConfiguredAppServiceOptions {
   readonly page_repository_factory?: PageAggregateRepositoryFactory;
   /** Override only at an outer composition or test boundary. */
   readonly api_key_repository_factory?: ApiKeyRepositoryFactory;
+  readonly storage_connection_repositories_factory?:
+    StorageConnectionRepositoriesFactory;
 }
 
 export const SESSION_COOKIE_MODE_ENV = "IAM_PAGER_SESSION_COOKIE_MODE";
@@ -299,6 +329,27 @@ export function create_app_services(
   const google_mock_consent_http = new GoogleMockConsentHttpAdapter({
     screen: options.google_mock_consent_screen ?? null,
   });
+  const storage_connection_repository = options.storage_connection_repository ??
+    new MemoryStorageConnectionRepository();
+  const storage_oauth_attempt_repository =
+    options.storage_oauth_attempt_repository ??
+      new MemoryStorageOAuthAttemptRepository();
+  const google_drive_connections = new GoogleDriveConnectionService({
+    oauth: options.google_drive_oauth ??
+      new UnavailableGoogleDriveOAuthClient(),
+    connections: storage_connection_repository,
+    attempts: storage_oauth_attempt_repository,
+    state_generator: new CryptoCredentialGenerator(),
+    connection_id_generator: new CryptoIdGenerator(),
+    clock,
+  });
+  const google_drive_connections_http = new GoogleDriveConnectionHttpAdapter({
+    connections: google_drive_connections,
+    callback_url_resolver: options.google_drive_callback_url_resolver,
+  });
+  const google_drive_mock_consent_http = new GoogleDriveMockConsentHttpAdapter(
+    options.google_drive_mock_consent_screen ?? null,
+  );
   return {
     engine,
     page_repository,
@@ -323,6 +374,11 @@ export function create_app_services(
     authentication,
     authentication_http,
     google_mock_consent_http,
+    storage_connection_repository,
+    storage_oauth_attempt_repository,
+    google_drive_connections,
+    google_drive_connections_http,
+    google_drive_mock_consent_http,
   };
 }
 
@@ -344,8 +400,17 @@ export async function create_configured_app_services(
     environment,
     ownership_storage_config,
   );
+  const storage_connection_storage_config =
+    parse_storage_connection_storage_config(
+      environment,
+      ownership_storage_config,
+    );
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
+  const google_drive_config = parse_google_drive_oauth_config(environment);
+  const google_drive_oauth = await compose_google_drive_oauth(
+    google_drive_config,
+  );
   const ownership_repositories = await (
     options.ownership_repository_factory ??
       new DefaultOwnershipRepositoryFactory()
@@ -362,11 +427,20 @@ export async function create_configured_app_services(
   const api_key_repository = await (
     options.api_key_repository_factory ?? new DefaultApiKeyRepositoryFactory()
   ).create(api_key_storage_config);
+  const storage_connection_repositories = await (
+    options.storage_connection_repositories_factory ??
+      new DefaultStorageConnectionRepositoriesFactory()
+  ).create(storage_connection_storage_config, environment);
   return create_app_services({
     ownership_repositories,
     session_repository,
     page_repository,
     api_key_repository,
+    storage_connection_repository:
+      storage_connection_repositories.connection_repository,
+    storage_oauth_attempt_repository:
+      storage_connection_repositories.oauth_attempt_repository,
+    google_drive_oauth: google_drive_oauth.client,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),
@@ -388,6 +462,18 @@ export async function create_configured_app_services(
     ...(google_gauth.mock_consent_screen === null
       ? {}
       : { google_mock_consent_screen: google_gauth.mock_consent_screen }),
+    google_drive_callback_url_resolver:
+      new ConfiguredAuthenticationCallbackUrlResolver({
+        ...(google_drive_config.redirect_uri === undefined
+          ? {}
+          : { configured_callback_url: google_drive_config.redirect_uri }),
+        ...(google_drive_config.request_host_pattern === undefined ? {} : {
+          request_host_pattern: google_drive_config.request_host_pattern,
+        }),
+      }),
+    ...(google_drive_oauth.mock_consent_screen === null ? {} : {
+      google_drive_mock_consent_screen: google_drive_oauth.mock_consent_screen,
+    }),
   });
 }
 

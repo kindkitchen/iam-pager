@@ -2,9 +2,9 @@
 
 This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
-storage-connection repository with encrypted token custody are implemented, but
-external storage is not available until OAuth, delivery, and management work
-lands.
+storage-connection repository with encrypted token custody and the separate
+Google Drive OAuth connect/disconnect flow are implemented, but external content
+storage is not available until provider, delivery, and management work lands.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -129,6 +129,19 @@ only as randomized AES-256-GCM ciphertext authenticated to the connection ID.
 The 256-bit key is supplied outside KV as canonical base64url configuration
 (`IAM_PAGER_STORAGE_TOKEN_KEY`); key loss is credential loss. The repository has
 no management serialization path capable of carrying tokens.
+
+Google Drive storage consent is a second explicit gauth composition under the
+`IAM_PAGER_GOOGLE_DRIVE_*` namespace, never the sign-in registration. It uses
+its own exact callback and local mock-consent routes, requests `drive.file` as
+the only Drive permission alongside gauth's verified-account identity scopes,
+and forces offline explicit consent. Raw state is never stored: its hash, PKCE
+context, exact callback, session ID, user ID, and expiry use a separate
+`storage-oauth-attempts/google-drive` persistence prefix and are consumed once
+before exchange. Connect and callback require the same authenticated session.
+Successful consent creates or same-subject reauthorizes one connection while
+preserving an existing refresh token if Google omits it. CSRF-protected POST
+disconnect attempts provider revocation, then revokes locally and destroys
+credentials even when the remote request fails.
 
 ## ES-DELIVERY — Resolution and failure behavior
 
