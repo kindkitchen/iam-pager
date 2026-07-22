@@ -240,6 +240,30 @@ Deno.test("direct PDF delivery supports validators and strict single byte ranges
   assertEquals(await not_modified.text(), "");
 });
 
+Deno.test("direct delivery returns a bounded no-store external fallback", async () => {
+  const body = "<!doctype html><h1>Content temporarily unavailable</h1>";
+  const response = await deliver_page_locator_path(
+    engine,
+    fixed_deliverer({
+      ok: false,
+      reason: "external_content_unavailable",
+      payload: { body, media_type: "text/html; charset=utf-8" },
+      retry_after_seconds: 45,
+    }),
+    "/ada/notes",
+    guest_actor,
+    "request-unavailable",
+  );
+
+  assertEquals(response.status, 503);
+  assertEquals(response.headers.get("cache-control"), "no-store");
+  assertEquals(response.headers.get("retry-after"), "45");
+  assertEquals(response.headers.get("content-disposition"), "inline");
+  assertEquals(response.headers.get("x-request-id"), "request-unavailable");
+  assertEquals(response.headers.get("content-length"), String(body.length));
+  assertStringIncludes(await response.text(), "temporarily unavailable");
+});
+
 Deno.test("direct delivery keeps invalid, missing, and undeliverable outcomes explicit", async () => {
   const missing = fixed_deliverer({ ok: false, reason: "not_found" });
   for (

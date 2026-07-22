@@ -172,6 +172,44 @@ Deno.test("public page wrapper renders a download-only PDF without embedding", (
   assertEquals(html.includes("<object"), false);
 });
 
+Deno.test("public page wrapper renders isolated unavailable content", () => {
+  const page = {
+    locator: { namespace: "Alice", page_name: "notes" },
+    path: "/Alice/notes",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Alice", page_name: "notes" },
+        path: "/Alice/notes",
+        delivery_profile: "inline",
+      },
+      alternates: [],
+    },
+    stewardship: "managed" as const,
+    content_type: "md-page",
+    media_type: "text/html; charset=utf-8",
+    size_bytes: 42,
+    tags: [],
+    created_at: new Date("2026-07-19T01:00:00.000Z"),
+    updated_at: new Date("2026-07-19T02:00:00.000Z"),
+  };
+  const html = render_to_string(
+    <PublicPageViewPage
+      navigation={navigation}
+      view={{
+        kind: "unavailable",
+        page,
+        preview: {
+          kind: "html",
+          document: "<!doctype html><h1>Content temporarily unavailable</h1>",
+        },
+      }}
+    />,
+  );
+  assertStringIncludes(html, "temporarily unavailable");
+  assertStringIncludes(html, "sandbox");
+  assertEquals(html.includes("provider"), false);
+});
+
 Deno.test("public page wrapper renders a non-disclosing missing view", () => {
   const html = render_to_string(
     <PublicPageViewPage navigation={navigation} view={{ kind: "missing" }} />,

@@ -202,6 +202,88 @@ export function test_page_aggregate_repository_conformance(
   );
 
   conformance_test(
+    "external delivery health is asset-bound, revision-neutral, and idempotent",
+    async (subject) => {
+      const external_asset: ContentAsset = {
+        content_asset_id: "asset-1",
+        content_type: "test-content",
+        source: {
+          kind: "external",
+          ref: {
+            provider_id: "reference",
+            connection_id: "connection-1",
+            external_ref: "health-object",
+          },
+        },
+        meta: {
+          media_type: "application/octet-stream",
+          size_bytes: 1,
+          sha256: "1".repeat(64),
+          codec_version: "test-content-v1",
+        },
+        created_at: t1,
+      };
+      assert((await subject.create_content_asset(external_asset)).ok);
+      const created = await create_managed(
+        subject,
+        "page-1",
+        "asset-1",
+        endpoint_set("health"),
+      );
+      assertEquals(
+        await subject.update_external_content_health({
+          page_id: "page-1",
+          content_asset_id: "asset-1",
+          external_missing: {
+            cause: "external_content_missing",
+            detected_at: t1,
+          },
+        }),
+        { ok: true, outcome: "updated" },
+      );
+      assertEquals(
+        await subject.update_external_content_health({
+          page_id: "page-1",
+          content_asset_id: "asset-1",
+          external_missing: {
+            cause: "external_content_missing",
+            detected_at: t2,
+          },
+        }),
+        { ok: true, outcome: "unchanged" },
+      );
+      const missing = await subject.find_page_aggregate_by_id("page-1");
+      assert(missing !== null);
+      assertEquals(missing.revision, created.revision);
+      assertEquals(missing.updated_at, created.updated_at);
+      assertEquals(missing.external_missing, {
+        cause: "external_content_missing",
+        detected_at: t1,
+      });
+      assertEquals(
+        await subject.update_external_content_health({
+          page_id: "page-1",
+          content_asset_id: "other-asset",
+          external_missing: null,
+        }),
+        { ok: false, reason: "stale" },
+      );
+      assertEquals(
+        await subject.update_external_content_health({
+          page_id: "page-1",
+          content_asset_id: "asset-1",
+          external_missing: null,
+        }),
+        { ok: true, outcome: "updated" },
+      );
+      assertEquals(
+        (await subject.find_page_aggregate_by_id("page-1"))?.external_missing,
+        undefined,
+      );
+    },
+  );
+
+  conformance_test(
     "structurally invalid asset and endpoint records are programming errors",
     async (subject) => {
       await assertRejects(

@@ -32,9 +32,17 @@ export async function deliver_page_locator_path(
   }
   const delivery = await deliverer.deliver(resolution.locator, actor);
   if (!delivery.ok) {
-    return delivery.reason === "not_found"
-      ? text_response(404, "page not found", request_id)
-      : text_response(500, "page content is not deliverable", request_id);
+    if (delivery.reason === "not_found") {
+      return text_response(404, "page not found", request_id);
+    }
+    if (delivery.reason === "external_content_unavailable") {
+      return unavailable_response(
+        delivery.payload,
+        delivery.retry_after_seconds,
+        request_id,
+      );
+    }
+    return text_response(500, "page content is not deliverable", request_id);
   }
   const { endpoint, page, payload } = delivery;
   const disposition = content_disposition(
@@ -120,6 +128,34 @@ function is_pdf_binary_payload(
 ): body is Uint8Array {
   return body instanceof Uint8Array &&
     media_type.split(";", 1)[0].trim().toLowerCase() === "application/pdf";
+}
+
+function unavailable_response(
+  payload: { body: string | Uint8Array; media_type: string },
+  retry_after_seconds?: number,
+  request_id?: string,
+): Response {
+  const size_bytes = typeof payload.body === "string"
+    ? new TextEncoder().encode(payload.body).byteLength
+    : payload.body.byteLength;
+  const headers = new Headers({
+    "content-type": payload.media_type,
+    "content-length": String(size_bytes),
+    "cache-control": "no-store",
+    "content-disposition": "inline",
+    "x-content-type-options": "nosniff",
+  });
+  if (request_id !== undefined) headers.set("x-request-id", request_id);
+  if (retry_after_seconds !== undefined) {
+    headers.set("retry-after", String(retry_after_seconds));
+  }
+  if (is_active_content(payload.media_type)) {
+    headers.set(
+      "content-security-policy",
+      "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+    );
+  }
+  return new Response(payload.body as BodyInit, { status: 503, headers });
 }
 
 function text_response(

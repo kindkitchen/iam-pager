@@ -150,6 +150,7 @@ export class GoogleDriveExternalStorageProvider
     } catch {
       return unreachable();
     }
+    if (connection?.status === "revoked") return revoked();
     if (
       connection === null || connection.status !== "active" ||
       connection.provider_id !== this.provider_id || credentials === null
@@ -177,7 +178,7 @@ export class GoogleDriveExternalStorageProvider
       result = await operation(retry_credentials.value.access_token);
       if (!result.ok && result.reason === "unauthorized") {
         await this.#revoke(connection);
-        return missing();
+        return revoked();
       }
     }
     return normalize_gateway_result(result);
@@ -201,7 +202,7 @@ export class GoogleDriveExternalStorageProvider
   ): Promise<CredentialResult> {
     if (credentials.refresh_token === undefined) {
       await this.#revoke(connection);
-      return missing();
+      return revoked();
     }
     const refreshed = await this.#gateway.refresh_access_token({
       refresh_token: credentials.refresh_token,
@@ -212,7 +213,7 @@ export class GoogleDriveExternalStorageProvider
         refreshed.reason === "unauthorized"
       ) {
         await this.#revoke(connection);
-        return missing();
+        return revoked();
       }
       return normalize_gateway_result(refreshed);
     }
@@ -335,6 +336,10 @@ function missing_gateway(): GoogleDriveGatewayResult<never> {
 
 function missing(): ExternalStorageFailure {
   return { ok: false, reason: "external_content_missing" };
+}
+
+function revoked(): ExternalStorageFailure {
+  return { ok: false, reason: "connection_revoked" };
 }
 
 function unreachable(): ExternalStorageFailure {

@@ -6,6 +6,7 @@ import {
 import type { CreateContentAssetResult } from "../content/interfaces.ts";
 import type { Locator } from "../locator/model.ts";
 import {
+  external_content_missing_state_violation,
   page_aggregate_endpoint_bindings,
   page_aggregate_violation,
   type PageAggregate,
@@ -35,6 +36,8 @@ import type {
   PageAggregateRepository,
   PutTrialPageAggregateRequest,
   PutTrialPageAggregateResult,
+  UpdateExternalContentHealthRequest,
+  UpdateExternalContentHealthResult,
   UpdateManagedPageAggregateRequest,
   UpdateManagedPageAggregateResult,
 } from "../page/aggregate-interfaces.ts";
@@ -138,6 +141,16 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+function external_health_equal(
+  current: PageAggregate["external_missing"],
+  requested: UpdateExternalContentHealthRequest["external_missing"],
+): boolean {
+  if (current === undefined || requested === null) {
+    return current === undefined && requested === null;
+  }
+  return current.cause === requested.cause;
+}
+
 function key_part_equals(a: Deno.KvKeyPart, b: Deno.KvKeyPart): boolean {
   if (a instanceof Uint8Array && b instanceof Uint8Array) {
     return a.length === b.length && a.every((byte, index) => byte === b[index]);
@@ -181,7 +194,7 @@ function deserialize_envelope(value: unknown): PageAggregate {
       "content_asset_id",
       "created_at",
       "updated_at",
-    ])
+    ], ["external_missing"])
   ) {
     return invalid_stored_page_aggregate();
   }
@@ -809,8 +822,14 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
         }
       }
 
+      const {
+        external_missing: _external_missing,
+        ...healthy_existing
+      } = existing.page;
       const page: PageAggregate = {
-        ...existing.page,
+        ...(content_asset_patch === undefined
+          ? existing.page
+          : healthy_existing),
         endpoint_set: clone(endpoint_set),
         access: access_patch ?? existing.page.access,
         tags: tags_patch ?? clone(existing.page.tags),
@@ -937,6 +956,53 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
         outcome: claimed_trials.length === 0 ? "created" : "replaced_trial",
         page: clone(page),
       };
+    }
+    return this.#write_contention_exhausted();
+  }
+
+  async update_external_content_health(
+    request: UpdateExternalContentHealthRequest,
+  ): Promise<UpdateExternalContentHealthResult> {
+    this.#require_page_id(request.page_id);
+    this.#require_content_asset_id(request.content_asset_id);
+    if (request.external_missing !== null) {
+      const violation = external_content_missing_state_violation(
+        request.external_missing,
+      );
+      require(violation === null, violation ?? "invalid external health");
+    }
+    const requested = request.external_missing === null
+      ? null
+      : clone(request.external_missing);
+
+    for (let attempt = 0; attempt < page_aggregate_max_attempts; attempt += 1) {
+      const existing = await this.#read_snapshot(request.page_id);
+      if (
+        existing === null ||
+        existing.page.content_asset_id !== request.content_asset_id
+      ) return { ok: false, reason: "stale" };
+      const asset = await this.#assets.find_content_asset_by_id(
+        request.content_asset_id,
+      );
+      require(
+        asset?.source.kind === "external",
+        "external health requires an external content asset",
+      );
+      if (external_health_equal(existing.page.external_missing, requested)) {
+        return { ok: true, outcome: "unchanged" };
+      }
+      const {
+        external_missing: _external_missing,
+        ...healthy_existing
+      } = existing.page;
+      const page: PageAggregate = requested === null
+        ? healthy_existing
+        : { ...healthy_existing, external_missing: requested };
+      const committed = await this.#commit(
+        [existing.entry],
+        (atomic) => atomic.set(existing.entry.key, serialize_envelope(page)),
+      );
+      if (committed) return { ok: true, outcome: "updated" };
     }
     return this.#write_contention_exhausted();
   }

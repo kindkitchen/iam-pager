@@ -213,7 +213,7 @@ Deno.test("Drive provider revokes invalid refresh credentials", async () => {
 
   assertEquals(await provider.stat_content(ref("file")), {
     ok: false,
-    reason: "external_content_missing",
+    reason: "connection_revoked",
   });
   assertEquals(
     (await repository.find_by_id("connection-1"))?.status,
@@ -230,7 +230,7 @@ Deno.test("Drive provider revokes a connection when refreshed access is still un
 
   assertEquals(await provider.stat_content(ref("file")), {
     ok: false,
-    reason: "external_content_missing",
+    reason: "connection_revoked",
   });
   assertEquals(
     (await repository.find_by_id("connection-1"))?.status,

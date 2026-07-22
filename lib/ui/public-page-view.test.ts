@@ -87,6 +87,31 @@ Deno.test("public page presenter keeps missing views non-disclosing", async () =
   assertEquals(pages.list_calls, []);
 });
 
+Deno.test("public page presenter keeps external fallback separate from missing", async () => {
+  const pages = new FakePublicPages();
+  const page = summary("Alice", "notes");
+  pages.views.set(locator_key(page.locator), {
+    ok: false,
+    reason: "external_content_unavailable",
+    page,
+    payload: {
+      media_type: "text/html; charset=utf-8",
+      body: "<!doctype html><h1>Content temporarily unavailable</h1>",
+    },
+  });
+  const presenter = new CreatorPublicPageViewPresenter({ pages });
+
+  assertEquals(await presenter.present(page.locator), {
+    kind: "unavailable",
+    page,
+    preview: {
+      kind: "html",
+      document: "<!doctype html><h1>Content temporarily unavailable</h1>",
+    },
+  });
+  assertEquals(pages.list_calls, []);
+});
+
 Deno.test("public page presenter builds isolated preview and creator links", async () => {
   const pages = new FakePublicPages();
   const current = summary("Alice", "notes");

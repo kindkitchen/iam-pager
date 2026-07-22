@@ -255,6 +255,9 @@ export function create_app_services(
     engine,
   });
   const clock = new SystemClock();
+  const external_storage_providers = new ExternalStorageProviderRegistry(
+    options.external_storage_providers ?? [],
+  );
   const api_key_repository = options.api_key_repository ??
     new MemoryApiKeyRepository();
   const api_keys = new ApiKeyService({
@@ -282,6 +285,7 @@ export function create_app_services(
     namespace_authority: new RepositoryNamespaceAuthorityResolver(
       namespace_repository,
     ),
+    external_storage_providers,
     clock,
   });
   const pages_http = new PageHttpAdapter({
@@ -357,9 +361,6 @@ export function create_app_services(
   });
   const google_drive_mock_consent_http = new GoogleDriveMockConsentHttpAdapter(
     options.google_drive_mock_consent_screen ?? null,
-  );
-  const external_storage_providers = new ExternalStorageProviderRegistry(
-    options.external_storage_providers ?? [],
   );
   return {
     engine,

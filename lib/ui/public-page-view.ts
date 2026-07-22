@@ -30,6 +30,11 @@ export type PublicContentPreview =
 export type PublicPageView =
   | { readonly kind: "missing" }
   | {
+    readonly kind: "unavailable";
+    readonly page: PublicPageSummary;
+    readonly preview: PublicContentPreview;
+  }
+  | {
     readonly kind: "page";
     readonly page: PublicPageSummary;
     readonly direct_path: string;
@@ -69,7 +74,13 @@ export class CreatorPublicPageViewPresenter implements PublicPageViewPresenter {
 
   async present(locator: Locator): Promise<PublicPageView> {
     const viewed = await this.#pages.view_public(locator);
-    if (!viewed.ok) return { kind: "missing" };
+    if (!viewed.ok) {
+      return viewed.reason === "not_found" ? { kind: "missing" } : {
+        kind: "unavailable",
+        page: viewed.page,
+        preview: preview_from_payload(viewed.page, viewed.payload),
+      };
+    }
 
     const page = viewed.page;
     const preview = preview_from_payload(page, viewed.payload);

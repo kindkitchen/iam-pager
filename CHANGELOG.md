@@ -2,6 +2,15 @@
 
 ## 2026-07-22
 
+- Added external content delivery for direct and site-wrapper visitors: provider
+  bytes are fetched within local bounds, verified against authoritative size and
+  SHA-256 facts, and served with existing endpoint semantics. Missing, revoked,
+  integrity-failed, unregistered, and retryable sources return one bounded
+  platform-owned `503` placeholder without leaking storage details. Definitive
+  failures persist asset-bound, revision-neutral page health in memory and Deno
+  KV; repeated observations are idempotent and verified recovery clears the
+  state. Google Drive now preserves the safe revoked cause, while transient
+  failures remain non-mutating.
 - Added the production `google-drive` external-storage provider with an injected
   Drive v3 HTTP gateway, bounded stat/media reads, multipart writes carrying
   `md5Checksum` version hints, single-flight persisted token refresh, definitive

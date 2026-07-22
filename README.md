@@ -82,17 +82,16 @@ delivery supports validators and one byte range.
 
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
-storage is a selected next slice. Its provider-neutral contract, registry,
-conformance suite, in-memory reference adapter, payload-free external asset
-persistence, and creator/provider connection repository now exist. Connection
-metadata is owner-safe, while provider tokens use separate AES-256-GCM custody
-in Deno KV. A separate Google Drive OAuth registration now provides
-session-bound connect, reauthorization, and CSRF-protected disconnect with an
-offline local mock. The production composition now registers a Google Drive REST
-provider with bounded fetch/stat and multipart upload, persisted token refresh,
-and normalized missing/unreachable outcomes. External publishing remains
-unavailable until delivery and management work lands; verified provider bytes
-will be served through iam-pager rather than redirecting visitors.
+storage now has its provider-neutral contract, registry, in-memory reference
+adapter, payload-free external assets, encrypted creator connections, separate
+Google Drive OAuth flow, and production Drive REST provider. Eligible direct and
+site-wrapper delivery fetches complete bounded provider bytes, verifies local
+size and SHA-256 facts, and serves them through iam-pager without redirecting.
+Missing, revoked, altered, or temporarily unreachable sources return the same
+platform-owned `503` placeholder; definitive failures are recorded idempotently
+on the page and verified recovery clears that revision-neutral health state.
+Creator-facing external publishing, warnings, and repair controls remain to be
+implemented.
 
 ## Architecture
 

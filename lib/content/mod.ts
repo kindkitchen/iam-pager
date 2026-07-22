@@ -4,3 +4,4 @@ export * from "./interfaces.ts";
 export * from "./generators.ts";
 export * from "./md-page.ts";
 export * from "./pdf.ts";
+export * from "./external-unavailable.ts";

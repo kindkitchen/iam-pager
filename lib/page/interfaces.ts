@@ -347,7 +347,14 @@ export type ViewPublicPageResult =
     page: PublicPageSummary;
     payload: DeliveryPayload;
   }
-  | { ok: false; reason: "not_found" };
+  | { ok: false; reason: "not_found" }
+  | {
+    ok: false;
+    reason: "external_content_unavailable";
+    page: PublicPageSummary;
+    payload: DeliveryPayload;
+    retry_after_seconds?: number;
+  };
 
 export interface ListPublicPagesRequest {
   namespace: string;
@@ -389,7 +396,13 @@ export type DeliverPageResult =
     endpoint: PageEndpointLink;
     payload: DeliveryPayload;
   }
-  | { ok: false; reason: "not_found" | "corrupt" };
+  | { ok: false; reason: "not_found" | "corrupt" }
+  | {
+    ok: false;
+    reason: "external_content_unavailable";
+    payload: DeliveryPayload;
+    retry_after_seconds?: number;
+  };
 
 export interface TrialPagePublisher {
   publish_trial(
