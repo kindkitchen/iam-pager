@@ -2,14 +2,22 @@
 
 ## 2026-07-22
 
+- Specified external content storage before implementation: iam-pager keeps
+  authoritative asset metadata locally, proxies and verifies provider payloads,
+  requires provider read while advertising optional write/delete, stores storage
+  OAuth tokens encrypted and separately from sign-in, and returns a
+  non-disclosing `503` placeholder only after page eligibility when external
+  bytes are missing or unreachable. The README and product, domain, experience,
+  capability, quality, and risk specifications now carry this selected but
+  not-yet-available boundary.
 - Drafted the external-content-storage task chain (`tasks/todo/`): epic plus
   nine ordered tasks covering specification, the storage-provider interface
   family with conformance suite, external-source support in the content-asset
   model, per-user storage connections with token custody, a separate Google
   Drive OAuth registration reusing `@kindkitchen/gauth`, the Drive provider,
-  delivery-time fallback with placeholder content for externally deleted
-  files, the owner warning and repair flow, and the management API/UI
-  surface. No implementation yet.
+  delivery-time fallback with placeholder content for externally deleted files,
+  the owner warning and repair flow, and the management API/UI surface. No
+  implementation yet.
 - Closed the API-key specification and regression boundary. The specifications
   now carry the API-key invariants (`SA-APIKEY`, `CP-APIKEY`, `CP-API-AUTH`,
   `EX-AUTOMATE`, plus updated `PD-CREATOR`, `QT-AUTHORITY`, `QT-API`,

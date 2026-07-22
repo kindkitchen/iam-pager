@@ -22,7 +22,7 @@ case-insensitive while publisher casing is preserved.
 A logical page has:
 
 - one stable management ID, independent of every locator;
-- one current immutable content asset;
+- one current immutable content asset, with authoritative metadata kept locally;
 - a non-empty set of locator references, one preferred only for stable
   management and exploration links;
 - one access policy, revision, tag set, management row, and exploration row.
@@ -80,9 +80,12 @@ attachment delivery. Add an alias only when separate inline and download URLs
 are wanted. Content-only replacement preserves all references. Direct PDF
 delivery supports validators and one byte range.
 
-External storage, generic binary publication, text indexing, quotas, publishing
-rate limits, guest expiry, and account deletion are outside the current
-boundary.
+Generic binary publication, text indexing, quotas, publishing rate limits, guest
+expiry, and account deletion are outside the current boundary. External content
+storage is now a selected, documented next slice, but is not available until its
+provider, connection, asset-source, delivery, and management tasks are
+implemented. Its contract keeps metadata local and serves verified provider
+bytes through iam-pager rather than redirecting visitors.
 
 ## Architecture
 
@@ -97,6 +100,9 @@ Important boundaries:
   delivery, and public-query behavior.
 - `PageAggregateRepository` is the persistence interface for immutable assets,
   logical pages, endpoint claims, and owner/public projections.
+- The selected external-storage boundary adds provider and connection
+  interfaces; page logic consumes normalized capabilities and never provider
+  SDKs or OAuth details directly.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
@@ -124,6 +130,7 @@ check budget, while the memory implementation accepts larger request-bounded
 sets.
 
 See [the project specification](docs/specification/README.md),
+[the external-storage contract](docs/specification/external-storage.md),
 [the page API contract](docs/api/pages.md),
 [the API authentication reference](docs/api/authentication.md), and
 [the API-key contract](docs/api/api-keys.md).

@@ -71,6 +71,9 @@ The current product supports first-party Markdown and PDF publication, direct
 delivery, namespace ownership, creator management, wrapped public views, and
 bounded public exploration.
 
-External storage, generic file hosting, full-text indexing, quotas, rate limits,
-guest expiry, account deletion, and permanent-storage guarantees are not part of
-the current boundary.
+Generic file hosting, full-text indexing, quotas, rate limits, guest expiry,
+account deletion, and permanent-storage guarantees are not part of the current
+boundary. External storage is the selected next product slice for validated
+Markdown and PDF payloads, under
+[its explicit custody and failure contract](external-storage.md), but is not yet
+an available capability.

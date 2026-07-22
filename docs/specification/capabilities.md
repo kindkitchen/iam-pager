@@ -52,6 +52,22 @@ attributes and may be extended without changing content or locator identity.
 multipart, ranges, and response headers; components own file selection and draft
 feedback. None of those concerns enter handlers.
 
+## CP-EXTERNAL-STORAGE — External payload capability
+
+The selected external-storage boundary is an interface family under
+`lib/external-storage`. `ExternalStorageProvider` exposes normalized provider
+identity, mandatory read, optional write/delete capabilities, bounded payload
+operations, and stable failure categories. A provider registry resolves it
+without leaking SDK or OAuth behavior into page services.
+
+A storage-connection repository owns creator/provider uniqueness, encrypted
+token custody, health, reauthorization, and revocation. Asset repositories
+persist only the external source reference and authoritative local integrity
+metadata. Delivery authorizes the page first, resolves the source through these
+interfaces, verifies complete bytes, and maps missing or retryable provider
+outcomes through `ES-DELIVERY`. Web routes and components do not call provider
+adapters directly.
+
 ## CP-AUTHORITY — Identity and namespace capability
 
 `IdentityRepository` maps a verified `(strategy_id, provider_subject)` to one

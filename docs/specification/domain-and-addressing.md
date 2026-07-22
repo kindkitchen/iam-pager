@@ -73,17 +73,28 @@ a set it cannot commit atomically; that is not a content-format rule.
 
 ## DA-ASSET — Content asset
 
-A content asset is an immutable validated payload with intrinsic metadata:
-content type, media type, size, and optional safe download filename. A page
-references one current asset; all its endpoints therefore expose one coherent
-payload.
+A content asset is an immutable validated payload with authoritative local
+metadata: content type, media type, exact size, required SHA-256 checksum,
+content codec version, and optional safe download filename. A page references
+one current asset; all its endpoints therefore expose one coherent payload.
+
+An asset has exactly one source. An inline source contains the canonical
+payload; an external source contains a stable provider ID, creator-owned
+connection ID, opaque provider object reference, and optional version hint.
+External source selection changes payload custody only: page, locator, endpoint,
+access, and metadata semantics remain local. Provider metadata cannot override
+the committed asset facts, and fetched bytes must match size and checksum before
+delivery.
 
 Content replacement stages a fresh asset before atomically switching the page
-reference. It does not require locator resubmission. If the content type
-changes, every retained endpoint profile must be supported by the new handler.
-An asset has no public address without an eligible page endpoint. Deleting or
-replacing a page may leave an unreferenced asset, but must never publish
-incomplete data or remove data still referenced by another page.
+reference. External publication additionally uploads validated content before
+the asset can be committed. Replacement does not require locator resubmission.
+If the content type changes, every retained endpoint profile must be supported
+by the new handler. An asset has no public address without an eligible page
+endpoint. Deleting or replacing a page may leave an unreferenced inline or
+provider payload, but must never publish incomplete data or remove data still
+referenced by another page. The complete external-source contract is in
+[external-storage.md](external-storage.md).
 
 ## DA-CONTENT — Supported content
 
@@ -109,6 +120,9 @@ the selected content handler supports it.
   creator-backed exploration.
 
 Missing, invalid, private, and unauthorized visitor lookups are non-disclosing.
+After a page is established as eligible, unavailable external bytes return the
+bounded platform placeholder defined by `ES-DELIVERY`; this discloses no page
+that would otherwise be hidden.
 
 ## DA-TAGS — Tags
 
