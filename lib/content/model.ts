@@ -18,11 +18,15 @@ export function is_valid_delivery_profile(
     delivery_profile_pattern.test(value);
 }
 
-/** Delivery metadata for stored content (DA-CONTENT). */
+/** Authoritative local facts for one immutable content representation. */
 export interface ContentMeta {
   media_type: string;
   size_bytes: number;
   download_filename?: string;
+  /** SHA-256 of canonical externally stored bytes; required for external assets. */
+  sha256?: string;
+  /** Bounded content codec/schema identifier; required for external assets. */
+  codec_version?: string;
 }
 
 /** Raw payload handed to HTTP delivery, independent of routing. */

@@ -5,6 +5,7 @@ import {
   assertRejects,
   assertThrows,
 } from "@std/assert";
+import { is_inline_content_asset } from "../content/asset.ts";
 import { type MdPageData, MdPageHandler } from "../content/md-page.ts";
 import { pdf_media_type, PdfHandler } from "../content/pdf.ts";
 import { LocatorEngine } from "../locator/engine.ts";
@@ -166,6 +167,7 @@ class TestPageAggregateRepository extends MemoryPageAggregateRepository {
     const created = await this.create_content_asset({
       content_asset_id,
       content_type: content.content_type,
+      source: { kind: "inline" },
       data: content.data,
       meta: content.meta,
       created_at,
@@ -177,6 +179,9 @@ class TestPageAggregateRepository extends MemoryPageAggregateRepository {
   async #materialize(page: PageAggregate): Promise<MaterializedTestPage> {
     const asset = await this.find_content_asset_by_id(page.content_asset_id);
     if (asset === null) throw new Error("test page asset is missing");
+    if (!is_inline_content_asset(asset)) {
+      throw new Error("test page asset is external");
+    }
     return {
       ...structuredClone(page),
       content: {

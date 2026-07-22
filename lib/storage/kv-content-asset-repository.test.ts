@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ContentAsset } from "../content/asset.ts";
 import { PdfHandler } from "../content/pdf.ts";
+import type { ContentDataCodec } from "./content-data-codec.ts";
 import type { KvGateway } from "./kv-gateway.ts";
 import {
   content_asset_manifest_key,
@@ -8,7 +9,7 @@ import {
   content_asset_payload_prefix,
   type ContentAssetPayloadIdGenerator,
   KvContentAssetRepository,
-  type StoredContentAssetManifest,
+  type StoredInlineContentAssetManifest,
 } from "./kv-content-asset-repository.ts";
 import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 
@@ -47,6 +48,7 @@ function make_asset(
   return {
     content_asset_id,
     content_type: data instanceof Uint8Array ? "pdf" : "test-content",
+    source: { kind: "inline" },
     data,
     meta: {
       media_type: data instanceof Uint8Array
@@ -54,6 +56,30 @@ function make_asset(
         : "application/octet-stream",
       size_bytes,
       download_filename: `${content_asset_id}.bin`,
+    },
+    created_at,
+  };
+}
+
+function make_external_asset(content_asset_id: string): ContentAsset {
+  return {
+    content_asset_id,
+    content_type: "pdf",
+    source: {
+      kind: "external",
+      ref: {
+        provider_id: "google-drive",
+        connection_id: "connection-1",
+        external_ref: `objects/${content_asset_id}`,
+        version_hint: "version-1",
+      },
+    },
+    meta: {
+      media_type: "application/pdf",
+      size_bytes: 4096,
+      download_filename: `${content_asset_id}.pdf`,
+      sha256: "a".repeat(64),
+      codec_version: "pdf-v1",
     },
     created_at,
   };
@@ -70,6 +96,7 @@ function make_pdf_asset(
   return {
     content_asset_id,
     content_type: handler.content_type,
+    source: { kind: "inline" },
     data: handler.derive(accepted.value),
     meta: {
       media_type: "application/pdf",
@@ -284,6 +311,75 @@ Deno.test("KV content assets preserve immutable values across reconstruction", a
   }
 });
 
+Deno.test("KV external assets round-trip without codec payload records", async () => {
+  const kv = await Deno.openKv(":memory:");
+  try {
+    const input = make_external_asset("external-asset");
+    const forbidden_codec: ContentDataCodec = {
+      encoding: "v8",
+      encode: () => {
+        throw new Error("external asset must not be encoded");
+      },
+      decode: () => {
+        throw new Error("external asset must not be decoded");
+      },
+    };
+    const subject = new KvContentAssetRepository(new KvToolboxGateway(kv), {
+      codec: forbidden_codec,
+    });
+    const created = await subject.create_content_asset(input);
+    assert(created.ok);
+    assertEquals(created.asset, input);
+    assertEquals(Object.hasOwn(created.asset, "data"), false);
+    assertEquals(await stored_payload_ids(kv), new Set());
+
+    const manifest = (await kv.get<Record<string, unknown>>(
+      content_asset_manifest_key("external-asset"),
+    )).value!;
+    assertEquals(Object.hasOwn(manifest, "payload_id"), false);
+    assertEquals(Object.hasOwn(manifest, "data_encoding"), false);
+    assertEquals(Object.hasOwn(manifest, "payload_sha256"), false);
+
+    const found = await subject.find_content_asset_by_id("external-asset");
+    assertEquals(found, input);
+    assert(found !== null);
+    assertEquals(Object.hasOwn(found, "data"), false);
+
+    await kv.set(content_asset_manifest_key("external-asset"), {
+      ...manifest,
+      payload_id: "forbidden-payload",
+    });
+    await assertRejects(
+      () => subject.find_content_asset_by_id("external-asset"),
+      TypeError,
+      "invalid stored content asset",
+    );
+  } finally {
+    kv.close();
+  }
+});
+
+Deno.test("KV content assets decode source-less legacy manifests as inline", async () => {
+  const kv = await Deno.openKv(":memory:");
+  try {
+    const input = make_asset("legacy-inline", { marker: "legacy" });
+    const created = await repository(kv, ["legacy-payload"])
+      .create_content_asset(input);
+    assert(created.ok);
+    const key = content_asset_manifest_key("legacy-inline");
+    const stored = (await kv.get<Record<string, unknown>>(key)).value!;
+    const { source: _source, ...legacy } = stored;
+    await kv.set(key, legacy);
+
+    assertEquals(
+      await repository(kv).find_content_asset_by_id("legacy-inline"),
+      input,
+    );
+  } finally {
+    kv.close();
+  }
+});
+
 Deno.test("concurrent KV asset creation has one native-CAS winner without staging leaks", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
@@ -450,8 +546,9 @@ Deno.test("KV content asset reads reject corrupt chunks, manifests, hashes, and 
       .create_content_asset(make_asset("corrupt-hash", { value: 1 }));
     assert(hash_created.ok);
     const hash_key = content_asset_manifest_key("corrupt-hash");
-    const hash_manifest = (await kv.get<StoredContentAssetManifest>(hash_key))
-      .value!;
+    const hash_manifest =
+      (await kv.get<StoredInlineContentAssetManifest>(hash_key))
+        .value!;
     await kv.set(hash_key, {
       ...hash_manifest,
       payload_byte_length: hash_manifest.payload_byte_length + 1,
@@ -475,7 +572,7 @@ Deno.test("KV content asset reads reject corrupt chunks, manifests, hashes, and 
       .create_content_asset(make_asset("bad-encoding", { value: 2 }));
     assert(encoding_created.ok);
     const encoding_key = content_asset_manifest_key("bad-encoding");
-    const encoding_manifest = (await kv.get<StoredContentAssetManifest>(
+    const encoding_manifest = (await kv.get<StoredInlineContentAssetManifest>(
       encoding_key,
     )).value!;
     await kv.set(encoding_key, {
@@ -494,7 +591,7 @@ Deno.test("KV content asset reads reject corrupt chunks, manifests, hashes, and 
       content_asset_payload_key("payload-bad-codec"),
       malformed_bytes,
     );
-    const malformed_manifest: StoredContentAssetManifest = {
+    const malformed_manifest: StoredInlineContentAssetManifest = {
       data_encoding: "v8",
       content_asset_id: "bad-codec",
       payload_id: "payload-bad-codec",

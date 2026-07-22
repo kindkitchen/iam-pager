@@ -2,14 +2,36 @@
 
 ## 2026-07-22
 
+- Added provider-neutral external sources to immutable `ContentAsset` records:
+  external assets carry a bounded provider reference plus required local
+  checksum and codec facts, never contain inline data, and round-trip through
+  memory and Deno KV repositories without creating payload objects. New inline
+  records use an explicit source discriminator while existing source-less KV
+  manifests decode as inline without migration; repository conformance now
+  covers both source kinds.
+- Added the provider-neutral external-storage interface family under
+  `lib/external-storage`: bounded opaque references and fetches, mandatory
+  read/stat with optional write/delete capabilities, normalized definitive
+  missing versus retryable unreachable outcomes, a validated provider registry,
+  reusable adapter conformance tests, and an isolated in-memory reference
+  provider with fault injection. External storage remains unavailable until the
+  connection, asset-source, delivery, and management slices land.
+- Specified external content storage before implementation: iam-pager keeps
+  authoritative asset metadata locally, proxies and verifies provider payloads,
+  requires provider read while advertising optional write/delete, stores storage
+  OAuth tokens encrypted and separately from sign-in, and returns a
+  non-disclosing `503` placeholder only after page eligibility when external
+  bytes are missing or unreachable. The README and product, domain, experience,
+  capability, quality, and risk specifications now carry this selected but
+  not-yet-available boundary.
 - Drafted the external-content-storage task chain (`tasks/todo/`): epic plus
   nine ordered tasks covering specification, the storage-provider interface
   family with conformance suite, external-source support in the content-asset
   model, per-user storage connections with token custody, a separate Google
   Drive OAuth registration reusing `@kindkitchen/gauth`, the Drive provider,
-  delivery-time fallback with placeholder content for externally deleted
-  files, the owner warning and repair flow, and the management API/UI
-  surface. No implementation yet.
+  delivery-time fallback with placeholder content for externally deleted files,
+  the owner warning and repair flow, and the management API/UI surface. No
+  implementation yet.
 - Closed the API-key specification and regression boundary. The specifications
   now carry the API-key invariants (`SA-APIKEY`, `CP-APIKEY`, `CP-API-AUTH`,
   `EX-AUTOMATE`, plus updated `PD-CREATOR`, `QT-AUTHORITY`, `QT-API`,

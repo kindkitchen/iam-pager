@@ -18,10 +18,11 @@ exists.
 ## OS-CONTENT — Additional content
 
 Active HTML, SVG, generic binary files, broader media inference, thumbnails,
-PDF.js, PDF text extraction, and external storage are unselected. Each new type
-requires an explicit size band, validation, delivery profiles, management model,
-and safe wrapped-view policy. PDF's current structure screen is not malware
-certification.
+PDF.js, and PDF text extraction are unselected. Each new type requires an
+explicit size band, validation, delivery profiles, management model, and safe
+wrapped-view policy. External storage does not add a content type and cannot be
+used to bypass current Markdown/PDF validation. PDF's current structure screen
+is not malware certification.
 
 ## OS-SEARCH — Search depth
 
@@ -30,12 +31,20 @@ substrings and exact tags. Text extraction, indexing, relevance, and view-count
 sorting remain later capabilities. Any index must preserve immediate privacy
 when access becomes private.
 
-## OS-EXTERNAL — External storage
+## OS-EXTERNAL — External storage implementation risk
 
-A future provider such as GitHub or Google Drive must preserve page, locator,
-endpoint, authority, and privacy semantics. The product must state whether it
-copies, synchronizes, redirects, or serves provider content and must fail closed
-when credentials or remote items disappear.
+The product boundary is selected in [external-storage.md](external-storage.md):
+iam-pager keeps authoritative metadata locally, fetches and verifies provider
+bytes, never redirects visitors, and uses a non-disclosing `503` placeholder
+after an eligible page loses content. The provider interface family, registry,
+conformance suite, and memory reference adapter now exist; connection,
+asset-source, delivery, warning/repair, and management remain open work.
+
+Until that chain lands, external storage must not be presented as available.
+Implementation must preserve local page/locator/authority/privacy semantics,
+prevent provider-side edits from mutating immutable assets, keep tokens
+encrypted and server-only, distinguish definitive missing state from retryable
+outages, and avoid automatic remote deletion or stale-byte delivery.
 
 ## OS-ISOLATION — Active content
 

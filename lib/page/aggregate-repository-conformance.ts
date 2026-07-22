@@ -30,6 +30,7 @@ export function make_content_asset(
   return {
     content_asset_id,
     content_type: "test-content",
+    source: { kind: "inline" },
     data: { marker },
     meta: {
       media_type: "application/octet-stream",
@@ -149,6 +150,54 @@ export function test_page_aggregate_repository_conformance(
       assert(reread !== null);
       assertEquals((reread.data as { marker: string }).marker, "original");
       assertEquals(await subject.find_content_asset_by_id("missing"), null);
+    },
+  );
+
+  conformance_test(
+    "external content assets keep references and integrity facts without data",
+    async (subject) => {
+      const input: ContentAsset = {
+        content_asset_id: "external-asset",
+        content_type: "test-content",
+        source: {
+          kind: "external",
+          ref: {
+            provider_id: "reference",
+            connection_id: "connection-1",
+            external_ref: "objects/canonical-content",
+            version_hint: "version-1",
+          },
+        },
+        meta: {
+          media_type: "application/octet-stream",
+          size_bytes: 17,
+          sha256: "1".repeat(64),
+          codec_version: "test-content-v1",
+        },
+        created_at: t1,
+      };
+      const expected = structuredClone(input);
+      const creating = subject.create_content_asset(input);
+      (input.source.ref as { external_ref: string }).external_ref = "mutated";
+      const created = await creating;
+      assert(created.ok);
+      assertEquals(created.asset, expected);
+      assertEquals(Object.hasOwn(created.asset, "data"), false);
+      assert(created.asset.source.kind === "external");
+      (created.asset.source.ref as { external_ref: string }).external_ref =
+        "mutated-result";
+
+      const found = await subject.find_content_asset_by_id("external-asset");
+      assertEquals(found, expected);
+      assert(found !== null);
+      assertEquals(Object.hasOwn(found, "data"), false);
+      assert(found.source.kind === "external");
+      (found.source.ref as { external_ref: string }).external_ref =
+        "mutated-read";
+      assertEquals(
+        await subject.find_content_asset_by_id("external-asset"),
+        expected,
+      );
     },
   );
 

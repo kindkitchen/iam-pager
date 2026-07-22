@@ -20,6 +20,8 @@ Stable product behavior must not depend on replaceable integrations:
 - every locator profile is publisher intent validated against the content
   handler, never inferred from content, preferred status, filename, or path;
 - identity, namespace authority, sessions, and page persistence use interfaces;
+- external providers and creator storage connections use interfaces; provider
+  SDKs, OAuth details, and token custody do not enter page logic or components;
 - presenters derive view models before components render them;
 - Fresh routes contain no business or authorization logic.
 
@@ -92,6 +94,9 @@ incoherent values.
   unknown transport profile.
 - Active creator content cannot read or mutate authenticated platform state.
 - Content and metadata changes must become visible together.
+- External delivery authorizes the page before provider access, verifies the
+  complete bounded payload against local size and SHA-256 facts, and never
+  redirects visitors or serves stale bytes after failure.
 
 PDF delivery supports bounded full responses, matching `If-None-Match`, and one
 strict byte range with `If-Range`, `206`, or bodyless `416`. Multiple or
