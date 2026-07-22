@@ -2,9 +2,10 @@
 
 This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
-storage-connection repository with encrypted token custody and the separate
-Google Drive OAuth connect/disconnect flow are implemented, but external content
-storage is not available until provider, delivery, and management work lands.
+storage-connection repository with encrypted token custody, the separate Google
+Drive OAuth connect/disconnect flow, and the production Google Drive provider
+are implemented. External content storage is not available until delivery and
+management work lands.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -93,6 +94,16 @@ complete bounded fetches, stat, optional put/delete operations, definitive
 outcomes, an immutable-at-composition registry, and a reusable conformance
 suite. The in-memory implementation is a reference adapter and test double, not
 an externally durable provider.
+
+The `google-drive` adapter implements Drive v3 metadata/media reads and bounded
+multipart writes through a small injected HTTP gateway. It stores Drive's
+`md5Checksum` as the provider version hint, treats trashed, gone, or
+definitively inaccessible files as missing, preserves bounded retry hints for
+rate limits and outages, and refreshes expiring or rejected access tokens
+through single-flight credential updates. Invalid grants and access that remains
+unauthorized after refresh revoke the local connection. The provider-neutral API
+deliberately collapses those credential details into the existing
+definitive-missing outcome.
 
 ## ES-CONNECTION — Credential custody and revocation
 

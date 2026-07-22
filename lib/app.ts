@@ -38,9 +38,14 @@ import { LocatorEngine, PathSlugStrategy } from "./locator/mod.ts";
 import { MdPageHandler, PdfHandler } from "./content/mod.ts";
 import {
   compose_google_drive_oauth,
+  type ExternalStorageProvider,
+  ExternalStorageProviderRegistry,
+  type ExternalStorageProviderResolver,
+  FetchGoogleDriveGateway,
   GoogleDriveConnectionHttpAdapter,
   type GoogleDriveConnectionHttpHandler,
   GoogleDriveConnectionService,
+  GoogleDriveExternalStorageProvider,
   GoogleDriveMockConsentHttpAdapter,
   type GoogleDriveOAuthClient,
   MemoryStorageConnectionRepository,
@@ -170,6 +175,7 @@ export interface AppServices {
   google_drive_connections: GoogleDriveConnectionService;
   google_drive_connections_http: GoogleDriveConnectionHttpHandler;
   google_drive_mock_consent_http: GoogleDriveMockConsentHttpAdapter;
+  external_storage_providers: ExternalStorageProviderResolver;
 }
 
 export interface AppServiceOptions {
@@ -196,6 +202,8 @@ export interface AppServiceOptions {
   readonly google_drive_callback_url_resolver?:
     AuthenticationCallbackUrlResolver;
   readonly google_drive_mock_consent_screen?: GoogleMockConsentScreen;
+  /** Immutable provider set available to page and management orchestration. */
+  readonly external_storage_providers?: readonly ExternalStorageProvider[];
 }
 
 export interface ConfiguredAppServiceOptions {
@@ -350,6 +358,9 @@ export function create_app_services(
   const google_drive_mock_consent_http = new GoogleDriveMockConsentHttpAdapter(
     options.google_drive_mock_consent_screen ?? null,
   );
+  const external_storage_providers = new ExternalStorageProviderRegistry(
+    options.external_storage_providers ?? [],
+  );
   return {
     engine,
     page_repository,
@@ -379,6 +390,7 @@ export function create_app_services(
     google_drive_connections,
     google_drive_connections_http,
     google_drive_mock_consent_http,
+    external_storage_providers,
   };
 }
 
@@ -431,6 +443,18 @@ export async function create_configured_app_services(
     options.storage_connection_repositories_factory ??
       new DefaultStorageConnectionRepositoriesFactory()
   ).create(storage_connection_storage_config, environment);
+  const external_storage_providers: ExternalStorageProvider[] =
+    google_drive_config.mode === "original"
+      ? [
+        new GoogleDriveExternalStorageProvider({
+          connections: storage_connection_repositories.connection_repository,
+          gateway: new FetchGoogleDriveGateway({
+            client_id: google_drive_config.client_id,
+            client_secret: google_drive_config.client_secret,
+          }),
+        }),
+      ]
+      : [];
   return create_app_services({
     ownership_repositories,
     session_repository,
@@ -441,6 +465,7 @@ export async function create_configured_app_services(
     storage_oauth_attempt_repository:
       storage_connection_repositories.oauth_attempt_repository,
     google_drive_oauth: google_drive_oauth.client,
+    external_storage_providers,
     session_cookie_mode: parse_session_cookie_mode(
       environment.get(SESSION_COOKIE_MODE_ENV),
     ),

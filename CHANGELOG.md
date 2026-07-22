@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Added the production `google-drive` external-storage provider with an injected
+  Drive v3 HTTP gateway, bounded stat/media reads, multipart writes carrying
+  `md5Checksum` version hints, single-flight persisted token refresh, definitive
+  revocation and missing mapping, retry-safe outage mapping, registry
+  composition, an in-process fake Drive server, and provider-conformance and
+  error-mapping coverage. Local consent mode remains provider-free; original
+  mode registers the adapter from its dedicated Drive client credentials.
 - Added a second, explicit `@kindkitchen/gauth` composition for Google Drive
   storage consent with its own `IAM_PAGER_GOOGLE_DRIVE_*` registration, exact
   callback routes, `drive.file` permission, offline explicit consent, and full

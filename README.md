@@ -88,9 +88,11 @@ persistence, and creator/provider connection repository now exist. Connection
 metadata is owner-safe, while provider tokens use separate AES-256-GCM custody
 in Deno KV. A separate Google Drive OAuth registration now provides
 session-bound connect, reauthorization, and CSRF-protected disconnect with an
-offline local mock. External publishing remains unavailable until provider,
-delivery, and management work lands; verified provider bytes will be served
-through iam-pager rather than redirecting visitors.
+offline local mock. The production composition now registers a Google Drive REST
+provider with bounded fetch/stat and multipart upload, persisted token refresh,
+and normalized missing/unreachable outcomes. External publishing remains
+unavailable until delivery and management work lands; verified provider bytes
+will be served through iam-pager rather than redirecting visitors.
 
 ## Architecture
 
@@ -114,7 +116,10 @@ Important boundaries:
   directly. `StorageConnectionRepository` separately owns one live connection
   per creator/provider pair, retained revocation metadata, and provider-only
   credentials; memory and Deno KV share conformance, and the KV adapter stores
-  only connection-bound AES-256-GCM ciphertext under credential keys.
+  only connection-bound AES-256-GCM ciphertext under credential keys. The
+  production Google Drive adapter uses a bounded HTTP gateway, records Drive's
+  `md5Checksum` as the opaque version hint, refreshes tokens single-flight, and
+  revokes invalid connections; local tests use an in-process fake Drive server.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
@@ -228,8 +233,11 @@ IAM_PAGER_GOOGLE_DRIVE_CLIENT_SECRET=...
 
 Drive requests `drive.file` as its only content permission, plus the identity
 scopes gauth needs to verify the provider account, and forces offline explicit
-consent. Connect and callback require an authenticated browser session;
-disconnect is POST-only and requires that session's CSRF token. The routes are
+consent. In `original` mode those same Drive client credentials compose the
+`google-drive` external provider; local mode mocks consent only and does not
+register a remote-content provider. Connect and callback require an
+authenticated browser session; disconnect is POST-only and requires that
+session's CSRF token. The routes are
 `/auth/storage/google-drive/{start,callback,disconnect}`.
 
 An explicitly designated HTTPS preview may derive callbacks from a narrow,

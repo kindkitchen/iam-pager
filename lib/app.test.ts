@@ -6,12 +6,17 @@ import {
   assertThrows,
 } from "@std/assert";
 import {
+  GOOGLE_AUTH_CLIENT_ID_ENV,
+  GOOGLE_AUTH_CLIENT_SECRET_ENV,
   GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
   MemoryIdentityRepository,
 } from "./auth/mod.ts";
 import {
+  type ExternalStorageProvider,
+  GOOGLE_DRIVE_CLIENT_ID_ENV,
+  GOOGLE_DRIVE_CLIENT_SECRET_ENV,
   GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV,
   GOOGLE_DRIVE_MODE_ENV,
   GOOGLE_DRIVE_REDIRECT_URI_ENV,
@@ -63,6 +68,17 @@ const local_google_environment: Readonly<Record<string, string>> = {
     "http://localhost:5173/auth/storage/google-drive/callback",
   [GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV]:
     "http://localhost:5173/auth/storage/google-drive/mock-consent",
+};
+const original_google_environment: Readonly<Record<string, string>> = {
+  [GOOGLE_AUTH_MODE_ENV]: "original",
+  [GOOGLE_AUTH_REDIRECT_URI_ENV]: "https://pager.test/auth/google/callback",
+  [GOOGLE_AUTH_CLIENT_ID_ENV]: "sign-in-client",
+  [GOOGLE_AUTH_CLIENT_SECRET_ENV]: "sign-in-secret",
+  [GOOGLE_DRIVE_MODE_ENV]: "original",
+  [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
+    "https://pager.test/auth/storage/google-drive/callback",
+  [GOOGLE_DRIVE_CLIENT_ID_ENV]: "drive-client",
+  [GOOGLE_DRIVE_CLIENT_SECRET_ENV]: "drive-secret",
 };
 
 function pdf_bytes(): Uint8Array {
@@ -508,6 +524,35 @@ Deno.test("Drive HTTP routes require authentication and valid disconnect CSRF", 
       context,
     )).status,
     401,
+  );
+});
+
+Deno.test("configured production composition registers the Drive provider", async () => {
+  const services = await create_configured_app_services({
+    get: (name) => original_google_environment[name],
+  });
+  const provider = services.external_storage_providers.resolve("google-drive");
+  assertExists(provider);
+  assertEquals(provider.capabilities, ["read", "write"]);
+});
+
+Deno.test("composition root registers only explicitly composed external providers", () => {
+  const provider: ExternalStorageProvider = {
+    provider_id: "test-drive",
+    capabilities: ["read"],
+    fetch_content: () =>
+      Promise.resolve({ ok: false, reason: "external_content_missing" }),
+    stat_content: () =>
+      Promise.resolve({ ok: false, reason: "external_content_missing" }),
+  };
+  assertEquals(
+    create_app_services().external_storage_providers.resolve("test-drive"),
+    null,
+  );
+  assertStrictEquals(
+    create_app_services({ external_storage_providers: [provider] })
+      .external_storage_providers.resolve("test-drive"),
+    provider,
   );
 });
 

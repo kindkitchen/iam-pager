@@ -34,6 +34,15 @@ export {
 } from "./provider-conformance.ts";
 export { ExternalStorageProviderRegistry } from "./provider-registry.ts";
 export type {
+  GoogleDriveAccessToken,
+  GoogleDriveFileStat,
+  GoogleDriveGateway,
+  GoogleDriveGatewayFailureReason,
+  GoogleDriveGatewayResult,
+} from "./google-drive-gateway.ts";
+export { FetchGoogleDriveGateway } from "./google-drive-gateway.ts";
+export { GoogleDriveExternalStorageProvider } from "./google-drive-provider.ts";
+export type {
   StorageConnection,
   StorageConnectionCredentials,
   StorageConnectionStatus,
