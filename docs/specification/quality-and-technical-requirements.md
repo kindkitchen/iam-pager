@@ -61,22 +61,24 @@ potentially referenced bytes or replay non-idempotent page changes.
 
 ## QT-STORAGE — Storage selection
 
-Identity plus namespace ownership form one persistence unit. Sessions, pages,
-and API keys are separate opt-ins but durable selection requires durable
-ownership, so an authenticated session, protected page, or API key cannot
-outlive its user and claim.
+Identity plus namespace ownership form one persistence unit. Sessions and pages
+are separate opt-ins, while API keys inherit the ownership backend unless an
+explicit override selects `memory` or `deno-kv`. Durable dependent storage
+requires durable ownership, so an authenticated session, protected page, or API
+key cannot outlive its user and claim.
 
-Each repository defaults to memory. Current durable selectors are:
+Ownership, sessions, and pages default to memory. Current durable selectors are:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
-IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv
 ```
 
-All Deno KV adapters use the ownership database path or attached default
-database. Record decoders reject unknown, malformed, or incoherent values.
+`IAM_PAGER_API_KEY_STORAGE_BACKEND` is optional because API keys inherit the
+ownership selection. All Deno KV adapters use the ownership database path or
+attached default database. Record decoders reject unknown, malformed, or
+incoherent values.
 
 ## QT-ROUTING — HTTP routing and delivery
 

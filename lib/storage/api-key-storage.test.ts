@@ -19,7 +19,7 @@ function environment(
   return { get: (name) => values[name] };
 }
 
-Deno.test("api key storage configuration defaults explicitly to memory", () => {
+Deno.test("api key storage inherits ownership unless explicitly ephemeral", () => {
   for (
     const ownership_config of [
       { backend: "memory" },
@@ -28,7 +28,7 @@ Deno.test("api key storage configuration defaults explicitly to memory", () => {
   ) {
     assertEquals(
       parse_api_key_storage_config(environment({}), ownership_config),
-      { backend: "memory" },
+      ownership_config,
     );
     assertEquals(
       parse_api_key_storage_config(

@@ -36,13 +36,17 @@ export class DefaultApiKeyRepositoryFactory implements ApiKeyRepositoryFactory {
 }
 
 /**
- * Durable API keys inherit the ownership KV path so a stored key's owner
- * user ID cannot outlive or drift away from the configured identity database.
+ * API keys inherit the ownership backend when no override is configured, so
+ * durable creator identities cannot silently receive process-local keys.
+ * Explicit memory remains available for deliberately ephemeral compositions.
  */
 export function parse_api_key_storage_config(
   environment: ApiKeyStorageEnvironmentSource,
   ownership_config: OwnershipStorageConfig,
 ): ApiKeyStorageConfig {
+  if (environment.get(API_KEY_STORAGE_BACKEND_ENV) === undefined) {
+    return ownership_config;
+  }
   return parse_dependent_storage_config(
     environment,
     API_KEY_STORAGE_BACKEND_ENV,

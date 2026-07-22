@@ -43,6 +43,13 @@
   authorization decisions. Also fixed the pre-existing `deno task check`
   failures (`static/site.css` formatting, `CssSourceEditor` timer type).
 
+- Improved API-key management UX with the shared four-word random label helper,
+  compact styled permission checkboxes, an explicitly optional expiry date whose
+  time defaults to the current local time, and an icon-only one-time-key
+  visibility control. API keys now inherit durable ownership storage by default,
+  so keys remain listed across reloads without requiring a newly introduced
+  deployment setting.
+
 - Implemented the owner API-key lifecycle as a new `lib/api-key/` sibling
   module: interface-backed model, service, memory repository, and HTTP adapter
   with thin Fresh routes at `/api/api-keys`. Browser-authenticated owners

@@ -58,6 +58,10 @@ Deno.test("API-key panel renders complete rows without secret material", () => {
   assertStringIncludes(html, "Generate key");
   assertStringIncludes(html, "Revoke all keys");
   assertStringIncludes(html, "Full access");
+  assertStringIncludes(html, 'aria-label="Use a random API-key label"');
+  assertStringIncludes(html, "Expiry date <small>optional</small>");
+  assertStringIncludes(html, "Leave blank for a key that never expires.");
+  assertEquals(html.includes("I stored it"), false);
   assert(!html.includes("iamp_"));
   assert(!html.includes("secret"));
 });
