@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Added the provider-neutral external-storage interface family under
+  `lib/external-storage`: bounded opaque references and fetches, mandatory
+  read/stat with optional write/delete capabilities, normalized definitive
+  missing versus retryable unreachable outcomes, a validated provider registry,
+  reusable adapter conformance tests, and an isolated in-memory reference
+  provider with fault injection. External storage remains unavailable until the
+  connection, asset-source, delivery, and management slices land.
 - Specified external content storage before implementation: iam-pager keeps
   authoritative asset metadata locally, proxies and verifies provider payloads,
   requires provider read while advertising optional write/delete, stores storage

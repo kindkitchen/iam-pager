@@ -1,8 +1,9 @@
 # External content storage
 
 This document selects the product and technical boundary for externally stored
-content. It is the contract for the implementation tasks that follow; external
-storage is not available until those tasks land.
+content. The provider interface family is implemented, but external storage is
+not available until connection, asset-source, delivery, and management work
+lands.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -81,6 +82,13 @@ capability.
 Provider SDKs, OAuth, HTTP, and error details stay behind the interface. Page
 services and web components consume normalized capabilities and outcomes rather
 than provider-specific behavior.
+
+`lib/external-storage/` now implements this boundary: bounded opaque references,
+complete bounded fetches, stat, optional put/delete operations, definitive
+`external_content_missing` versus retryable `external_source_unreachable`
+outcomes, an immutable-at-composition registry, and a reusable conformance
+suite. The in-memory implementation is a reference adapter and test double, not
+an externally durable provider.
 
 ## ES-CONNECTION — Credential custody and revocation
 

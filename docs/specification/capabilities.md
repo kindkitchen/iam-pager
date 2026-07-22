@@ -58,7 +58,9 @@ The selected external-storage boundary is an interface family under
 `lib/external-storage`. `ExternalStorageProvider` exposes normalized provider
 identity, mandatory read, optional write/delete capabilities, bounded payload
 operations, and stable failure categories. A provider registry resolves it
-without leaking SDK or OAuth behavior into page services.
+without leaking SDK or OAuth behavior into page services. A shared conformance
+suite fixes those semantics for every adapter; the memory adapter is the
+reference implementation and test double.
 
 A storage-connection repository owns creator/provider uniqueness, encrypted
 token custody, health, reauthorization, and revocation. Asset repositories

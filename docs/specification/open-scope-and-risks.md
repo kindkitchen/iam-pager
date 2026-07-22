@@ -36,8 +36,9 @@ when access becomes private.
 The product boundary is selected in [external-storage.md](external-storage.md):
 iam-pager keeps authoritative metadata locally, fetches and verifies provider
 bytes, never redirects visitors, and uses a non-disclosing `503` placeholder
-after an eligible page loses content. The provider, connection, asset-source,
-delivery, warning/repair, and management implementations remain open work.
+after an eligible page loses content. The provider interface family, registry,
+conformance suite, and memory reference adapter now exist; connection,
+asset-source, delivery, warning/repair, and management remain open work.
 
 Until that chain lands, external storage must not be presented as available.
 Implementation must preserve local page/locator/authority/privacy semantics,

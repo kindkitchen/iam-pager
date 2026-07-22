@@ -82,10 +82,11 @@ delivery supports validators and one byte range.
 
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
-storage is now a selected, documented next slice, but is not available until its
-provider, connection, asset-source, delivery, and management tasks are
-implemented. Its contract keeps metadata local and serves verified provider
-bytes through iam-pager rather than redirecting visitors.
+storage is a selected next slice. Its provider-neutral contract, registry,
+conformance suite, and in-memory reference adapter now exist, but the capability
+is not available until connection, asset-source, delivery, and management work
+lands. The contract keeps metadata local and serves verified provider bytes
+through iam-pager rather than redirecting visitors.
 
 ## Architecture
 
@@ -100,9 +101,10 @@ Important boundaries:
   delivery, and public-query behavior.
 - `PageAggregateRepository` is the persistence interface for immutable assets,
   logical pages, endpoint claims, and owner/public projections.
-- The selected external-storage boundary adds provider and connection
-  interfaces; page logic consumes normalized capabilities and never provider
-  SDKs or OAuth details directly.
+- `lib/external-storage/` defines bounded provider operations, normalized
+  missing/unreachable outcomes, a read-only resolver registry, and reusable
+  provider conformance tests. Page logic consumes this contract and never
+  provider SDKs or OAuth details directly.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
