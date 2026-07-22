@@ -34,6 +34,7 @@ export interface ListManagedPageAggregatesRequest {
   readonly page_name_query?: string;
   readonly access?: PageAccess;
   readonly tag?: PageTag;
+  readonly external_missing?: boolean;
   readonly limit: number;
   readonly cursor?: string;
 }

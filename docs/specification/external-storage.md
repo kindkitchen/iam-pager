@@ -3,9 +3,10 @@
 This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
 storage-connection repository with encrypted token custody, the separate Google
-Drive OAuth connect/disconnect flow, the production Google Drive provider, and
-verified direct and wrapped delivery with fallback behavior are implemented.
-External publishing and creator warning/repair management remain unavailable.
+Drive OAuth connect/disconnect flow, the production Google Drive provider,
+verified direct and wrapped delivery with fallback behavior, and creator warning
+and repair management are implemented. External publishing and connection
+settings UI remain unavailable.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -186,15 +187,20 @@ mark an asset missing. V1 has no persistent payload cache, so stale bytes are
 not served during an outage. Success clears a previous observational warning
 only after full integrity verification.
 
-Owners see a bounded warning and safe cause category for affected pages. Repair
-creates or selects a valid replacement asset at an exact page revision by:
+Owners see a bounded warning and safe cause category in page lists and
+inspection, and can filter the managed list to affected pages. Repair creates or
+selects a valid replacement asset at an exact page revision by:
 
 - reauthorizing the existing connection when the provider object still matches;
-- uploading the validated content again, externally or inline; or
-- replacing the page's asset reference with another validated source.
+- replacing content through the validated inline upload flow, which also serves
+  as detach because V1 has no persistent cache; or
+- re-linking the existing owner-proven connection to a byte-identical external
+  copy after provider stat, bounded fetch, size, and SHA-256 verification.
 
-Repair never mutates an immutable asset or silently changes every page that may
-share it.
+The re-link action deliberately cannot import changed arbitrary provider bytes;
+changed content must pass the normal content handler. Every successful repair
+clears `external_missing`. Repair never mutates an immutable asset or silently
+changes every page that may share it.
 
 ## ES-LIFECYCLE — Operations
 

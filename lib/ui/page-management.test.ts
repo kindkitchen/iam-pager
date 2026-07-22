@@ -15,6 +15,7 @@ import {
   format_size_bytes,
   managed_bulk_access_from_api,
   managed_bulk_delete_from_api,
+  managed_external_content_source,
   managed_list_from_api,
   managed_md_page_draft,
   managed_pdf_delivery_links,
@@ -31,6 +32,7 @@ import {
   prepare_managed_inspect_request,
   prepare_managed_list_request,
   prepare_managed_pdf_replace_request,
+  prepare_managed_relink_request,
   prepare_managed_rename_request,
   prepare_managed_update_request,
   present_management_summary,
@@ -243,17 +245,42 @@ Deno.test("management_summary_from_api rejects malformed rows", () => {
   );
 });
 
+Deno.test("management summaries preserve strict external health", () => {
+  const value = api_summary({
+    external_missing: {
+      cause: "connection_revoked",
+      detected_at: now.toISOString(),
+    },
+  });
+  assertEquals(management_summary_from_api(value)?.external_missing, {
+    cause: "connection_revoked",
+    detected_at: now.toISOString(),
+  });
+  assertEquals(
+    management_summary_from_api({
+      ...value,
+      external_missing: { cause: "secret_provider_error", detected_at: now },
+    }),
+    null,
+  );
+});
+
 Deno.test("list request carries filters, limit, and URL-safe cursor", () => {
   assertEquals(prepare_managed_list_request().url, "/api/pages?limit=20");
   const request = prepare_managed_list_request({
     cursor: "abc+/=",
     limit: 5,
-    filters: { name: " Notes ", access: "private", tag: " Work " },
+    filters: {
+      name: " Notes ",
+      access: "private",
+      tag: " Work ",
+      external_missing: true,
+    },
   });
   assertEquals(request.method, "GET");
   assertEquals(
     request.url,
-    "/api/pages?limit=5&name=Notes&access=private&tag=Work&cursor=abc%2B%2F%3D",
+    "/api/pages?limit=5&name=Notes&access=private&tag=Work&external_missing=true&cursor=abc%2B%2F%3D",
   );
   assertEquals(
     prepare_managed_list_request({ filters: { name: " ", tag: "" } }).url,
@@ -402,6 +429,16 @@ Deno.test("rename and duplicate requests bind the source revision", () => {
     {},
   );
 
+  const relink = prepare_managed_relink_request(
+    target,
+    " new-file-id ",
+    "csrf",
+  );
+  assertEquals(relink.url, "/api/pages/p1/relink");
+  assertEquals(relink.method, "POST");
+  assertEquals(relink.headers.get("if-match"), '"page-p1-r2"');
+  assertEquals(relink.body, { external_ref: "new-file-id" });
+
   const duplicate = prepare_managed_duplicate_request(target, "csrf");
   assertEquals(duplicate.url, "/api/pages/p1/duplicate");
   assertEquals(duplicate.method, "POST");
@@ -529,6 +566,23 @@ Deno.test("tag input and local filter matching mirror management semantics", () 
     management_summary_matches_filters(page, { access: "public" }),
     false,
   );
+  assertEquals(
+    management_summary_matches_filters(page, { external_missing: true }),
+    false,
+  );
+  assertEquals(
+    management_summary_matches_filters(
+      {
+        ...page,
+        external_missing: {
+          cause: "external_content_missing",
+          detected_at: now.toISOString(),
+        },
+      },
+      { external_missing: true },
+    ),
+    true,
+  );
 });
 
 Deno.test("managed_md_page_draft accepts only editable md-page content", () => {
@@ -561,6 +615,30 @@ Deno.test("managed_md_page_draft accepts only editable md-page content", () => {
   );
 });
 
+Deno.test("external management content exposes only owner-safe source details", () => {
+  assertEquals(
+    managed_external_content_source({
+      external_source: {
+        provider_id: "google-drive",
+        external_ref: "file-1",
+      },
+    }),
+    {
+      provider_id: "google-drive",
+      external_ref: "file-1",
+    },
+  );
+  assertEquals(
+    managed_external_content_source({
+      external_source: {
+        provider_id: "google-drive",
+        connection_id: "must-not-be-required",
+      },
+    }),
+    null,
+  );
+});
+
 Deno.test("managed PDF inspection accepts only bounded metadata without bytes", () => {
   const metadata = {
     content_type: "pdf",
@@ -571,7 +649,7 @@ Deno.test("managed PDF inspection accepts only bounded metadata without bytes", 
       pdf_version: "1.7",
       replaceable: true,
     },
-  };
+  } as const;
   assertEquals(managed_pdf_metadata(metadata, 2048), metadata.input);
   assertEquals(managed_pdf_metadata(metadata, 2049), null);
   assertEquals(
@@ -596,6 +674,22 @@ Deno.test("managed PDF inspection accepts only bounded metadata without bytes", 
     null,
   );
   assertEquals(managed_pdf_metadata({ content_type: "md-page" }), null);
+  assertEquals(
+    managed_pdf_metadata({
+      content_type: "pdf",
+      input: {
+        filename: "external.pdf",
+        media_type: "application/pdf",
+        size_bytes: 2048,
+        replaceable: true,
+      },
+      external_source: {
+        provider_id: "google-drive",
+        external_ref: "file-1",
+      },
+    }, 2048)?.pdf_version,
+    null,
+  );
 });
 
 Deno.test("managed PDF delivery links follow returned endpoint profiles", () => {

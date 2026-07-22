@@ -1,6 +1,7 @@
 import {
   type ContentAsset,
   type ContentAssetId,
+  type ExternalContentAssetSource,
   is_inline_content_asset,
   is_valid_content_asset_id,
 } from "../content/asset.ts";
@@ -12,6 +13,10 @@ import type {
 } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
 import type { ExternalStorageProviderResolver } from "../external-storage/interfaces.ts";
+import {
+  external_content_ref_violation,
+  type ExternalContentRef,
+} from "../external-storage/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
 import {
@@ -58,6 +63,7 @@ import type {
   ListManagedPagesResult,
   ListPublicPagesRequest,
   ListPublicPagesResult,
+  ManagedExternalContentRelinker,
   ManagedPageBulkAccessChanger,
   ManagedPageBulkDeleter,
   ManagedPageCreator,
@@ -82,6 +88,8 @@ import type {
   PublicPageViewer,
   PublishTrialPageRequest,
   PublishTrialPageResult,
+  RelinkManagedExternalContentRequest,
+  RelinkManagedExternalContentResult,
   RenameManagedPageRequest,
   RenameManagedPageResult,
   TrialPagePublisher,
@@ -138,7 +146,23 @@ type SummaryPage = PageAggregate & {
   readonly content: Pick<PageContent, "content_type" | "meta">;
 };
 
-type MaterializedPage = PageAggregate & { readonly content: PageContent };
+type MaterializedContent =
+  | {
+    readonly kind: "inline";
+    readonly content_type: string;
+    readonly data: unknown;
+    readonly meta: ContentMeta;
+  }
+  | {
+    readonly kind: "external";
+    readonly content_type: string;
+    readonly meta: ContentMeta;
+    readonly source: ExternalContentAssetSource;
+  };
+
+type MaterializedPage = PageAggregate & {
+  readonly content: MaterializedContent;
+};
 
 type ResolvedDeliveryRecord = {
   readonly page: PageAggregate;
@@ -192,6 +216,7 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    ManagedExternalContentRelinker,
     ManagedPageBulkAccessChanger,
     ManagedPageBulkDeleter,
     ManagedPageRenamer,
@@ -411,6 +436,9 @@ export class PageService
         ...(page_name_query === undefined ? {} : { page_name_query }),
         ...(request.access === undefined ? {} : { access: request.access }),
         ...(tag === undefined ? {} : { tag }),
+        ...(request.external_missing === undefined
+          ? {}
+          : { external_missing: request.external_missing }),
         limit: request.limit,
         cursor: request.cursor,
       }),
@@ -521,6 +549,105 @@ export class PageService
       return { ok: false, reason: replaced.reason };
     }
     return { ok: true, page: this.#inspection(replaced.page) };
+  }
+
+  async relink_managed_external_content(
+    request: RelinkManagedExternalContentRequest,
+  ): Promise<RelinkManagedExternalContentResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const page = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (page === null) return { ok: false, reason: "not_found" };
+    if (page.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    if (page.revision === Number.MAX_SAFE_INTEGER) {
+      return { ok: false, reason: "revision_exhausted" };
+    }
+    if (page.content.kind !== "external") {
+      return { ok: false, reason: "content_not_external" };
+    }
+
+    const candidate_without_version: ExternalContentRef = {
+      provider_id: page.content.source.ref.provider_id,
+      connection_id: page.content.source.ref.connection_id,
+      external_ref: request.external_ref,
+    };
+    if (external_content_ref_violation(candidate_without_version) !== null) {
+      return { ok: false, reason: "invalid_external_ref" };
+    }
+    const provider = this.#external_storage_providers.resolve(
+      candidate_without_version.provider_id,
+    );
+    if (provider === null) {
+      return { ok: false, reason: "provider_unavailable" };
+    }
+
+    let stated: Awaited<ReturnType<typeof provider.stat_content>>;
+    try {
+      stated = await provider.stat_content(candidate_without_version);
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!stated.ok) return stated;
+    if (stated.value.size_bytes !== page.content.meta.size_bytes) {
+      return { ok: false, reason: "external_content_mismatch" };
+    }
+    const candidate: ExternalContentRef = {
+      ...candidate_without_version,
+      ...(stated.value.version_hint === undefined
+        ? {}
+        : { version_hint: stated.value.version_hint }),
+    };
+    let fetched: Awaited<ReturnType<typeof provider.fetch_content>>;
+    try {
+      fetched = await provider.fetch_content({
+        content_ref: candidate,
+        max_bytes: page.content.meta.size_bytes,
+      });
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!fetched.ok) return fetched;
+    if (
+      fetched.value.stat.size_bytes !== page.content.meta.size_bytes ||
+      fetched.value.body.byteLength !== page.content.meta.size_bytes ||
+      await sha256(fetched.value.body) !== page.content.meta.sha256
+    ) {
+      return { ok: false, reason: "external_content_mismatch" };
+    }
+
+    const now = this.#operation_time();
+    const content_asset_id = await this.#stage_external_content_asset({
+      content_type: page.content.content_type,
+      source: { kind: "external", ref: candidate },
+      meta: page.content.meta,
+      created_at: now,
+    });
+    const updated = await this.#repository.update_managed_page_aggregate({
+      page_id: page.page_id,
+      owner_user_id: request.actor.user_id,
+      expected_revision: request.expected_revision,
+      patch: { content_asset_id },
+      now,
+    });
+    if (!updated.ok) {
+      if (
+        updated.reason === "not_found" ||
+        updated.reason === "revision_conflict" ||
+        updated.reason === "revision_exhausted"
+      ) return { ok: false, reason: updated.reason };
+      throw new Error(`page service persistence: ${updated.reason}`);
+    }
+    return {
+      ok: true,
+      page: this.#inspection(await this.#materialize_aggregate(updated.page)),
+    };
   }
 
   async bulk_change_managed_access(
@@ -1393,6 +1520,31 @@ export class PageService
     };
   }
 
+  async #stage_external_content_asset(input: {
+    readonly content_type: string;
+    readonly source: ExternalContentAssetSource;
+    readonly meta: ContentMeta;
+    readonly created_at: Date;
+  }): Promise<ContentAssetId> {
+    for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt += 1) {
+      const content_asset_id = this.#content_asset_id_generator.generate();
+      if (!is_valid_content_asset_id(content_asset_id)) {
+        throw new Error(
+          "ContentAssetIdGenerator produced an invalid content asset id",
+        );
+      }
+      const result = await this.#repository.create_content_asset({
+        content_asset_id,
+        content_type: input.content_type,
+        source: structuredClone(input.source),
+        meta: structuredClone(input.meta),
+        created_at: new Date(input.created_at),
+      });
+      if (result.ok) return result.asset.content_asset_id;
+    }
+    throw new Error("content asset id generation exhausted");
+  }
+
   async #materialize_aggregate(
     page: PageAggregate,
   ): Promise<MaterializedPage> {
@@ -1409,16 +1561,21 @@ export class PageService
     page: PageAggregate,
     asset: ContentAsset,
   ): MaterializedPage {
-    if (!is_inline_content_asset(asset)) {
-      throw new Error("external content asset requires delivery resolution");
-    }
     return {
       ...structuredClone(page),
-      content: {
-        content_type: asset.content_type,
-        data: structuredClone(asset.data),
-        meta: structuredClone(asset.meta),
-      },
+      content: is_inline_content_asset(asset)
+        ? {
+          kind: "inline",
+          content_type: asset.content_type,
+          data: structuredClone(asset.data),
+          meta: structuredClone(asset.meta),
+        }
+        : {
+          kind: "external",
+          content_type: asset.content_type,
+          source: structuredClone(asset.source),
+          meta: structuredClone(asset.meta),
+        },
     };
   }
 
@@ -1559,12 +1716,26 @@ export class PageService
   }
 
   #inspection(page: MaterializedPage): ManagedPageInspection {
-    const handler = this.#require_handler(page.content.content_type);
+    const content = page.content;
+    const handler = this.#require_handler(content.content_type);
+    if (content.kind === "inline") {
+      return {
+        ...this.#summary(page),
+        content: {
+          content_type: content.content_type,
+          input: handler.to_management(content.data),
+        },
+      };
+    }
     return {
       ...this.#summary(page),
       content: {
-        content_type: page.content.content_type,
-        input: handler.to_management(page.content.data),
+        content_type: content.content_type,
+        input: external_management_input(content),
+        external_source: {
+          provider_id: content.source.ref.provider_id,
+          external_ref: content.source.ref.external_ref,
+        },
       },
     };
   }
@@ -1624,6 +1795,12 @@ export class PageService
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
       revision: page.revision,
+      ...(page.external_missing === undefined ? {} : {
+        external_missing: {
+          cause: page.external_missing.cause,
+          detected_at: new Date(page.external_missing.detected_at),
+        },
+      }),
     };
   }
 
@@ -1660,6 +1837,18 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function external_management_input(
+  content: Extract<MaterializedContent, { kind: "external" }>,
+): unknown {
+  if (content.content_type !== "pdf") return null;
+  return {
+    filename: content.meta.download_filename ?? "external.pdf",
+    media_type: content.meta.media_type,
+    size_bytes: content.meta.size_bytes,
+    replaceable: true,
+  };
 }
 
 function public_view_payload(payload: DeliveryPayload): DeliveryPayload {

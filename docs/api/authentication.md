@@ -57,6 +57,7 @@ at creation time; see [the API-key contract](api-keys.md)).
 | `POST /api/pages`                   | trial only    | yes + CSRF            | `write` (managed)   |
 | `GET /api/pages/:id`                | never         | yes                   | `read`              |
 | `PATCH /api/pages/:id`              | never         | yes + CSRF + If-Match | `write` + If-Match  |
+| `POST /api/pages/:id/relink`        | never         | yes + CSRF + If-Match | `write` + If-Match  |
 | `DELETE /api/pages/:id`             | never         | yes + CSRF + If-Match | `delete` + If-Match |
 | `POST /api/pages/:id/rename`        | never         | yes + CSRF + If-Match | `write` + If-Match  |
 | `POST /api/pages/:id/duplicate`     | never         | yes + CSRF + If-Match | `write` + If-Match  |

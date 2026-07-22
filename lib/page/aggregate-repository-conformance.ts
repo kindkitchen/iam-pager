@@ -260,6 +260,20 @@ export function test_page_aggregate_repository_conformance(
         cause: "external_content_missing",
         detected_at: t1,
       });
+      const broken = await subject.list_managed_page_aggregates({
+        owner_user_id: "owner-1",
+        external_missing: true,
+        limit: 10,
+      });
+      assert(broken.ok);
+      assertEquals(broken.pages.map((page) => page.page_id), ["page-1"]);
+      const healthy = await subject.list_managed_page_aggregates({
+        owner_user_id: "owner-1",
+        external_missing: false,
+        limit: 10,
+      });
+      assert(healthy.ok);
+      assertEquals(healthy.pages, []);
       assertEquals(
         await subject.update_external_content_health({
           page_id: "page-1",
@@ -280,6 +294,13 @@ export function test_page_aggregate_repository_conformance(
         (await subject.find_page_aggregate_by_id("page-1"))?.external_missing,
         undefined,
       );
+      const recovered = await subject.list_managed_page_aggregates({
+        owner_user_id: "owner-1",
+        external_missing: false,
+        limit: 10,
+      });
+      assert(recovered.ok);
+      assertEquals(recovered.pages.map((page) => page.page_id), ["page-1"]);
     },
   );
 

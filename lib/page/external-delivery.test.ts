@@ -86,12 +86,15 @@ async function fixture(options: {
     now: detected_at,
   });
   assert(created.ok);
+  const namespaces = new MemoryNamespaceRepository();
+  await namespaces.reserve({
+    namespace: locator.namespace,
+    owner_user_id: "owner-1",
+  });
   const service = new PageService({
     engine: new LocatorEngine({ strategies: [new PathSlugStrategy()] }),
     repository,
-    namespace_authority: new RepositoryNamespaceAuthorityResolver(
-      new MemoryNamespaceRepository(),
-    ),
+    namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler()],
     external_storage_providers: new ExternalStorageProviderRegistry([provider]),
     clock: new FixedClock(),
@@ -154,6 +157,100 @@ Deno.test("PageService records definitive external loss and clears it after reco
     (await repository.find_page_aggregate_by_id("external-page"))
       ?.external_missing,
     undefined,
+  );
+});
+
+Deno.test("PageService exposes, filters, and repairs owner external health", async () => {
+  const { service, repository, provider } = await fixture();
+  assert(provider instanceof MemoryExternalStorageProvider);
+  provider.set_fault(ref, "external_content_missing");
+  await service.deliver(locator, guest);
+
+  const inspected = await service.inspect_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    page_id: "external-page",
+  });
+  assert(inspected.ok);
+  assertEquals(inspected.page.external_missing, {
+    cause: "external_content_missing",
+    detected_at,
+  });
+  assertEquals(inspected.page.content, {
+    content_type: "md-page",
+    input: null,
+    external_source: {
+      provider_id: "memory",
+      external_ref: "object-1",
+    },
+  });
+  const broken = await service.list_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    external_missing: true,
+    limit: 10,
+  });
+  assert(broken.ok);
+  assertEquals(broken.pages.map((page) => page.page_id), ["external-page"]);
+  const healthy = await service.list_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    external_missing: false,
+    limit: 10,
+  });
+  assert(healthy.ok);
+  assertEquals(healthy.pages, []);
+
+  const replacement_ref = { ...ref, external_ref: "object-2" };
+  provider.seed_content(replacement_ref, external_body);
+  provider.set_fault(ref, null);
+  const relinked = await service.relink_managed_external_content({
+    actor: { kind: "user", user_id: "owner-1" },
+    page_id: "external-page",
+    expected_revision: 1,
+    external_ref: replacement_ref.external_ref,
+  });
+  assert(relinked.ok);
+  assertEquals(relinked.page.revision, 2);
+  assertEquals(relinked.page.external_missing, undefined);
+  assertEquals(relinked.page.content.external_source?.external_ref, "object-2");
+  const relinked_page = await repository.find_page_aggregate_by_id(
+    "external-page",
+  );
+  assert(relinked_page !== null);
+  assertEquals(relinked_page.external_missing, undefined);
+  assert(relinked_page.content_asset_id !== "external-asset");
+
+  provider.set_fault(replacement_ref, "external_content_missing");
+  await service.deliver(locator, guest);
+  const detached = await service.update_managed({
+    actor: { kind: "user", user_id: "owner-1" },
+    page_id: "external-page",
+    expected_revision: 2,
+    patch: {
+      content: { content_type: "md-page", input: { md: "# Restored inline" } },
+    },
+  });
+  assert(detached.ok);
+  assertEquals(detached.page.revision, 3);
+  assertEquals(detached.page.external_missing, undefined);
+  assertEquals(detached.page.content.input, { md: "# Restored inline" });
+});
+
+Deno.test("PageService rejects a non-identical external re-link", async () => {
+  const { service, repository, provider } = await fixture();
+  assert(provider instanceof MemoryExternalStorageProvider);
+  const altered = external_body.slice();
+  altered[altered.byteLength - 2] ^= 1;
+  provider.seed_content({ ...ref, external_ref: "altered" }, altered);
+  const result = await service.relink_managed_external_content({
+    actor: { kind: "user", user_id: "owner-1" },
+    page_id: "external-page",
+    expected_revision: 1,
+    external_ref: "altered",
+  });
+  assertEquals(result, { ok: false, reason: "external_content_mismatch" });
+  assertEquals(
+    (await repository.find_page_aggregate_by_id("external-page"))
+      ?.content_asset_id,
+    "external-asset",
   );
 });
 

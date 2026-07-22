@@ -35,6 +35,14 @@ import type { Session } from "../session/model.ts";
  * the island. Field names and formats match the `/api/pages` summaries, so a
  * row can be refreshed from any API response without translation drift.
  */
+export interface PageManagementExternalMissing {
+  readonly cause:
+    | "external_content_missing"
+    | "connection_revoked"
+    | "integrity_mismatch";
+  readonly detected_at: string;
+}
+
 export interface PageManagementSummary {
   readonly page_id: string;
   readonly locator: Locator;
@@ -50,6 +58,7 @@ export interface PageManagementSummary {
   /** Exact strong validator accepted by `If-Match` on the management API. */
   readonly etag: string;
   readonly management_url: string;
+  readonly external_missing?: PageManagementExternalMissing;
 }
 
 /** Complete server-owned model for the creator page-management panel. */
@@ -137,6 +146,12 @@ export function present_management_summary(
     revision: page.revision,
     etag: format_page_etag(page.page_id, page.revision),
     management_url: `/api/pages/${page.page_id}`,
+    ...(page.external_missing === undefined ? {} : {
+      external_missing: {
+        cause: page.external_missing.cause,
+        detected_at: page.external_missing.detected_at.toISOString(),
+      },
+    }),
   };
 }
 
@@ -163,6 +178,7 @@ export function management_summary_from_api(
     revision,
     etag,
     management_url,
+    external_missing,
   } = record;
   const parsed_endpoints = management_endpoint_links(endpoints);
   if (
@@ -180,7 +196,8 @@ export function management_summary_from_api(
     typeof etag !== "string" ||
     parse_page_etag(etag)?.page_id !== page_id ||
     parse_page_etag(etag)?.revision !== revision ||
-    management_url !== `/api/pages/${page_id}`
+    management_url !== `/api/pages/${page_id}` ||
+    !is_management_external_missing(external_missing)
   ) {
     return null;
   }
@@ -197,6 +214,9 @@ export function management_summary_from_api(
     revision,
     etag,
     management_url,
+    ...(external_missing === undefined
+      ? {}
+      : { external_missing: { ...external_missing } }),
   };
 }
 
@@ -228,6 +248,7 @@ export interface ManagedPageFilters {
   readonly name?: string;
   readonly access?: PageAccess;
   readonly tag?: string;
+  readonly external_missing?: boolean;
 }
 
 interface ManagedEndpointBindingBody {
@@ -246,6 +267,10 @@ interface ManagedUpdateBody {
     readonly content_type: "md-page";
     readonly input: { readonly md: string; readonly css?: string };
   };
+}
+
+interface ManagedRelinkBody {
+  readonly external_ref: string;
 }
 
 interface ManagedRenameBody {
@@ -268,6 +293,7 @@ export interface PreparedManagedRequest {
   readonly body?:
     | ManagedUpdateBody
     | ManagedRenameBody
+    | ManagedRelinkBody
     | ManagedBulkAccessBody
     | ManagedBulkDeleteBody
     | FormData;
@@ -290,6 +316,9 @@ export function prepare_managed_list_request(
     query.set("access", options.filters.access);
   }
   if (tag !== undefined && tag !== "") query.set("tag", tag);
+  if (options.filters?.external_missing !== undefined) {
+    query.set("external_missing", String(options.filters.external_missing));
+  }
   if (options.cursor !== undefined) query.set("cursor", options.cursor);
   return {
     url: `/api/pages?${query}`,
@@ -433,6 +462,20 @@ export function managed_pdf_replacement_violation(
   return null;
 }
 
+/** Builds a revision-bound same-connection external reference repair. */
+export function prepare_managed_relink_request(
+  target: ManagedPageTarget,
+  external_ref: string,
+  csrf_token: string,
+): PreparedManagedRequest {
+  return {
+    url: `${target.management_url}/relink`,
+    method: "POST",
+    headers: json_mutation_headers(csrf_token, target.etag),
+    body: { external_ref: external_ref.trim() },
+  };
+}
+
 /** Builds the revision-bound same-namespace rename request. */
 export function prepare_managed_rename_request(
   target: ManagedPageTarget,
@@ -570,7 +613,9 @@ export function management_summary_matches_filters(
       (page.locator.page_name !== undefined &&
         page.locator.page_name.toLowerCase().includes(name))) &&
     (filters.access === undefined || page.access === filters.access) &&
-    (tag === undefined || tag === "" || page.tags.includes(tag))
+    (tag === undefined || tag === "" || page.tags.includes(tag)) &&
+    (filters.external_missing === undefined ||
+      (page.external_missing !== undefined) === filters.external_missing)
   );
 }
 
@@ -596,8 +641,33 @@ export interface ManagedPdfMetadata {
   readonly filename: string;
   readonly media_type: typeof pdf_media_type;
   readonly size_bytes: number;
-  readonly pdf_version: PdfVersion;
+  /** External canonical bytes do not retain handler-internal PDF metadata. */
+  readonly pdf_version: PdfVersion | null;
   readonly replaceable: true;
+}
+
+export interface ManagedExternalContentSource {
+  readonly provider_id: string;
+  readonly external_ref: string;
+}
+
+export function managed_external_content_source(
+  content: unknown,
+): ManagedExternalContentSource | null {
+  if (
+    typeof content !== "object" || content === null || Array.isArray(content)
+  ) {
+    return null;
+  }
+  const source = (content as Record<string, unknown>).external_source;
+  if (typeof source !== "object" || source === null || Array.isArray(source)) {
+    return null;
+  }
+  const record = source as Record<string, unknown>;
+  return typeof record.provider_id === "string" && record.provider_id !== "" &&
+      typeof record.external_ref === "string" && record.external_ref !== ""
+    ? { provider_id: record.provider_id, external_ref: record.external_ref }
+    : null;
 }
 
 /** Accepts only the bounded PDF inspection projection; bytes are never read. */
@@ -628,8 +698,11 @@ export function managed_pdf_metadata(
     input.size_bytes > default_pdf_limits.max_bytes ||
     (expected_size_bytes !== undefined &&
       input.size_bytes !== expected_size_bytes) ||
-    typeof input.pdf_version !== "string" ||
-    !supported_pdf_versions.includes(input.pdf_version as PdfVersion) ||
+    (input.pdf_version !== undefined &&
+      (typeof input.pdf_version !== "string" ||
+        !supported_pdf_versions.includes(input.pdf_version as PdfVersion))) ||
+    (input.pdf_version === undefined &&
+      managed_external_content_source(content) === null) ||
     input.replaceable !== true
   ) {
     return null;
@@ -638,7 +711,9 @@ export function managed_pdf_metadata(
     filename: input.filename,
     media_type: pdf_media_type,
     size_bytes: input.size_bytes,
-    pdf_version: input.pdf_version as PdfVersion,
+    pdf_version: input.pdf_version === undefined
+      ? null
+      : input.pdf_version as PdfVersion,
     replaceable: true,
   };
 }
@@ -753,6 +828,22 @@ function is_management_locator(value: unknown): value is Locator {
   return typeof record.namespace === "string" && record.namespace !== "" &&
     (record.page_name === undefined ||
       (typeof record.page_name === "string" && record.page_name !== ""));
+}
+
+function is_management_external_missing(
+  value: unknown,
+): value is PageManagementExternalMissing | undefined {
+  if (value === undefined) return true;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).length === 2 &&
+    (record.cause === "external_content_missing" ||
+      record.cause === "connection_revoked" ||
+      record.cause === "integrity_mismatch") &&
+    typeof record.detected_at === "string" &&
+    is_iso_timestamp(record.detected_at);
 }
 
 function is_iso_timestamp(value: string): boolean {

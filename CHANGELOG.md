@@ -2,6 +2,14 @@
 
 ## 2026-07-22
 
+- Added owner-facing external-content health and repair management. Managed page
+  summaries now expose safe missing causes and detection times, list cursors
+  bind a strict missing/healthy filter, and the creator UI shows affected-page
+  indicators, warnings, and repair controls. Inline replacement detaches from
+  external storage; a new revision-bound re-link action stats and fetches a
+  byte-identical file through the existing owner-proven connection, creates a
+  fresh immutable asset, and clears health without exposing storage details to
+  visitors.
 - Added external content delivery for direct and site-wrapper visitors: provider
   bytes are fetched within local bounds, verified against authoritative size and
   SHA-256 facts, and served with existing endpoint semantics. Missing, revoked,

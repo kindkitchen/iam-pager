@@ -175,6 +175,38 @@ export class TypedPageApiFailurePresenter implements PageApiFailurePresenter {
           code,
           "This page content type is not supported.",
         );
+      case "invalid_external_ref":
+        return failure(
+          "request",
+          code,
+          "Enter a valid external file reference.",
+        );
+      case "external_content_missing":
+        return failure(
+          "request",
+          code,
+          "That external file could not be found. Choose another copy.",
+        );
+      case "external_content_mismatch":
+        return failure(
+          "request",
+          code,
+          "The selected file is not a byte-identical copy of this page.",
+        );
+      case "connection_revoked":
+        return failure(
+          "authority",
+          code,
+          "Reconnect external storage before re-linking this page.",
+        );
+      case "content_not_external":
+        return failure(
+          "request",
+          code,
+          "This page already stores its content inline.",
+        );
+      case "provider_unavailable":
+      case "external_source_unreachable":
       case "page_unavailable":
       case "page_id_generation_exhausted":
       case "page_name_generation_exhausted":

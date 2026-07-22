@@ -15,8 +15,10 @@ link presentation use this one boundary.
 
 - trial publication and managed creation;
 - owner-safe list and inspection;
-- revision-bound update, rename, duplicate, and delete;
+- revision-bound update, external-content re-link, rename, duplicate, and
+  delete;
 - bounded per-item bulk access and deletion;
+- owner-only external-health inspection and filtering;
 - direct delivery and wrapped public viewing;
 - namespace public listing and cross-namespace exploration.
 

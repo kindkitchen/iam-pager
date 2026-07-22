@@ -89,6 +89,39 @@ Deno.test("page API failures distinguish PDF, size, and stale outcomes", () => {
   );
 });
 
+Deno.test("page API failures make external repairs actionable", () => {
+  assertEquals(
+    presenter.present(422, body("external_content_missing"), {
+      operation: "manage",
+    }),
+    {
+      kind: "request",
+      code: "external_content_missing",
+      message: "That external file could not be found. Choose another copy.",
+    },
+  );
+  assertEquals(
+    presenter.present(422, body("external_content_mismatch"), {
+      operation: "manage",
+    }),
+    {
+      kind: "request",
+      code: "external_content_mismatch",
+      message: "The selected file is not a byte-identical copy of this page.",
+    },
+  );
+  assertEquals(
+    presenter.present(409, body("connection_revoked"), {
+      operation: "manage",
+    }),
+    {
+      kind: "authority",
+      code: "connection_revoked",
+      message: "Reconnect external storage before re-linking this page.",
+    },
+  );
+});
+
 Deno.test("page API failures hide unknown detail and type server failures", () => {
   assertEquals(
     presenter.present(

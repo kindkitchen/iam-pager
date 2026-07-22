@@ -25,6 +25,7 @@ import type {
   DuplicateManagedPageResult,
   InspectManagedPageResult,
   ListManagedPagesResult,
+  ManagedExternalContentRelinker,
   ManagedPageBulkAccessChanger,
   ManagedPageBulkDeleter,
   ManagedPageCreator,
@@ -38,6 +39,7 @@ import type {
   ManagedPageUpdater,
   PageSummary,
   PublishTrialPageResult,
+  RelinkManagedExternalContentResult,
   RenameManagedPageResult,
   TrialPagePublisher,
   UpdateManagedPageResult,
@@ -69,6 +71,7 @@ export type PageHttpApplication =
   & ManagedPageDeleter
   & ManagedPageRenamer
   & ManagedPageDuplicator
+  & ManagedExternalContentRelinker
   & ManagedPageBulkAccessChanger
   & ManagedPageBulkDeleter;
 
@@ -123,6 +126,10 @@ interface RenameBody {
 
 interface DuplicateBody {
   endpoint_set: PageEndpointSetIntent;
+}
+
+interface RelinkBody {
+  external_ref: string;
 }
 
 interface BulkAccessBody {
@@ -366,6 +373,18 @@ export class PageHttpAdapter implements PageHttpHandler {
     if (!target.ok) return target.response;
     const precondition = decode_precondition(request, target.page_id);
     if (!precondition.ok) return precondition.response;
+    if (target.action === "relink") {
+      const decoded = await decode_json_body(request, decode_relink_body);
+      if (!decoded.ok) return decoded.response;
+      const result = await this.#pages.relink_managed_external_content({
+        actor,
+        page_id: target.page_id,
+        expected_revision: precondition.revision,
+        external_ref: decoded.value.external_ref,
+      });
+      if (!result.ok) return relink_failure_response(result);
+      return action_success_response(200, "relinked", result.page);
+    }
     if (target.action === "duplicate") {
       const decoded = await decode_optional_duplicate_body(request);
       if (!decoded.ok) return decoded.response;
@@ -799,6 +818,15 @@ async function decode_optional_duplicate_body(
     };
 }
 
+function decode_relink_body(input: unknown): DecodeResult<RelinkBody> {
+  const body = strict_object(input, ["external_ref"]);
+  if (!body.ok) return body;
+  if (typeof body.value.external_ref !== "string") {
+    return { ok: false, detail: "external_ref must be a string" };
+  }
+  return { ok: true, value: { external_ref: body.value.external_ref } };
+}
+
 function decode_rename_body(input: unknown): DecodeResult<RenameBody> {
   const body = strict_object(input, ["page_name?"]);
   if (!body.ok) return body;
@@ -890,6 +918,7 @@ function decode_list_query(request_url: string): DecodeResult<{
   page_name_query?: string;
   access?: PageAccess;
   tag?: string;
+  external_missing?: boolean;
   limit: number;
   cursor?: string;
 }> {
@@ -897,7 +926,15 @@ function decode_list_query(request_url: string): DecodeResult<{
   if (url.search.length > page_list_query_max_length) {
     return { ok: false, detail: "query is too large" };
   }
-  const allowed = ["namespace", "name", "access", "tag", "limit", "cursor"];
+  const allowed = [
+    "namespace",
+    "name",
+    "access",
+    "tag",
+    "external_missing",
+    "limit",
+    "cursor",
+  ];
   for (const key of url.searchParams.keys()) {
     if (!allowed.includes(key)) {
       return { ok: false, detail: `unknown query parameter: ${key}` };
@@ -931,6 +968,16 @@ function decode_list_query(request_url: string): DecodeResult<{
   const name = url.searchParams.get("name");
   const access = url.searchParams.get("access");
   const tag = url.searchParams.get("tag");
+  const raw_external_missing = url.searchParams.get("external_missing");
+  if (
+    raw_external_missing !== null && raw_external_missing !== "true" &&
+    raw_external_missing !== "false"
+  ) {
+    return {
+      ok: false,
+      detail: "external_missing must be true or false",
+    };
+  }
   return {
     ok: true,
     value: {
@@ -938,6 +985,9 @@ function decode_list_query(request_url: string): DecodeResult<{
       ...(name === null ? {} : { page_name_query: name }),
       ...(access === null ? {} : { access: access as PageAccess }),
       ...(tag === null ? {} : { tag }),
+      ...(raw_external_missing === null
+        ? {}
+        : { external_missing: raw_external_missing === "true" }),
       limit,
       ...(cursor === null ? {} : { cursor }),
     },
@@ -973,7 +1023,11 @@ function decode_item_target(request_url: string):
 }
 
 function decode_action_target(request_url: string):
-  | { ok: true; page_id: string; action: "rename" | "duplicate" }
+  | {
+    ok: true;
+    page_id: string;
+    action: "rename" | "duplicate" | "relink";
+  }
   | { ok: false; response: Response } {
   const url = new URL(request_url);
   if (url.search !== "") {
@@ -986,7 +1040,7 @@ function decode_action_target(request_url: string):
       ),
     };
   }
-  const match = /^\/api\/pages\/([^/]+)\/(rename|duplicate)$/.exec(
+  const match = /^\/api\/pages\/([^/]+)\/(rename|duplicate|relink)$/.exec(
     url.pathname,
   );
   if (match === null) {
@@ -1008,7 +1062,7 @@ function decode_action_target(request_url: string):
   return {
     ok: true,
     page_id: match[1],
-    action: match[2] as "rename" | "duplicate",
+    action: match[2] as "rename" | "duplicate" | "relink",
   };
 }
 
@@ -1325,6 +1379,60 @@ function rename_failure_response(
   }
 }
 
+function relink_failure_response(
+  result: Exclude<RelinkManagedExternalContentResult, { ok: true }>,
+): Response {
+  switch (result.reason) {
+    case "not_found":
+      return error_response(404, result.reason, "page was not found");
+    case "revision_conflict":
+      return error_response(
+        412,
+        "precondition_failed",
+        "page representation has changed",
+      );
+    case "revision_exhausted":
+      return error_response(
+        409,
+        result.reason,
+        "page cannot accept another revision",
+      );
+    case "content_not_external":
+      return error_response(
+        409,
+        result.reason,
+        "page content is already inline",
+      );
+    case "invalid_external_ref":
+      return error_response(
+        422,
+        result.reason,
+        "external file reference is invalid",
+      );
+    case "external_content_missing":
+      return error_response(422, result.reason, "external file was not found");
+    case "connection_revoked":
+      return error_response(
+        409,
+        result.reason,
+        "storage connection must be reauthorized",
+      );
+    case "external_content_mismatch":
+      return error_response(
+        422,
+        result.reason,
+        "external file must be a byte-identical copy of the current content",
+      );
+    case "provider_unavailable":
+    case "external_source_unreachable":
+      return error_response(
+        503,
+        result.reason,
+        "external storage is temporarily unavailable",
+      );
+  }
+}
+
 function duplicate_failure_response(
   result: Exclude<DuplicateManagedPageResult, { ok: true }>,
 ): Response {
@@ -1443,6 +1551,14 @@ function present_summary(page: PageSummary, managed: boolean) {
     created_at: page.created_at.toISOString(),
     updated_at: page.updated_at.toISOString(),
     revision: page.revision,
+    ...(managed && page.external_missing !== undefined
+      ? {
+        external_missing: {
+          cause: page.external_missing.cause,
+          detected_at: page.external_missing.detected_at.toISOString(),
+        },
+      }
+      : {}),
     ...(managed
       ? {
         etag: format_page_etag(page.page_id, page.revision),

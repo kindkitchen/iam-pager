@@ -245,6 +245,25 @@ const endpoint_cases: readonly EndpointCase[] = [
     denied_permission: "delete",
   },
   {
+    name: "POST /api/pages/:id/relink",
+    request: (fixture, headers) =>
+      new Request(
+        `https://pager.test/api/pages/${fixture.page_id}/relink`,
+        {
+          method: "POST",
+          headers: {
+            ...headers,
+            "content-type": "application/json",
+            "if-match": stale_if_match(fixture.page_id),
+          },
+          body: JSON.stringify({ external_ref: "replacement-file" }),
+        },
+      ),
+    dispatch: page_item_action,
+    allowed_permission: "write",
+    denied_permission: "read",
+  },
+  {
     name: "POST /api/pages/:id/duplicate",
     request: (fixture, headers) =>
       new Request(

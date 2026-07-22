@@ -71,6 +71,8 @@ A signed-in creator can reserve namespaces and then:
   owned-namespace path controls;
 - rename within the namespace;
 - duplicate into fresh endpoints;
+- identify externally unavailable pages, re-link byte-identical provider copies,
+  or replace inline to detach;
 - delete one page;
 - bulk-change access or delete explicit selections;
 - once external storage is enabled, connect or disconnect one account per

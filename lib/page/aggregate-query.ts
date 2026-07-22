@@ -48,6 +48,11 @@ export function require_normalized_managed_list_request(
     request.tag === undefined || is_valid_page_tags([request.tag]),
     "tag filter must be canonical when present",
   );
+  require(
+    request.external_missing === undefined ||
+      typeof request.external_missing === "boolean",
+    "external_missing filter must be boolean when present",
+  );
 }
 
 export function matches_managed_list(
@@ -60,7 +65,9 @@ export function matches_managed_list(
       (key.default_rank === 1 &&
         key.page_name_key.includes(scope.page_name_query))) &&
     (scope.access === null || page.access === scope.access) &&
-    (scope.tag === null || page.tags.includes(scope.tag));
+    (scope.tag === null || page.tags.includes(scope.tag)) &&
+    (scope.external_missing === null ||
+      (page.external_missing !== undefined) === scope.external_missing);
 }
 
 export function require_normalized_exploration_request(

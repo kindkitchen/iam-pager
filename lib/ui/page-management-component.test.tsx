@@ -39,6 +39,7 @@ Deno.test("creator management component renders controls and safe rows", () => {
   assertStringIncludes(html, "Apply filters");
   assertStringIncludes(html, 'placeholder="contains…"');
   assertStringIncludes(html, "Exact tag");
+  assertStringIncludes(html, "External content unavailable");
   assertStringIncludes(html, "0 selected");
   assertStringIncludes(html, "Apply access");
   assertStringIncludes(html, "Delete selected");
@@ -52,6 +53,48 @@ Deno.test("creator management component renders controls and safe rows", () => {
   assertStringIncludes(html, "Load more pages");
   assertEquals(html.includes("csrf_token"), false);
   assertEquals(html.includes("owner_user_id"), false);
+});
+
+Deno.test("creator management component warns owners and presents repairs", () => {
+  const html = render_to_string(
+    <PageManagementPanel
+      csrf_token={"c".repeat(43)}
+      owned_namespaces={["Mine"]}
+      initial_pages={[{
+        page_id: "broken-1",
+        locator: { namespace: "Mine", page_name: "broken" },
+        path: "/Mine/broken",
+        endpoints: {
+          canonical: {
+            locator: { namespace: "Mine", page_name: "broken" },
+            path: "/Mine/broken",
+            delivery_profile: "inline",
+          },
+          alternates: [],
+        },
+        access: "public",
+        content_type: "md-page",
+        size_bytes: 42,
+        tags: [],
+        updated_at: "2026-07-22T01:00:00.000Z",
+        revision: 1,
+        etag: '"page-broken-1-r1"',
+        management_url: "/api/pages/broken-1",
+        external_missing: {
+          cause: "connection_revoked",
+          detected_at: "2026-07-22T02:00:00.000Z",
+        },
+      }]}
+      initial_next_cursor={null}
+    />,
+  );
+
+  assertStringIncludes(html, "External content is unavailable");
+  assertStringIncludes(html, "The storage connection was revoked.");
+  assertStringIncludes(html, "Visitors see a temporary placeholder.");
+  assertStringIncludes(html, "Re-link external file");
+  assertStringIncludes(html, "Replace inline and detach");
+  assertEquals(html.includes("connection_id"), false);
 });
 
 Deno.test("creator management component presents PDF preview and download actions", () => {
