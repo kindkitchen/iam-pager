@@ -62,13 +62,16 @@ without leaking SDK or OAuth behavior into page services. A shared conformance
 suite fixes those semantics for every adapter; the memory adapter is the
 reference implementation and test double.
 
-A storage-connection repository owns creator/provider uniqueness, encrypted
-token custody, health, reauthorization, and revocation. Asset repositories
-persist only the external source reference and authoritative local integrity
-metadata. Delivery authorizes the page first, resolves the source through these
-interfaces, verifies complete bytes, and maps missing or retryable provider
-outcomes through `ES-DELIVERY`. Web routes and components do not call provider
-adapters directly.
+`StorageConnectionRepository` now owns creator/provider active uniqueness,
+owner-safe retained revocation metadata, and provider-only token access. Its
+memory and Deno KV implementations share conformance; KV credentials are
+separate connection-bound AES-256-GCM ciphertext and are deleted on revocation.
+Later OAuth and management capabilities will own reauthorization and connection
+health. Asset repositories persist only the external source reference and
+authoritative local integrity metadata. Delivery authorizes the page first,
+resolves the source through these interfaces, verifies complete bytes, and maps
+missing or retryable provider outcomes through `ES-DELIVERY`. Web routes and
+components do not call provider adapters directly.
 
 ## CP-AUTHORITY — Identity and namespace capability
 

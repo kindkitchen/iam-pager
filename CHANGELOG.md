@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Added the creator storage-connection model and repository boundary with strict
+  owner-safe metadata, one active connection per user/provider pair, retained
+  revocation records, same-account reauthorization, provider-only credential
+  access, and shared memory/Deno KV conformance. The KV adapter stores tokens
+  separately as randomized connection-bound AES-256-GCM ciphertext, fails closed
+  on malformed state, and atomically destroys credentials on revocation; the
+  memory implementation is a fault-injectable test double.
 - Added provider-neutral external sources to immutable `ContentAsset` records:
   external assets carry a bounded provider reference plus required local
   checksum and codec facts, never contain inline data, and round-trip through
@@ -30,8 +37,7 @@
   model, per-user storage connections with token custody, a separate Google
   Drive OAuth registration reusing `@kindkitchen/gauth`, the Drive provider,
   delivery-time fallback with placeholder content for externally deleted files,
-  the owner warning and repair flow, and the management API/UI surface. No
-  implementation yet.
+  the owner warning and repair flow, and the management API/UI surface.
 - Closed the API-key specification and regression boundary. The specifications
   now carry the API-key invariants (`SA-APIKEY`, `CP-APIKEY`, `CP-API-AUTH`,
   `EX-AUTOMATE`, plus updated `PD-CREATOR`, `QT-AUTHORITY`, `QT-API`,

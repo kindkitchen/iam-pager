@@ -7,3 +7,4 @@ export * from "./kv-toolbox-gateway.ts";
 export * from "./content-data-codec.ts";
 export * from "./kv-content-asset-repository.ts";
 export * from "./kv-page-aggregate-repository.ts";
+export * from "./kv-storage-connection-repository.ts";

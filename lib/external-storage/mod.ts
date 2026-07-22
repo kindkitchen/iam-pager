@@ -33,3 +33,42 @@ export {
   test_external_storage_provider_conformance,
 } from "./provider-conformance.ts";
 export { ExternalStorageProviderRegistry } from "./provider-registry.ts";
+export type {
+  StorageConnection,
+  StorageConnectionCredentials,
+  StorageConnectionStatus,
+} from "./connection-model.ts";
+export {
+  assert_storage_connection,
+  assert_storage_connection_credentials,
+  clone_storage_connection,
+  clone_storage_connection_credentials,
+  is_storage_connection,
+  is_storage_connection_credentials,
+  max_storage_provider_subject_length,
+  max_storage_scope_count,
+  max_storage_scope_length,
+  max_storage_token_length,
+  storage_connection_credentials_violation,
+  storage_connection_statuses,
+  storage_connection_violation,
+} from "./connection-model.ts";
+export type {
+  StorageConnectionCreateResult,
+  StorageConnectionReauthorization,
+  StorageConnectionReauthorizationResult,
+  StorageConnectionRepository,
+} from "./connection-repository.ts";
+export { MemoryStorageConnectionRepository } from "./memory-connection-repository.ts";
+export {
+  type StorageConnectionRepositoryConformanceOptions,
+  test_storage_connection_repository_conformance,
+} from "./connection-repository-conformance.ts";
+export type {
+  EncryptedStorageCredentials,
+  StorageCredentialCipher,
+} from "./token-cipher.ts";
+export {
+  AesGcmStorageCredentialCipher,
+  STORAGE_TOKEN_KEY_ENV,
+} from "./token-cipher.ts";
