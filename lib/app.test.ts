@@ -28,7 +28,6 @@ import {
 import type { AppRequestState } from "./request-context.ts";
 import { MemorySessionRepository } from "./session/mod.ts";
 import {
-  API_KEY_STORAGE_BACKEND_ENV,
   type ApiKeyRepositoryFactory,
   type ApiKeyStorageConfig,
   OWNERSHIP_DENO_KV_PATH_ENV,
@@ -260,7 +259,6 @@ Deno.test("configured composition selects every persistence interface together",
     [OWNERSHIP_DENO_KV_PATH_ENV]: "/data/iam-pager.kv",
     [SESSION_STORAGE_BACKEND_ENV]: "deno-kv",
     [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
-    [API_KEY_STORAGE_BACKEND_ENV]: "deno-kv",
   };
 
   const services = await create_configured_app_services(

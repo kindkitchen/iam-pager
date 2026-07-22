@@ -136,6 +136,7 @@ available action.
 
 Sessions default to process memory. Durable sessions require the same durable
 ownership database as users, identities, and namespace claims. Otherwise a
-surviving session could reference a missing user. Page and API-key persistence
-are independently selected under the same durable ownership requirement, so a
-key cannot outlive its owner.
+surviving session could reference a missing user. Page persistence is selected
+independently under the same durability requirement; API keys inherit the
+ownership backend by default so durable users never silently receive
+process-local keys.

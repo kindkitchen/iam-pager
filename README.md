@@ -58,9 +58,10 @@ available to the publishing selector immediately. Every managed mutation is
 owner-checked and revision-bound.
 
 Signed-in creators also manage their API keys at `/site/api-keys`: generate a
-key with explicit permissions and optional expiry, copy the one-time bearer,
-edit or revoke individual keys, and revoke everything at once. The page is a
-projection of the same API-key capabilities exposed at `/api/api-keys`.
+key with a typed or shared four-word random label, explicit permissions, and
+optional expiry; copy the one-time bearer; edit or revoke individual keys; and
+revoke everything at once. The page is a projection of the same API-key
+capabilities exposed at `/api/api-keys`.
 
 ### Content
 
@@ -156,15 +157,18 @@ deno task hooks:install
 
 ## Persistence
 
-All repositories default to process memory. For one durable Deno KV composition,
-set:
+Ownership, sessions, and pages default to process memory. API keys inherit the
+ownership backend by default, preventing durable creator identities from getting
+process-local keys. For one durable Deno KV composition, set:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
 IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
-IAM_PAGER_API_KEY_STORAGE_BACKEND=deno-kv
 ```
+
+`IAM_PAGER_API_KEY_STORAGE_BACKEND` can explicitly override API keys to `memory`
+or `deno-kv`; normally no override is needed.
 
 For a self-hosted database, also set the shared path:
 

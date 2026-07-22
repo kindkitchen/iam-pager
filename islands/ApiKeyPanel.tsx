@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import {
   api_key_all_permissions_shorthand,
   api_key_draft_violation,
@@ -18,6 +18,10 @@ import {
   type PreparedApiKeyRequest,
   revoked_count_from_api,
 } from "../lib/ui/api-key-panel.ts";
+import {
+  FourWordRandomNameGenerator,
+  type RandomNameGenerator,
+} from "../lib/random-name.ts";
 
 interface GeneratedReveal {
   readonly api_key_id: string;
@@ -34,14 +38,16 @@ interface DraftState {
   label: string;
   permissions: readonly string[];
   all_access: boolean;
-  expires_at_local: string;
+  expiry_date: string;
+  expiry_time: string;
 }
 
 const empty_draft: DraftState = {
   label: "",
   permissions: [],
   all_access: false,
-  expires_at_local: "",
+  expiry_date: "",
+  expiry_time: "",
 };
 
 export interface ApiKeyPanelProps {
@@ -53,11 +59,16 @@ export interface ApiKeyPanelProps {
 
 /** Creator panel for owned API keys: generate, copy, edit, revoke. */
 export default function ApiKeyPanel(props: ApiKeyPanelProps) {
+  const random_name_generator: RandomNameGenerator = useMemo(
+    () => new FourWordRandomNameGenerator(),
+    [],
+  );
   const [keys, set_keys] = useState(props.initial_api_keys);
   const [draft, set_draft] = useState<DraftState>(empty_draft);
   const [busy, set_busy] = useState(false);
   const [notice, set_notice] = useState<PanelNotice>({ kind: "none" });
   const [generated, set_generated] = useState<GeneratedReveal | null>(null);
+  const [generated_visible, set_generated_visible] = useState(false);
   const [copied, set_copied] = useState(false);
   const [editing, set_editing] = useState<string | null>(null);
   const [edit_draft, set_edit_draft] = useState<DraftState>(empty_draft);
@@ -70,9 +81,7 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
       permissions: state.all_access
         ? [api_key_all_permissions_shorthand]
         : state.permissions,
-      expires_at: state.expires_at_local === ""
-        ? null
-        : local_input_to_iso(state.expires_at_local),
+      expires_at: local_expiry_to_iso(state.expiry_date, state.expiry_time),
     };
   }
 
@@ -136,6 +145,7 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
     set_keys((current) => [...current, created.api_key]);
     set_draft(empty_draft);
     set_copied(false);
+    set_generated_visible(false);
     set_generated({
       api_key_id: created.api_key.api_key_id,
       label: created.api_key.label,
@@ -162,9 +172,7 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
       label: key.label,
       permissions: key.permissions,
       all_access: key.permissions.length === api_key_permission_choices.length,
-      expires_at_local: key.expires_at === null
-        ? ""
-        : iso_to_local_input(key.expires_at),
+      ...expiry_fields_from_iso(key.expires_at),
     });
   }
 
@@ -255,24 +263,42 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
     state: DraftState,
     set_state: (updater: (current: DraftState) => DraftState) => void,
     id_prefix: string,
+    random_label: boolean,
   ) {
     return (
       <>
-        <label for={`${id_prefix}-label`}>Label</label>
-        <input
-          id={`${id_prefix}-label`}
-          value={state.label}
-          maxlength={64}
-          autocomplete="off"
-          placeholder="ci deployment"
-          onInput={(event) => {
-            const label = event.currentTarget.value;
-            set_state((current) => ({ ...current, label }));
-          }}
-        />
+        <div class="contextual-input api-key-label-input">
+          <div class="contextual-input-heading">
+            <label for={`${id_prefix}-label`}>Label</label>
+            {random_label && (
+              <button
+                type="button"
+                class="embedded-input-action"
+                aria-label="Use a random API-key label"
+                onClick={() => {
+                  const label = random_name_generator.generate();
+                  set_state((current) => ({ ...current, label }));
+                }}
+              >
+                Random
+              </button>
+            )}
+          </div>
+          <input
+            id={`${id_prefix}-label`}
+            value={state.label}
+            maxlength={64}
+            autocomplete="off"
+            placeholder="ci deployment"
+            onInput={(event) => {
+              const label = event.currentTarget.value;
+              set_state((current) => ({ ...current, label }));
+            }}
+          />
+        </div>
         <fieldset class="api-key-permissions">
           <legend>Permissions</legend>
-          <label class="api-key-permission-choice">
+          <label class="api-key-permission-choice api-key-permission-all">
             <input
               type="checkbox"
               checked={state.all_access}
@@ -287,7 +313,10 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
                 }));
               }}
             />
-            Full access (everything the API allows now and nothing more)
+            <span>
+              <strong>Full access</strong>
+              <small>Everything the API allows now, and nothing more.</small>
+            </span>
           </label>
           {api_key_permission_choices.map((permission) => (
             <label key={permission} class="api-key-permission-choice">
@@ -313,18 +342,43 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
             </label>
           ))}
         </fieldset>
-        <label for={`${id_prefix}-expiry`}>
-          Expires (leave empty for a key that never expires)
+        <label for={`${id_prefix}-expiry-date`}>
+          Expiry date <small>optional</small>
         </label>
         <input
-          id={`${id_prefix}-expiry`}
-          type="datetime-local"
-          value={state.expires_at_local}
+          id={`${id_prefix}-expiry-date`}
+          type="date"
+          value={state.expiry_date}
           onInput={(event) => {
-            const expires_at_local = event.currentTarget.value;
-            set_state((current) => ({ ...current, expires_at_local }));
+            const expiry_date = event.currentTarget.value;
+            set_state((current) => ({
+              ...current,
+              expiry_date,
+              expiry_time: expiry_date === ""
+                ? ""
+                : current.expiry_date === ""
+                ? local_time_input(new Date())
+                : current.expiry_time,
+            }));
           }}
         />
+        <p class="api-key-expiry-hint">
+          Leave blank for a key that never expires.
+        </p>
+        {state.expiry_date !== "" && (
+          <label for={`${id_prefix}-expiry-time`}>
+            Expiry time <small>defaults to the current time</small>
+            <input
+              id={`${id_prefix}-expiry-time`}
+              type="time"
+              value={state.expiry_time}
+              onInput={(event) => {
+                const expiry_time = event.currentTarget.value;
+                set_state((current) => ({ ...current, expiry_time }));
+              }}
+            />
+          </label>
+        )}
       </>
     );
   }
@@ -350,19 +404,29 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
             later, only replaced.
           </p>
           <div class="api-key-generated-row">
-            <code class="api-key-bearer">{generated.bearer}</code>
+            <code class="api-key-bearer">
+              {generated_visible ? generated.bearer : "••••••••••••••••"}
+            </code>
+            <button
+              type="button"
+              class="api-key-visibility"
+              aria-label={generated_visible ? "Hide key" : "Show key"}
+              aria-pressed={generated_visible}
+              title={generated_visible ? "Hide key" : "Show key"}
+              onClick={() => set_generated_visible((current) => !current)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5c-5.2 0-9.3 4.7-10.5 6.2a1.3 1.3 0 0 0 0 1.6C2.7 14.3 6.8 19 12 19s9.3-4.7 10.5-6.2a1.3 1.3 0 0 0 0-1.6C21.3 9.7 17.2 5 12 5Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-2.2a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6Z" />
+                {!generated_visible && (
+                  <path d="m4.2 2.8 17 17-1.4 1.4-17-17 1.4-1.4Z" />
+                )}
+              </svg>
+            </button>
             <button
               type="button"
               onClick={() => copy_bearer(generated.bearer)}
             >
               {copied ? "Copied" : "Copy key"}
-            </button>
-            <button
-              type="button"
-              class="api-key-dismiss"
-              onClick={() => set_generated(null)}
-            >
-              I stored it
             </button>
           </div>
         </div>
@@ -398,6 +462,7 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
                         edit_draft,
                         (updater) => set_edit_draft(updater),
                         `edit-${key.api_key_id}`,
+                        false,
                       )}
                       <div class="api-key-item-actions">
                         <button
@@ -444,7 +509,12 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
 
       <form class="api-key-form" onSubmit={generate}>
         <h3>Generate a new key</h3>
-        {draft_form(draft, (updater) => set_draft(updater), "new-key")}
+        {draft_form(
+          draft,
+          (updater) => set_draft(updater),
+          "new-key",
+          true,
+        )}
         <button type="submit" disabled={busy}>
           {busy ? "Working…" : "Generate key"}
         </button>
@@ -488,17 +558,32 @@ export default function ApiKeyPanel(props: ApiKeyPanelProps) {
   );
 }
 
-/** `datetime-local` values carry no zone; interpret them as local time. */
-function local_input_to_iso(value: string): string | null {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+/** Date/time inputs carry no zone; interpret their combined value as local. */
+function local_expiry_to_iso(date: string, time: string): string | null {
+  if (date === "") return null;
+  const local_value = `${date}T${time}`;
+  const parsed = new Date(local_value);
+  return Number.isNaN(parsed.getTime()) ? local_value : parsed.toISOString();
 }
 
-function iso_to_local_input(iso: string): string {
+function expiry_fields_from_iso(
+  iso: string | null,
+): Pick<DraftState, "expiry_date" | "expiry_time"> {
+  if (iso === null) return { expiry_date: "", expiry_time: "" };
   const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "";
+  if (Number.isNaN(parsed.getTime())) {
+    return { expiry_date: "", expiry_time: "" };
+  }
   const pad = (part: number) => String(part).padStart(2, "0");
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${
-    pad(parsed.getDate())
-  }T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  return {
+    expiry_date: `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${
+      pad(parsed.getDate())
+    }`,
+    expiry_time: local_time_input(parsed),
+  };
+}
+
+function local_time_input(date: Date): string {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
