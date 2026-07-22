@@ -1,6 +1,7 @@
 import {
   type ContentAsset,
   type ContentAssetId,
+  is_inline_content_asset,
   is_valid_content_asset_id,
 } from "../content/asset.ts";
 import { CryptoContentAssetIdGenerator } from "../content/generators.ts";
@@ -1239,6 +1240,7 @@ export class PageService
       const asset: ContentAsset = {
         content_asset_id,
         content_type: content.content_type,
+        source: { kind: "inline" },
         data: content.data,
         meta: content.meta,
         created_at,
@@ -1265,6 +1267,9 @@ export class PageService
     page: PageAggregate,
     asset: ContentAsset,
   ): MaterializedPage {
+    if (!is_inline_content_asset(asset)) {
+      throw new Error("external content asset requires delivery resolution");
+    }
     return {
       ...structuredClone(page),
       content: {

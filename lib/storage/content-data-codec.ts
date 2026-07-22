@@ -6,7 +6,7 @@ export interface ContentDataCodec {
   decode(bytes: Uint8Array): unknown;
 }
 
-/** V8 structured-clone payload codec. */
+/** V8 structured-clone codec for inline asset data only. External assets bypass it. */
 export class V8ContentDataCodec implements ContentDataCodec {
   readonly encoding = "v8";
 

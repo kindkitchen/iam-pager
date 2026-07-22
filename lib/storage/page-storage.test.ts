@@ -103,6 +103,7 @@ Deno.test("page repository factory selects current memory and Deno KV aggregates
     const asset = await durable.create_content_asset({
       content_asset_id: "asset-1",
       content_type: "md-page",
+      source: { kind: "inline" },
       data: { md: "persisted", html: "<p>persisted</p>" },
       meta: { media_type: "text/html; charset=utf-8", size_bytes: 16 },
       created_at: now,
