@@ -2,9 +2,10 @@
 
 This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
-storage-connection repository with encrypted token custody are implemented, but
-external storage is not available until OAuth, delivery, and management work
-lands.
+storage-connection repository with encrypted token custody, the separate Google
+Drive OAuth connect/disconnect flow, the production Google Drive provider, and
+verified direct and wrapped delivery with fallback behavior are implemented.
+External publishing and creator warning/repair management remain unavailable.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -42,7 +43,7 @@ The local asset record is authoritative and contains:
 - exact canonical payload size;
 - required SHA-256 checksum;
 - optional safe download filename;
-- the content codec/schema version needed to decode it;
+- the delivery representation codec/schema version used to produce it;
 - either inline payload data or the external source reference.
 
 These values are committed validation facts, not a mutable cache of provider
@@ -94,6 +95,17 @@ outcomes, an immutable-at-composition registry, and a reusable conformance
 suite. The in-memory implementation is a reference adapter and test double, not
 an externally durable provider.
 
+The `google-drive` adapter implements Drive v3 metadata/media reads and bounded
+multipart writes through a small injected HTTP gateway. It stores Drive's
+`md5Checksum` as the provider version hint, treats trashed, gone, or
+definitively inaccessible files as missing, preserves bounded retry hints for
+rate limits and outages, and refreshes expiring or rejected access tokens
+through single-flight credential updates. Invalid grants and access that remains
+unauthorized after refresh revoke the local connection. The provider-neutral API
+reports that safe `connection_revoked` category separately from missing content
+so page health can preserve the repair-relevant cause without exposing
+credential details to visitors.
+
 ## ES-CONNECTION — Credential custody and revocation
 
 A storage connection belongs to one application user and one provider. V1 allows
@@ -130,6 +142,19 @@ The 256-bit key is supplied outside KV as canonical base64url configuration
 (`IAM_PAGER_STORAGE_TOKEN_KEY`); key loss is credential loss. The repository has
 no management serialization path capable of carrying tokens.
 
+Google Drive storage consent is a second explicit gauth composition under the
+`IAM_PAGER_GOOGLE_DRIVE_*` namespace, never the sign-in registration. It uses
+its own exact callback and local mock-consent routes, requests `drive.file` as
+the only Drive permission alongside gauth's verified-account identity scopes,
+and forces offline explicit consent. Raw state is never stored: its hash, PKCE
+context, exact callback, session ID, user ID, and expiry use a separate
+`storage-oauth-attempts/google-drive` persistence prefix and are consumed once
+before exchange. Connect and callback require the same authenticated session.
+Successful consent creates or same-subject reauthorizes one connection while
+preserving an existing refresh token if Google omits it. CSRF-protected POST
+disconnect attempts provider revocation, then revokes locally and destroys
+credentials even when the remote request fails.
+
 ## ES-DELIVERY — Resolution and failure behavior
 
 Page authority and visibility are resolved before the content source. Invalid,
@@ -153,10 +178,13 @@ media type. This does not weaken the `404` invariant: the page has already been
 shown to be eligible and only its payload is unavailable. Missing and transient
 failures intentionally look the same to visitors.
 
-Definitive failures record or refresh `external_missing` health for owner
-management. Retryable failures never mark an asset missing. V1 has no persistent
-payload cache, so stale bytes are not served during an outage. Success clears a
-previous observational warning only after full integrity verification.
+Definitive failures idempotently record `external_missing` health on the page
+aggregate with a safe cause and detection time. This observational write is
+bound to the current asset and does not change page revision or update time;
+concurrent repeats of the same cause do not rewrite it. Retryable failures never
+mark an asset missing. V1 has no persistent payload cache, so stale bytes are
+not served during an outage. Success clears a previous observational warning
+only after full integrity verification.
 
 Owners see a bounded warning and safe cause category for affected pages. Repair
 creates or selects a valid replacement asset at an exact page revision by:

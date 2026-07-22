@@ -175,7 +175,9 @@ export class MemoryExternalStorageProvider implements ExternalStorageProvider {
   #failure(content_ref: ExternalContentRef): ExternalStorageFailure | null {
     const reason = this.#faults.get(content_key(content_ref));
     if (reason === undefined) return null;
-    return reason === "external_content_missing" ? missing() : unreachable();
+    if (reason === "external_content_missing") return missing();
+    if (reason === "connection_revoked") return revoked();
+    return unreachable();
   }
 }
 
@@ -196,6 +198,10 @@ function stored_stat(content: StoredContent): ExternalContentStat {
 
 function missing(): ExternalStorageFailure {
   return { ok: false, reason: "external_content_missing" };
+}
+
+function revoked(): ExternalStorageFailure {
+  return { ok: false, reason: "connection_revoked" };
 }
 
 function unreachable(): ExternalStorageFailure {

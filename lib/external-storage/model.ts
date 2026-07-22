@@ -54,6 +54,7 @@ export interface ExternalContentPutInput {
 
 export type ExternalStorageFailure =
   | { readonly ok: false; readonly reason: "external_content_missing" }
+  | { readonly ok: false; readonly reason: "connection_revoked" }
   | {
     readonly ok: false;
     readonly reason: "external_source_unreachable";

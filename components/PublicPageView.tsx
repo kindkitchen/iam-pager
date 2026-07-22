@@ -38,6 +38,38 @@ export function PublicPageViewPage(
     );
   }
 
+  if (view.kind === "unavailable") {
+    const title = view.page.locator.page_name ?? "Default page";
+    return (
+      <main class="site-app public-page-shell">
+        <header class="public-page-platform-header">
+          <SiteSessionNavigation navigation={navigation} />
+          {breadcrumb && <SiteBreadcrumb trail={breadcrumb} />}
+          <a class="public-page-home" href="/site">iam-pager</a>
+          <h1>{title}</h1>
+        </header>
+        <section class="public-content-frame" aria-label="Creator content">
+          <p class="public-content-label">Creator content</p>
+          {view.preview.kind === "html"
+            ? (
+              <iframe
+                title={`${title} temporarily unavailable`}
+                sandbox=""
+                referrerpolicy="no-referrer"
+                srcdoc={view.preview.document}
+              />
+            )
+            : (
+              <div class="public-content-fallback">
+                <h2>Content temporarily unavailable</h2>
+                <p>Please try again later.</p>
+              </div>
+            )}
+        </section>
+      </main>
+    );
+  }
+
   const title = view.page.locator.page_name ?? "Default page";
   return (
     <main class="site-app public-page-shell">

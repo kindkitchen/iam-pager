@@ -82,13 +82,16 @@ delivery supports validators and one byte range.
 
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
-storage is a selected next slice. Its provider-neutral contract, registry,
-conformance suite, in-memory reference adapter, payload-free external asset
-persistence, and creator/provider connection repository now exist. Connection
-metadata is owner-safe, while provider tokens use separate AES-256-GCM custody
-in Deno KV. The capability is not available until OAuth, delivery, and
-management work lands; verified provider bytes will be served through iam-pager
-rather than redirecting visitors.
+storage now has its provider-neutral contract, registry, in-memory reference
+adapter, payload-free external assets, encrypted creator connections, separate
+Google Drive OAuth flow, and production Drive REST provider. Eligible direct and
+site-wrapper delivery fetches complete bounded provider bytes, verifies local
+size and SHA-256 facts, and serves them through iam-pager without redirecting.
+Missing, revoked, altered, or temporarily unreachable sources return the same
+platform-owned `503` placeholder; definitive failures are recorded idempotently
+on the page and verified recovery clears that revision-neutral health state.
+Creator-facing external publishing, warnings, and repair controls remain to be
+implemented.
 
 ## Architecture
 
@@ -112,7 +115,10 @@ Important boundaries:
   directly. `StorageConnectionRepository` separately owns one live connection
   per creator/provider pair, retained revocation metadata, and provider-only
   credentials; memory and Deno KV share conformance, and the KV adapter stores
-  only connection-bound AES-256-GCM ciphertext under credential keys.
+  only connection-bound AES-256-GCM ciphertext under credential keys. The
+  production Google Drive adapter uses a bounded HTTP gateway, records Drive's
+  `md5Checksum` as the opaque version hint, refreshes tokens single-flight, and
+  revokes invalid connections; local tests use an in-process fake Drive server.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
@@ -154,8 +160,8 @@ deno task dev
 ```
 
 Open <http://localhost:5173>. The development task selects the localhost session
-cookie and gauth's loopback-only mock Google flow. Its fake sign-in mode must
-never be exposed as production authentication.
+cookie and gauth's loopback-only mock Google sign-in and Drive-consent flows.
+Neither fake mode may be exposed in production.
 
 Useful commands:
 
@@ -174,9 +180,10 @@ deno task hooks:install
 
 ## Persistence
 
-Ownership, sessions, and pages default to process memory. API keys inherit the
-ownership backend by default, preventing durable creator identities from getting
-process-local keys. For one durable Deno KV composition, set:
+Ownership, sessions, pages, and storage connections default to process memory.
+API keys and storage connections inherit the ownership backend by default,
+preventing durable creator identities from getting process-local credentials.
+For one durable Deno KV composition, set:
 
 ```env
 IAM_PAGER_OWNERSHIP_STORAGE_BACKEND=deno-kv
@@ -198,10 +205,11 @@ sessions, pages, and API keys require durable ownership so a session, protected
 page, or API key cannot outlive its user and namespace claim.
 
 The Deno KV storage-connection adapter requires a canonical unpadded base64url
-256-bit token-custody key supplied as `IAM_PAGER_STORAGE_TOKEN_KEY` when that
-adapter is composed. Keep the key outside KV and deployment logs; losing it
-makes stored provider credentials unrecoverable. Storage OAuth composition is
-not exposed yet.
+256-bit token-custody key supplied as `IAM_PAGER_STORAGE_TOKEN_KEY`. Keep the
+key outside KV and deployment logs; losing it makes stored provider credentials
+unrecoverable. `IAM_PAGER_STORAGE_CONNECTION_BACKEND` may explicitly select
+`memory` or `deno-kv`; normally it inherits ownership. One-use Drive OAuth state
+uses its own `storage-oauth-attempts/google-drive` KV prefix.
 
 ## Authentication configuration
 
@@ -214,13 +222,29 @@ IAM_PAGER_GOOGLE_AUTH_MODE=original
 IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI=https://example.com/auth/google/callback
 IAM_PAGER_GOOGLE_AUTH_CLIENT_ID=...
 IAM_PAGER_GOOGLE_AUTH_CLIENT_SECRET=...
+
+# Separate Google Cloud OAuth client; storage consent is not sign-in.
+IAM_PAGER_GOOGLE_DRIVE_MODE=original
+IAM_PAGER_GOOGLE_DRIVE_REDIRECT_URI=https://example.com/auth/storage/google-drive/callback
+IAM_PAGER_GOOGLE_DRIVE_CLIENT_ID=...
+IAM_PAGER_GOOGLE_DRIVE_CLIENT_SECRET=...
 ```
+
+Drive requests `drive.file` as its only content permission, plus the identity
+scopes gauth needs to verify the provider account, and forces offline explicit
+consent. In `original` mode those same Drive client credentials compose the
+`google-drive` external provider; local mode mocks consent only and does not
+register a remote-content provider. Connect and callback require an
+authenticated browser session; disconnect is POST-only and requires that
+session's CSRF token. The routes are
+`/auth/storage/google-drive/{start,callback,disconnect}`.
 
 An explicitly designated HTTPS preview may derive callbacks from a narrow,
 full-host regular expression:
 
 ```env
 IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
+IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 ```
 
 The request URL must match completely. `Origin` and `Referer` are never callback

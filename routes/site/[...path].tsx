@@ -15,9 +15,9 @@ export const handler = define.handlers({
     const view: PublicPageView = resolution.ok
       ? await services.public_page_view.present(resolution.locator)
       : { kind: "missing" };
-    const title = view.kind === "page"
-      ? (view.page.locator.page_name ?? "Default page")
-      : "Page unavailable";
+    const title = view.kind === "missing"
+      ? "Page unavailable"
+      : (view.page.locator.page_name ?? "Default page");
     return page({
       navigation: site_navigation_presenter.present(
         ctx.state.request_context.session,
@@ -29,7 +29,11 @@ export const handler = define.handlers({
       }),
       view,
     }, {
-      status: view.kind === "missing" ? 404 : 200,
+      status: view.kind === "missing"
+        ? 404
+        : view.kind === "unavailable"
+        ? 503
+        : 200,
       headers: { "cache-control": "private, no-store" },
     });
   },

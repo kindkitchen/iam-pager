@@ -4,19 +4,25 @@ import {
   is_inline_content_asset,
   is_valid_content_asset_id,
 } from "../content/asset.ts";
+import { ExternalUnavailableContentHandler } from "../content/external-unavailable.ts";
 import { CryptoContentAssetIdGenerator } from "../content/generators.ts";
 import type {
   ContentAssetIdGenerator,
   ContentTypeHandler,
 } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
+import type { ExternalStorageProviderResolver } from "../external-storage/interfaces.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
 import {
   FourWordRandomNameGenerator,
   type RandomNameGenerator,
 } from "../random-name.ts";
-import { page_aggregate_violation, type PageAggregate } from "./aggregate.ts";
+import {
+  type ExternalContentMissingCause,
+  page_aggregate_violation,
+  type PageAggregate,
+} from "./aggregate.ts";
 import type { PageAggregateRepository } from "./aggregate-interfaces.ts";
 import {
   DefaultPageEndpointPlanner,
@@ -100,6 +106,7 @@ export interface PageServiceOptions {
   repository: PageAggregateRepository;
   namespace_authority: NamespaceAuthorityResolver;
   handlers: readonly ContentTypeHandler<unknown, unknown>[];
+  external_storage_providers?: ExternalStorageProviderResolver;
   page_id_generator?: PageIdGenerator;
   content_asset_id_generator?: ContentAssetIdGenerator;
   endpoint_planner?: PageEndpointPlanner;
@@ -127,7 +134,26 @@ type EndpointPreparationResult =
       | "unknown_content_type";
   };
 
+type SummaryPage = PageAggregate & {
+  readonly content: Pick<PageContent, "content_type" | "meta">;
+};
+
 type MaterializedPage = PageAggregate & { readonly content: PageContent };
+
+type ResolvedDeliveryRecord = {
+  readonly page: PageAggregate;
+  readonly asset: ContentAsset;
+  readonly endpoint: PageEndpointBinding;
+};
+
+type ContentDeliveryResult =
+  | { readonly ok: true; readonly payload: DeliveryPayload }
+  | {
+    readonly ok: false;
+    readonly reason: "external_content_unavailable";
+    readonly payload: DeliveryPayload;
+    readonly retry_after_seconds?: number;
+  };
 
 type MaterializedPageMutationResult<
   Outcome extends string,
@@ -148,7 +174,7 @@ type MaterializedPageUpdateResult =
   };
 
 type MaterializedPageListResult =
-  | { ok: true; pages: MaterializedPage[]; next_cursor: string | null }
+  | { ok: true; pages: SummaryPage[]; next_cursor: string | null }
   | { ok: false; reason: "invalid_cursor" };
 
 /**
@@ -188,6 +214,9 @@ export class PageService
   readonly #max_page_id_attempts: number;
   readonly #page_name_generator: RandomNameGenerator;
   readonly #max_page_name_attempts: number;
+  readonly #external_storage_providers: ExternalStorageProviderResolver;
+  readonly #external_unavailable_handler =
+    new ExternalUnavailableContentHandler();
 
   constructor(options: PageServiceOptions) {
     for (const handler of options.handlers) {
@@ -208,6 +237,9 @@ export class PageService
     this.#engine = options.engine;
     this.#repository = options.repository;
     this.#namespace_authority = options.namespace_authority;
+    this.#external_storage_providers = options.external_storage_providers ?? {
+      resolve: () => null,
+    };
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
     this.#content_asset_id_generator = options.content_asset_id_generator ??
@@ -843,19 +875,38 @@ export class PageService
     if (!this.#engine.validate(locator).ok) {
       return { ok: false, reason: "not_found" };
     }
-    const page = await this.#find_public_record_by_locator(locator);
-    if (page === null || page.access !== "public") {
-      // Missing, private, and incoherent pages are indistinguishable to
-      // visitors.
-      return { ok: false, reason: "not_found" };
-    }
-    const handler = this.#handlers.get(page.content.content_type);
-    if (handler === undefined) return { ok: false, reason: "not_found" };
-    return {
-      ok: true,
-      page: this.#public_summary(page),
-      payload: handler.render(page.content.data),
-    };
+    const resolved = await this.#resolve_delivery_record(locator, {
+      kind: "guest",
+    });
+    if (!resolved.ok) return { ok: false, reason: "not_found" };
+    const handler = this.#handlers.get(resolved.asset.content_type);
+    if (
+      handler === undefined ||
+      !handler.supported_delivery_profiles.includes(
+        resolved.endpoint.delivery_profile,
+      )
+    ) return { ok: false, reason: "not_found" };
+    const page = this.#public_summary_from_asset(
+      resolved.page,
+      resolved.asset,
+    );
+    const delivered = is_inline_content_asset(resolved.asset)
+      ? {
+        ok: true as const,
+        payload: handler.render(resolved.asset.data),
+      }
+      : await this.#deliver_external_content(resolved);
+    return delivered.ok
+      ? { ok: true, page, payload: public_view_payload(delivered.payload) }
+      : {
+        ok: false,
+        reason: delivered.reason,
+        page,
+        payload: delivered.payload,
+        ...(delivered.retry_after_seconds === undefined ? {} : {
+          retry_after_seconds: delivered.retry_after_seconds,
+        }),
+      };
   }
 
   async list_public(
@@ -921,30 +972,33 @@ export class PageService
   ) {
     const resolved = await this.#resolve_delivery_record(locator, actor);
     if (!resolved.ok) return resolved;
-    const page = resolved.page;
-    const handler = this.#handlers.get(page.content.content_type);
-    if (handler === undefined) {
-      return { ok: false as const, reason: "corrupt" as const };
-    }
+    const handler = this.#handlers.get(resolved.asset.content_type);
     if (
+      handler === undefined ||
       !handler.supported_delivery_profiles.includes(
         resolved.endpoint.delivery_profile,
       )
-    ) {
-      return { ok: false as const, reason: "corrupt" as const };
-    }
+    ) return { ok: false as const, reason: "corrupt" as const };
+
+    const delivered = is_inline_content_asset(resolved.asset)
+      ? {
+        ok: true as const,
+        payload: handler.render(resolved.asset.data),
+      }
+      : await this.#deliver_external_content(resolved);
+    if (!delivered.ok) return delivered;
     return {
       ok: true as const,
       page: {
-        page_id: page.page_id,
-        revision: page.revision,
-        size_bytes: page.content.meta.size_bytes,
+        page_id: resolved.page.page_id,
+        revision: resolved.page.revision,
+        size_bytes: resolved.asset.meta.size_bytes,
       },
       endpoint: project_page_endpoint_links(
         { canonical: resolved.endpoint, alternates: [] },
         this.#engine,
       ).canonical,
-      payload: handler.render(page.content.data),
+      payload: delivered.payload,
     };
   }
 
@@ -1046,7 +1100,7 @@ export class PageService
     return {
       ...result,
       pages: await Promise.all(
-        result.pages.map((page) => this.#materialize_aggregate(page)),
+        result.pages.map((page) => this.#materialize_summary(page)),
       ),
     };
   }
@@ -1171,33 +1225,11 @@ export class PageService
     };
   }
 
-  async #find_public_record_by_locator(
-    locator: Locator,
-  ): Promise<MaterializedPage | null> {
-    const resolved = await this.#repository.resolve_page_endpoint(locator);
-    if (
-      resolved === null || resolved.page.access !== "public" ||
-      page_aggregate_violation(resolved.page) !== null
-    ) {
-      return null;
-    }
-    const asset = await this.#repository.find_content_asset_by_id(
-      resolved.page.content_asset_id,
-    );
-    return asset === null
-      ? null
-      : this.#materialize_aggregate_with_asset(resolved.page, asset);
-  }
-
   async #resolve_delivery_record(
     locator: Locator,
     actor: { kind: "guest" } | UserPageActor,
   ): Promise<
-    | {
-      readonly ok: true;
-      readonly page: MaterializedPage;
-      readonly endpoint: PageEndpointBinding;
-    }
+    | ({ readonly ok: true } & ResolvedDeliveryRecord)
     | { readonly ok: false; readonly reason: "not_found" | "corrupt" }
   > {
     const resolved = await this.#repository.resolve_page_endpoint(locator);
@@ -1221,8 +1253,102 @@ export class PageService
     }
     return {
       ok: true,
-      page: this.#materialize_aggregate_with_asset(resolved.page, asset),
+      page: resolved.page,
+      asset,
       endpoint: resolved.endpoint,
+    };
+  }
+
+  async #deliver_external_content(
+    resolved: ResolvedDeliveryRecord,
+  ): Promise<ContentDeliveryResult> {
+    if (resolved.asset.source.kind !== "external") {
+      throw new Error("external delivery requires an external asset");
+    }
+    const provider = this.#external_storage_providers.resolve(
+      resolved.asset.source.ref.provider_id,
+    );
+    if (provider === null) return this.#external_unavailable();
+
+    let fetched: Awaited<ReturnType<typeof provider.fetch_content>>;
+    try {
+      fetched = await provider.fetch_content({
+        content_ref: resolved.asset.source.ref,
+        max_bytes: resolved.asset.meta.size_bytes,
+      });
+    } catch {
+      return this.#external_unavailable();
+    }
+    if (!fetched.ok) {
+      if (fetched.reason === "external_source_unreachable") {
+        return this.#external_unavailable(fetched.retry_after_seconds);
+      }
+      await this.#record_external_missing(resolved, fetched.reason);
+      return this.#external_unavailable();
+    }
+    if (
+      fetched.value.stat.size_bytes !== resolved.asset.meta.size_bytes ||
+      fetched.value.body.byteLength !== resolved.asset.meta.size_bytes ||
+      await sha256(fetched.value.body) !== resolved.asset.meta.sha256
+    ) {
+      await this.#record_external_missing(resolved, "integrity_mismatch");
+      return this.#external_unavailable();
+    }
+    if (resolved.page.external_missing !== undefined) {
+      await this.#update_external_content_health({
+        page_id: resolved.page.page_id,
+        content_asset_id: resolved.asset.content_asset_id,
+        external_missing: null,
+      });
+    }
+    return {
+      ok: true,
+      payload: {
+        body: fetched.value.body.slice(),
+        media_type: resolved.asset.meta.media_type,
+        ...(resolved.asset.meta.download_filename === undefined
+          ? {}
+          : { download_filename: resolved.asset.meta.download_filename }),
+      },
+    };
+  }
+
+  async #record_external_missing(
+    resolved: ResolvedDeliveryRecord,
+    cause: ExternalContentMissingCause,
+  ): Promise<void> {
+    await this.#update_external_content_health({
+      page_id: resolved.page.page_id,
+      content_asset_id: resolved.asset.content_asset_id,
+      external_missing: { cause, detected_at: this.#operation_time() },
+    });
+  }
+
+  async #update_external_content_health(
+    request: Parameters<
+      PageAggregateRepository["update_external_content_health"]
+    >[0],
+  ): Promise<void> {
+    try {
+      await this.#repository.update_external_content_health(request);
+    } catch {
+      // Observational health persistence must not replace verified content or
+      // the non-disclosing visitor fallback with an application error.
+    }
+  }
+
+  #external_unavailable(retry_after_seconds?: number): ContentDeliveryResult {
+    const payload = this.#external_unavailable_handler.render(
+      this.#external_unavailable_handler.derive(null),
+    );
+    const retry_after = normalize_retry_after(retry_after_seconds);
+    return {
+      ok: false,
+      reason: "external_content_unavailable",
+      payload,
+      ...(retry_after === undefined
+        ? {}
+        : { retry_after_seconds: retry_after }),
     };
   }
 
@@ -1249,6 +1375,22 @@ export class PageService
       if (result.ok) return result.asset.content_asset_id;
     }
     throw new Error("content asset id generation exhausted");
+  }
+
+  async #materialize_summary(page: PageAggregate): Promise<SummaryPage> {
+    const asset = await this.#repository.find_content_asset_by_id(
+      page.content_asset_id,
+    );
+    if (asset === null) {
+      throw new Error("page aggregate references a missing content asset");
+    }
+    return {
+      ...structuredClone(page),
+      content: {
+        content_type: asset.content_type,
+        meta: structuredClone(asset.meta),
+      },
+    };
   }
 
   async #materialize_aggregate(
@@ -1439,7 +1581,20 @@ export class PageService
     return handler;
   }
 
-  #public_summary(page: MaterializedPage): PublicPageSummary {
+  #public_summary_from_asset(
+    page: PageAggregate,
+    asset: ContentAsset,
+  ): PublicPageSummary {
+    return this.#public_summary({
+      ...structuredClone(page),
+      content: {
+        content_type: asset.content_type,
+        meta: structuredClone(asset.meta),
+      },
+    });
+  }
+
+  #public_summary(page: SummaryPage): PublicPageSummary {
     const locator = page.endpoint_set.canonical.locator;
     return {
       locator: structuredClone(locator),
@@ -1455,7 +1610,7 @@ export class PageService
     };
   }
 
-  #summary(page: MaterializedPage): PageSummary {
+  #summary(page: SummaryPage): PageSummary {
     const locator = page.endpoint_set.canonical.locator;
     return {
       page_id: page.page_id,
@@ -1472,11 +1627,11 @@ export class PageService
     };
   }
 
-  #endpoint_set(page: MaterializedPage): PageEndpointSet {
+  #endpoint_set(page: PageAggregate): PageEndpointSet {
     return structuredClone(page.endpoint_set);
   }
 
-  #endpoint_links(page: MaterializedPage) {
+  #endpoint_links(page: PageAggregate) {
     return project_page_endpoint_links(this.#endpoint_set(page), this.#engine);
   }
 
@@ -1505,6 +1660,27 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function public_view_payload(payload: DeliveryPayload): DeliveryPayload {
+  return payload.body instanceof Uint8Array &&
+      payload.media_type.toLowerCase().startsWith("text/html")
+    ? { ...payload, body: new TextDecoder().decode(payload.body) }
+    : payload;
+}
+
+async function sha256(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
+  return Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function normalize_retry_after(value: number | undefined): number | undefined {
+  return Number.isSafeInteger(value) && value !== undefined && value > 0
+    ? Math.min(value, 3600)
+    : undefined;
 }
 
 function page_endpoint_sets_equal(

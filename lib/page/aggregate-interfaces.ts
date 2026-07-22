@@ -4,7 +4,11 @@ import type {
   ContentAssetReader,
 } from "../content/interfaces.ts";
 import type { Locator } from "../locator/model.ts";
-import type { PageAggregate, ResolvedPageEndpoint } from "./aggregate.ts";
+import type {
+  ExternalContentMissingState,
+  PageAggregate,
+  ResolvedPageEndpoint,
+} from "./aggregate.ts";
 import type { PageEndpointSet } from "./endpoint.ts";
 import type { PageAccess, PageId, PageTag } from "./model.ts";
 
@@ -254,6 +258,25 @@ export interface ManagedPageAggregateDeleter {
   ): Promise<DeleteManagedPageAggregateResult>;
 }
 
+export interface UpdateExternalContentHealthRequest {
+  readonly page_id: PageId;
+  /** Prevents a delivery observation from changing a replaced page. */
+  readonly content_asset_id: ContentAssetId;
+  /** `null` records verified recovery. */
+  readonly external_missing: ExternalContentMissingState | null;
+}
+
+export type UpdateExternalContentHealthResult =
+  | { readonly ok: true; readonly outcome: "updated" | "unchanged" }
+  | { readonly ok: false; readonly reason: "stale" };
+
+/** Revision-neutral, asset-bound observational health mutation. */
+export interface ExternalContentHealthUpdater {
+  update_external_content_health(
+    request: UpdateExternalContentHealthRequest,
+  ): Promise<UpdateExternalContentHealthResult>;
+}
+
 /**
  * Complete page/content persistence capability used by application services and
  * shared conformance. Implementations own asset staging and one atomic page,
@@ -273,4 +296,5 @@ export interface PageAggregateRepository
     ManagedPageAggregateCreator,
     ManagedPageAggregateUpdater,
     ManagedPageAggregateDuplicator,
-    ManagedPageAggregateDeleter {}
+    ManagedPageAggregateDeleter,
+    ExternalContentHealthUpdater {}

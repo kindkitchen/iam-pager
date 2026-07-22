@@ -2,6 +2,31 @@
 
 ## 2026-07-22
 
+- Added external content delivery for direct and site-wrapper visitors: provider
+  bytes are fetched within local bounds, verified against authoritative size and
+  SHA-256 facts, and served with existing endpoint semantics. Missing, revoked,
+  integrity-failed, unregistered, and retryable sources return one bounded
+  platform-owned `503` placeholder without leaking storage details. Definitive
+  failures persist asset-bound, revision-neutral page health in memory and Deno
+  KV; repeated observations are idempotent and verified recovery clears the
+  state. Google Drive now preserves the safe revoked cause, while transient
+  failures remain non-mutating.
+- Added the production `google-drive` external-storage provider with an injected
+  Drive v3 HTTP gateway, bounded stat/media reads, multipart writes carrying
+  `md5Checksum` version hints, single-flight persisted token refresh, definitive
+  revocation and missing mapping, retry-safe outage mapping, registry
+  composition, an in-process fake Drive server, and provider-conformance and
+  error-mapping coverage. Local consent mode remains provider-free; original
+  mode registers the adapter from its dedicated Drive client credentials.
+- Added a second, explicit `@kindkitchen/gauth` composition for Google Drive
+  storage consent with its own `IAM_PAGER_GOOGLE_DRIVE_*` registration, exact
+  callback routes, `drive.file` permission, offline explicit consent, and full
+  local mock flow. Authenticated-session-bound one-use state uses a separate KV
+  prefix; callbacks create or reauthorize encrypted storage credentials while
+  preserving omitted refresh tokens, and CSRF-protected disconnect attempts
+  Google revocation before always destroying local credentials. Added thin Fresh
+  routes, persistence composition, configuration docs, and roundtrip, mismatch,
+  unauthenticated, replay, and revocation regression tests.
 - Added the creator storage-connection model and repository boundary with strict
   owner-safe metadata, one active connection per user/provider pair, retained
   revocation records, same-account reauthorization, provider-only credential

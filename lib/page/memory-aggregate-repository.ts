@@ -7,6 +7,7 @@ import {
 import type { CreateContentAssetResult } from "../content/interfaces.ts";
 import { type Locator, locator_key } from "../locator/model.ts";
 import {
+  external_content_missing_state_violation,
   page_aggregate_endpoint_bindings,
   page_aggregate_violation,
   type PageAggregate,
@@ -48,6 +49,8 @@ import type {
   PageAggregateRepository,
   PutTrialPageAggregateRequest,
   PutTrialPageAggregateResult,
+  UpdateExternalContentHealthRequest,
+  UpdateExternalContentHealthResult,
   UpdateManagedPageAggregateRequest,
   UpdateManagedPageAggregateResult,
 } from "./aggregate-interfaces.ts";
@@ -69,6 +72,16 @@ function require(condition: boolean, message: string): asserts condition {
 
 function is_valid_time(value: Date): boolean {
   return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function external_health_equal(
+  current: PageAggregate["external_missing"],
+  requested: UpdateExternalContentHealthRequest["external_missing"],
+): boolean {
+  if (current === undefined || requested === null) {
+    return current === undefined && requested === null;
+  }
+  return current.cause === requested.cause;
 }
 
 /** Boundary isolation: callers can never alias internal repository state. */
@@ -457,8 +470,12 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
         claimed_trials.add(page_id);
       }
     }
+    const { external_missing: _external_missing, ...healthy_existing } =
+      existing;
     const page: PageAggregate = {
-      ...existing,
+      ...(request.patch.content_asset_id === undefined
+        ? existing
+        : healthy_existing),
       endpoint_set: clone(endpoint_set),
       access: request.patch.access ?? existing.access,
       tags: request.patch.tags === undefined
@@ -534,6 +551,47 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
       outcome: claimed_trials.size === 0 ? "created" : "replaced_trial",
       page: clone(page),
     };
+  }
+
+  // deno-lint-ignore require-await
+  async update_external_content_health(
+    request: UpdateExternalContentHealthRequest,
+  ): Promise<UpdateExternalContentHealthResult> {
+    this.#require_page_id(request.page_id);
+    this.#require_content_asset_id(request.content_asset_id);
+    if (request.external_missing !== null) {
+      const violation = external_content_missing_state_violation(
+        request.external_missing,
+      );
+      require(violation === null, violation ?? "invalid external health");
+    }
+    const existing = this.#pages.get(request.page_id);
+    if (
+      existing === undefined ||
+      existing.content_asset_id !== request.content_asset_id
+    ) return { ok: false, reason: "stale" };
+    const asset = this.#assets.get(request.content_asset_id);
+    require(
+      asset?.source.kind === "external",
+      "external health requires an external content asset",
+    );
+
+    if (
+      external_health_equal(existing.external_missing, request.external_missing)
+    ) {
+      return { ok: true, outcome: "unchanged" };
+    }
+    const { external_missing: _external_missing, ...healthy_existing } =
+      existing;
+    const page: PageAggregate = request.external_missing === null
+      ? healthy_existing
+      : {
+        ...healthy_existing,
+        external_missing: clone(request.external_missing),
+      };
+    this.#assert_valid_page(page);
+    this.#pages.set(page.page_id, page);
+    return { ok: true, outcome: "updated" };
   }
 
   // deno-lint-ignore require-await

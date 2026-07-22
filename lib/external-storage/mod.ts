@@ -34,6 +34,15 @@ export {
 } from "./provider-conformance.ts";
 export { ExternalStorageProviderRegistry } from "./provider-registry.ts";
 export type {
+  GoogleDriveAccessToken,
+  GoogleDriveFileStat,
+  GoogleDriveGateway,
+  GoogleDriveGatewayFailureReason,
+  GoogleDriveGatewayResult,
+} from "./google-drive-gateway.ts";
+export { FetchGoogleDriveGateway } from "./google-drive-gateway.ts";
+export { GoogleDriveExternalStorageProvider } from "./google-drive-provider.ts";
+export type {
   StorageConnection,
   StorageConnectionCredentials,
   StorageConnectionStatus,
@@ -72,3 +81,48 @@ export {
   AesGcmStorageCredentialCipher,
   STORAGE_TOKEN_KEY_ENV,
 } from "./token-cipher.ts";
+export type {
+  StorageOAuthAttempt,
+  StorageOAuthAttemptRepository,
+} from "./storage-oauth-attempt-repository.ts";
+export {
+  DenoKvStorageOAuthAttemptRepository,
+  MemoryStorageOAuthAttemptRepository,
+} from "./storage-oauth-attempt-repository.ts";
+export type {
+  GoogleDriveOAuthClient,
+  GoogleDriveOAuthGrant,
+  GoogleDriveOAuthResult,
+  GoogleDriveTokenRevoker,
+} from "./google-drive-oauth.ts";
+export {
+  FetchGoogleDriveTokenRevoker,
+  google_drive_file_scope,
+  google_drive_provider_id,
+  GoogleDriveGAuthClient,
+  LocalGoogleDriveTokenRevoker,
+  UnavailableGoogleDriveOAuthClient,
+} from "./google-drive-oauth.ts";
+export type {
+  GoogleDriveOAuthComposition,
+  GoogleDriveOAuthConfig,
+} from "./google-drive-oauth-composition.ts";
+export {
+  compose_google_drive_oauth,
+  GOOGLE_DRIVE_CLIENT_ID_ENV,
+  GOOGLE_DRIVE_CLIENT_SECRET_ENV,
+  GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV,
+  GOOGLE_DRIVE_MODE_ENV,
+  GOOGLE_DRIVE_REDIRECT_URI_ENV,
+  GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV,
+  parse_google_drive_oauth_config,
+} from "./google-drive-oauth-composition.ts";
+export type {
+  GoogleDriveConnectionFailureReason,
+  GoogleDriveConnectionManager,
+  GoogleDriveConnectionResult,
+} from "./google-drive-connection-service.ts";
+export { GoogleDriveConnectionService } from "./google-drive-connection-service.ts";
+export type { GoogleDriveConnectionHttpHandler } from "./google-drive-connection-http.ts";
+export { GoogleDriveConnectionHttpAdapter } from "./google-drive-connection-http.ts";
+export { GoogleDriveMockConsentHttpAdapter } from "./google-drive-mock-consent-http.ts";
