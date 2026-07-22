@@ -1,9 +1,9 @@
 # External content storage
 
 This document selects the product and technical boundary for externally stored
-content. The provider interface family is implemented, but external storage is
-not available until connection, asset-source, delivery, and management work
-lands.
+content. The provider interface family and external asset-source persistence are
+implemented, but external storage is not available until connection, delivery,
+and management work lands.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -45,9 +45,12 @@ The local asset record is authoritative and contains:
 - either inline payload data or the external source reference.
 
 These values are committed validation facts, not a mutable cache of provider
-metadata. A provider filename, media type, size, or checksum cannot override
-them during delivery. Provider account labels and connection health belong to
-the storage-connection model, not the asset.
+metadata. External assets require the checksum and codec version structurally
+and contain no `data` field or KV payload record. Existing source-less KV
+manifests decode as inline assets without migration. A provider filename, media
+type, size, or checksum cannot override local facts during delivery. Provider
+account labels and connection health belong to the storage-connection model, not
+the asset.
 
 Before serving an external payload, iam-pager obtains the complete bounded
 payload and verifies its size and checksum. A provider-side edit at the same

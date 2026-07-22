@@ -83,10 +83,11 @@ delivery supports validators and one byte range.
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
 storage is a selected next slice. Its provider-neutral contract, registry,
-conformance suite, and in-memory reference adapter now exist, but the capability
-is not available until connection, asset-source, delivery, and management work
-lands. The contract keeps metadata local and serves verified provider bytes
-through iam-pager rather than redirecting visitors.
+conformance suite, in-memory reference adapter, and payload-free external asset
+persistence now exist, but the capability is not available until connection,
+delivery, and management work lands. The contract keeps metadata local and
+serves verified provider bytes through iam-pager rather than redirecting
+visitors.
 
 ## Architecture
 
@@ -103,8 +104,11 @@ Important boundaries:
   logical pages, endpoint claims, and owner/public projections.
 - `lib/external-storage/` defines bounded provider operations, normalized
   missing/unreachable outcomes, a read-only resolver registry, and reusable
-  provider conformance tests. Page logic consumes this contract and never
-  provider SDKs or OAuth details directly.
+  provider conformance tests. `ContentAsset` discriminates inline data from an
+  external reference with local integrity facts; Deno KV stores no payload
+  object for external assets and decodes legacy source-less manifests as inline.
+  Page logic consumes this contract and never provider SDKs or OAuth details
+  directly.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:

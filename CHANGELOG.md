@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Added provider-neutral external sources to immutable `ContentAsset` records:
+  external assets carry a bounded provider reference plus required local
+  checksum and codec facts, never contain inline data, and round-trip through
+  memory and Deno KV repositories without creating payload objects. New inline
+  records use an explicit source discriminator while existing source-less KV
+  manifests decode as inline without migration; repository conformance now
+  covers both source kinds.
 - Added the provider-neutral external-storage interface family under
   `lib/external-storage`: bounded opaque references and fetches, mandatory
   read/stat with optional write/delete capabilities, normalized definitive
