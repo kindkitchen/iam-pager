@@ -1,9 +1,10 @@
 # External content storage
 
 This document selects the product and technical boundary for externally stored
-content. The provider interface family and external asset-source persistence are
-implemented, but external storage is not available until connection, delivery,
-and management work lands.
+content. The provider interface family, external asset-source persistence, and
+storage-connection repository with encrypted token custody are implemented, but
+external storage is not available until OAuth, delivery, and management work
+lands.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -118,6 +119,16 @@ not blocked by dependent assets: blocking cannot prevent provider-side
 revocation and would trap the owner. Dependents retain their metadata but become
 `external_missing` until each page is repaired. A later new connection does not
 silently retarget old object references.
+
+`lib/external-storage/` now defines strict owner-safe connection metadata and a
+repository contract for create, lookup, owner listing, active uniqueness,
+revocation, same-subject reauthorization, and provider-only credential access.
+Memory and Deno KV satisfy one conformance suite. The KV implementation retains
+revoked metadata, removes token material on revocation, and stores credentials
+only as randomized AES-256-GCM ciphertext authenticated to the connection ID.
+The 256-bit key is supplied outside KV as canonical base64url configuration
+(`IAM_PAGER_STORAGE_TOKEN_KEY`); key loss is credential loss. The repository has
+no management serialization path capable of carrying tokens.
 
 ## ES-DELIVERY — Resolution and failure behavior
 

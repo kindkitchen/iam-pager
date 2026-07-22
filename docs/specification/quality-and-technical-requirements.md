@@ -194,4 +194,6 @@ Deno KV implementations. Coverage must include:
 - identical PDF bytes under endpoint-specific disposition;
 - API-key lifecycle, one-time bearer exposure, bearer precedence without cookie
   fallback, and the permission matrix across every API operation;
+- storage-connection active uniqueness, retained revocation metadata, credential
+  isolation and destruction, authenticated encryption, and malformed KV state;
 - presenter/component boundaries that keep logic outside the web layer.

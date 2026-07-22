@@ -83,11 +83,12 @@ delivery supports validators and one byte range.
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
 storage is a selected next slice. Its provider-neutral contract, registry,
-conformance suite, in-memory reference adapter, and payload-free external asset
-persistence now exist, but the capability is not available until connection,
-delivery, and management work lands. The contract keeps metadata local and
-serves verified provider bytes through iam-pager rather than redirecting
-visitors.
+conformance suite, in-memory reference adapter, payload-free external asset
+persistence, and creator/provider connection repository now exist. Connection
+metadata is owner-safe, while provider tokens use separate AES-256-GCM custody
+in Deno KV. The capability is not available until OAuth, delivery, and
+management work lands; verified provider bytes will be served through iam-pager
+rather than redirecting visitors.
 
 ## Architecture
 
@@ -108,7 +109,10 @@ Important boundaries:
   external reference with local integrity facts; Deno KV stores no payload
   object for external assets and decodes legacy source-less manifests as inline.
   Page logic consumes this contract and never provider SDKs or OAuth details
-  directly.
+  directly. `StorageConnectionRepository` separately owns one live connection
+  per creator/provider pair, retained revocation metadata, and provider-only
+  credentials; memory and Deno KV share conformance, and the KV adapter stores
+  only connection-bound AES-256-GCM ciphertext under credential keys.
 - `NamespaceRepository`, `IdentityRepository`, and `SessionRepository` isolate
   their corresponding persistence concerns.
 - `ApiKeyManager` and `ApiKeyRepository` own the owner API-key lifecycle:
@@ -192,6 +196,12 @@ IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/iam-pager.kv
 On Deno Deploy, leave the path unset to use the attached database. Durable
 sessions, pages, and API keys require durable ownership so a session, protected
 page, or API key cannot outlive its user and namespace claim.
+
+The Deno KV storage-connection adapter requires a canonical unpadded base64url
+256-bit token-custody key supplied as `IAM_PAGER_STORAGE_TOKEN_KEY` when that
+adapter is composed. Keep the key outside KV and deployment logs; losing it
+makes stored provider credentials unrecoverable. Storage OAuth composition is
+not exposed yet.
 
 ## Authentication configuration
 
