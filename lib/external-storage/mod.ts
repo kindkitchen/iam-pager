@@ -106,6 +106,7 @@ export {
 export type {
   GoogleDriveOAuthComposition,
   GoogleDriveOAuthConfig,
+  GoogleDriveOAuthConfigParsingOptions,
 } from "./google-drive-oauth-composition.ts";
 export {
   compose_google_drive_oauth,

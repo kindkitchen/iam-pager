@@ -17,13 +17,19 @@ function environment(values: Readonly<Record<string, string>>) {
 
 Deno.test("Google Drive OAuth configuration uses its own exact routes and credentials", () => {
   assertEquals(
-    parse_google_drive_oauth_config(environment({
-      [GOOGLE_DRIVE_MODE_ENV]: "local",
-      [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
-        "http://localhost:5173/auth/storage/google-drive/callback",
-      [GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV]:
-        "http://localhost:5173/auth/storage/google-drive/mock-consent",
-    })),
+    parse_google_drive_oauth_config(
+      environment({
+        [GOOGLE_DRIVE_MODE_ENV]: "local",
+        [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
+          "http://localhost:5173/auth/storage/google-drive/callback",
+        [GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV]:
+          "http://localhost:5173/auth/storage/google-drive/mock-consent",
+      }),
+      {
+        fallback_local_request_host_pattern:
+          "auth-pr-[a-z0-9-]+\\.example\\.com",
+      },
+    ),
     {
       mode: "local",
       redirect_uri: "http://localhost:5173/auth/storage/google-drive/callback",
@@ -32,14 +38,37 @@ Deno.test("Google Drive OAuth configuration uses its own exact routes and creden
     },
   );
   assertEquals(
-    parse_google_drive_oauth_config(environment({
-      [GOOGLE_DRIVE_MODE_ENV]: "local",
-      [GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV]:
-        "pager-pr-[a-z0-9-]+\\.example\\.com",
-    })),
+    parse_google_drive_oauth_config(
+      environment({
+        [GOOGLE_DRIVE_MODE_ENV]: "local",
+        [GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV]:
+          "drive-pr-[a-z0-9-]+\\.example\\.com",
+      }),
+      {
+        fallback_local_request_host_pattern:
+          "auth-pr-[a-z0-9-]+\\.example\\.com",
+      },
+    ),
     {
       mode: "local",
-      request_host_pattern: "pager-pr-[a-z0-9-]+\\.example\\.com",
+      request_host_pattern: "drive-pr-[a-z0-9-]+\\.example\\.com",
+    },
+  );
+  assertEquals(
+    parse_google_drive_oauth_config(
+      environment({
+        [GOOGLE_DRIVE_MODE_ENV]: "local",
+        [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
+          "https://production.example/auth/storage/google-drive/callback",
+      }),
+      {
+        fallback_local_request_host_pattern:
+          "auth-pr-[a-z0-9-]+\\.example\\.com",
+      },
+    ),
+    {
+      mode: "local",
+      request_host_pattern: "auth-pr-[a-z0-9-]+\\.example\\.com",
     },
   );
   assertEquals(

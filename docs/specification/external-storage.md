@@ -164,11 +164,13 @@ initiates or disconnects supported providers; explicit API-key bearers are
 rejected without cookie fallback.
 
 Credential-free local Drive mode needs no redirect URI, client ID, or client
-secret when a request-host pattern is configured. Start requests derive the
-callback origin only from a fully matched HTTPS request host and retain the
-application-owned callback path; mock consent enforces the same origin and
-allowlist. This mode never registers the remote Drive content provider and must
-not match production hosts.
+secret when a request-host pattern is available. A Drive-specific pattern takes
+precedence, followed by a complete static callback/mock-consent pair; otherwise
+local Drive inherits the already validated Google auth pattern. Start requests
+derive the callback origin only from a fully matched HTTPS request host and
+retain the application-owned callback path; mock consent enforces the same
+origin and allowlist. This mode never registers the remote Drive content
+provider and must not match production hosts.
 
 ## ES-DELIVERY — Resolution and failure behavior
 

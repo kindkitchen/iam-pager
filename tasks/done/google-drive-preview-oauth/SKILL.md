@@ -7,5 +7,5 @@ tags: [oauth, google-drive, deployment]
 relates: []
 ---
 
-Completed credential-free Google Drive preview OAuth hardening. Local mode plus a full-host pattern now has composition-root regression coverage, original-mode credential failures identify their mode requirement, and deployment docs show the complete profile.
+Completed local Drive preview-host inheritance. Drive local mode uses its own pattern first, a complete static URL pair second, and otherwise inherits Google auth's validated request-host pattern; original mode remains independent.
 Validated with `deno task verify` (667 tests) and `deno task build`.

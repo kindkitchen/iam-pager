@@ -80,13 +80,16 @@ Google integrations. A host pattern alone does not override `original` mode:
 IAM_PAGER_GOOGLE_AUTH_MODE=local
 IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 IAM_PAGER_GOOGLE_DRIVE_MODE=local
-IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 ```
 
-Do not assign the corresponding redirect URIs, mock-consent URLs, client IDs, or
-client secrets to that preview context. The matched HTTPS request supplies the
-origin; application-owned callback paths remain fixed. Local mode grants fake
-identity and Drive consent, so the pattern must not match production.
+Local Drive inherits the validated auth pattern when
+`IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN` and a complete static Drive URL
+pair are unset; configure that variable only when Drive needs a narrower host
+policy. Do not assign the corresponding redirect URIs, mock-consent URLs, client
+IDs, or client secrets to that preview context. The matched HTTPS request
+supplies the origin; application-owned callback paths remain fixed. Local mode
+grants fake identity and Drive consent, so the pattern must not match
+production.
 
 Sources:
 

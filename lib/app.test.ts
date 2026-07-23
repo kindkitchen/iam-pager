@@ -21,7 +21,6 @@ import {
   GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV,
   GOOGLE_DRIVE_MODE_ENV,
   GOOGLE_DRIVE_REDIRECT_URI_ENV,
-  GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV,
   MemoryStorageConnectionRepository,
   MemoryStorageOAuthAttemptRepository,
 } from "./external-storage/mod.ts";
@@ -84,8 +83,6 @@ const preview_google_drive_environment: Readonly<Record<string, string>> = {
   [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
     "iam-pager-pr-[a-z0-9-]+\\.example\\.com",
   [GOOGLE_DRIVE_MODE_ENV]: "local",
-  [GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV]:
-    "iam-pager-pr-[a-z0-9-]+\\.example\\.com",
 };
 const original_google_environment: Readonly<Record<string, string>> = {
   ...memory_storage_environment,
@@ -433,7 +430,7 @@ Deno.test("configured local Google flow upgrades its guest session", async () =>
   );
 });
 
-Deno.test("configured preview Drive flow derives an allowlisted request host without credentials", async () => {
+Deno.test("configured preview Drive inherits the auth request-host pattern without credentials", async () => {
   const services = await create_configured_app_services({
     get: (name) => preview_google_drive_environment[name],
   });

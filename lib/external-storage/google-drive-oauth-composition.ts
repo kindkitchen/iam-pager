@@ -32,6 +32,11 @@ export interface GoogleDriveEnvironmentSource {
   get(name: string): string | undefined;
 }
 
+export interface GoogleDriveOAuthConfigParsingOptions {
+  /** Already-validated auth host policy inherited only by local Drive mode. */
+  readonly fallback_local_request_host_pattern?: string;
+}
+
 export type GoogleDriveOAuthConfig =
   | {
     readonly mode: "local";
@@ -138,6 +143,7 @@ class GoogleDriveMockConsentScreen implements GoogleMockConsentScreen {
 
 export function parse_google_drive_oauth_config(
   environment: GoogleDriveEnvironmentSource,
+  options: GoogleDriveOAuthConfigParsingOptions = {},
 ): GoogleDriveOAuthConfig {
   const mode = require_value(environment, GOOGLE_DRIVE_MODE_ENV);
   if (mode !== "local" && mode !== "original") {
@@ -147,6 +153,20 @@ export function parse_google_drive_oauth_config(
   if (mode === "local") {
     if (request_host_pattern !== undefined) {
       return { mode, request_host_pattern };
+    }
+    const has_complete_static_urls = has_configured_value(
+      environment.get(GOOGLE_DRIVE_REDIRECT_URI_ENV),
+    ) && has_configured_value(
+      environment.get(GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV),
+    );
+    if (
+      !has_complete_static_urls &&
+      options.fallback_local_request_host_pattern !== undefined
+    ) {
+      return {
+        mode,
+        request_host_pattern: options.fallback_local_request_host_pattern,
+      };
     }
     const redirect_uri = require_value(
       environment,
@@ -254,6 +274,10 @@ export async function compose_google_drive_oauth(
     }),
     mock_consent_screen: null,
   };
+}
+
+function has_configured_value(value: string | undefined): value is string {
+  return value !== undefined && value.length > 0;
 }
 
 function require_value(
