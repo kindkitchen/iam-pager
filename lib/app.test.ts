@@ -57,7 +57,13 @@ import {
 } from "./storage/mod.ts";
 
 const text_encoder = new TextEncoder();
+const memory_storage_environment: Readonly<Record<string, string>> = {
+  [OWNERSHIP_STORAGE_BACKEND_ENV]: "memory",
+  [SESSION_STORAGE_BACKEND_ENV]: "memory",
+  [PAGE_STORAGE_BACKEND_ENV]: "memory",
+};
 const local_google_environment: Readonly<Record<string, string>> = {
+  ...memory_storage_environment,
   [SESSION_COOKIE_MODE_ENV]: "local",
   [GOOGLE_AUTH_MODE_ENV]: "local",
   [GOOGLE_AUTH_REDIRECT_URI_ENV]: "http://localhost:5173/auth/google/callback",
@@ -70,6 +76,7 @@ const local_google_environment: Readonly<Record<string, string>> = {
     "http://localhost:5173/auth/storage/google-drive/mock-consent",
 };
 const original_google_environment: Readonly<Record<string, string>> = {
+  ...memory_storage_environment,
   [GOOGLE_AUTH_MODE_ENV]: "original",
   [GOOGLE_AUTH_REDIRECT_URI_ENV]: "https://pager.test/auth/google/callback",
   [GOOGLE_AUTH_CLIENT_ID_ENV]: "sign-in-client",
