@@ -55,9 +55,10 @@ an equivalent boundary.
 
 ## OS-OPERATIONS — Deployment
 
-Memory repositories are unreliable across restarts or multiple instances. Deno
-KV must be selected explicitly where continuity matters. Local Google mode
-grants fake authentication and is safe only on loopback or narrowly designated
-preview hosts.
+Memory repositories are unreliable across restarts or multiple instances.
+Configured runtimes refuse implicit storage backends, and Deno KV connection
+credentials do not substitute for selecting the application repositories. Local
+Google mode grants fake authentication and is safe only on loopback or narrowly
+designated preview hosts.
 
-Storage records fail closed on unknown or corrupt shapes.
+Storage records and conflicting current/legacy page selectors fail closed.

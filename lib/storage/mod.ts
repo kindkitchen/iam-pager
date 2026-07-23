@@ -3,6 +3,7 @@ export * from "./session-storage.ts";
 export * from "./api-key-storage.ts";
 export * from "./page-storage.ts";
 export * from "./storage-connection-storage.ts";
+export * from "./runtime-storage.ts";
 export * from "./kv-gateway.ts";
 export * from "./kv-toolbox-gateway.ts";
 export * from "./content-data-codec.ts";

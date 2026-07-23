@@ -136,6 +136,7 @@ import {
   parse_page_storage_config,
   parse_session_storage_config,
   parse_storage_connection_storage_config,
+  require_explicit_runtime_storage_selection,
   type SessionRepositoryFactory,
   type StorageConnectionRepositoriesFactory,
 } from "./storage/mod.ts";
@@ -426,6 +427,10 @@ export async function create_configured_app_services(
   environment: EnvironmentSource,
   options: ConfiguredAppServiceOptions = {},
 ): Promise<AppServices> {
+  const session_cookie_mode = parse_session_cookie_mode(
+    environment.get(SESSION_COOKIE_MODE_ENV),
+  );
+  require_explicit_runtime_storage_selection(environment);
   const ownership_storage_config = parse_ownership_storage_config(environment);
   const session_storage_config = parse_session_storage_config(
     environment,
@@ -493,9 +498,7 @@ export async function create_configured_app_services(
       storage_connection_repositories.oauth_attempt_repository,
     google_drive_oauth: google_drive_oauth.client,
     external_storage_providers,
-    session_cookie_mode: parse_session_cookie_mode(
-      environment.get(SESSION_COOKIE_MODE_ENV),
-    ),
+    session_cookie_mode,
     authentication_strategies: [
       new GoogleGAuthStrategy(
         google_gauth.service,

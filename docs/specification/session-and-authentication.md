@@ -155,9 +155,11 @@ available action.
 
 ## SA-STORAGE — Persistence
 
-Sessions default to process memory. Durable sessions require the same durable
-ownership database as users, identities, and namespace claims. Otherwise a
-surviving session could reference a missing user. Page persistence is selected
+Session repositories default to process memory only in tests and direct local
+compositions; every configured runtime must select session, ownership, and page
+backends explicitly. Durable sessions require the same durable ownership
+database as users, identities, and namespace claims. Otherwise a surviving
+session could reference a missing user. Page persistence is selected
 independently under the same durability requirement; API keys and storage
 connections inherit the ownership backend by default so durable users never
 silently receive process-local credentials. Durable token custody requires the

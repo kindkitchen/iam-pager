@@ -11,6 +11,9 @@ import {
 } from "./ownership-storage.ts";
 
 export const PAGE_STORAGE_BACKEND_ENV = "IAM_PAGER_PAGE_STORAGE_BACKEND";
+/** Deployment compatibility for the selector used before the page-aggregate cutover. */
+export const LEGACY_PAGE_STORAGE_BACKEND_ENV =
+  "IAM_PAGER_CONTENT_STORAGE_BACKEND";
 
 export type PageStorageEnvironmentSource = StorageEnvironmentSource;
 export type PageStorageConfig = StorageConfig;
@@ -43,9 +46,21 @@ export function parse_page_storage_config(
   environment: PageStorageEnvironmentSource,
   ownership_config: OwnershipStorageConfig,
 ): PageStorageConfig {
+  const backend = environment.get(PAGE_STORAGE_BACKEND_ENV);
+  const legacy_backend = environment.get(LEGACY_PAGE_STORAGE_BACKEND_ENV);
+  if (
+    backend !== undefined && legacy_backend !== undefined &&
+    backend !== legacy_backend
+  ) {
+    throw new TypeError(
+      `${PAGE_STORAGE_BACKEND_ENV} and ${LEGACY_PAGE_STORAGE_BACKEND_ENV} must match when both are set`,
+    );
+  }
   return parse_dependent_storage_config(
     environment,
-    PAGE_STORAGE_BACKEND_ENV,
+    backend === undefined && legacy_backend !== undefined
+      ? LEGACY_PAGE_STORAGE_BACKEND_ENV
+      : PAGE_STORAGE_BACKEND_ENV,
     ownership_config,
   );
 }

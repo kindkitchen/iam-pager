@@ -3,6 +3,7 @@ import { MemoryPageAggregateRepository } from "../page/mod.ts";
 import { KvToolboxGateway } from "./kv-toolbox-gateway.ts";
 import {
   DefaultPageAggregateRepositoryFactory,
+  LEGACY_PAGE_STORAGE_BACKEND_ENV,
   PAGE_STORAGE_BACKEND_ENV,
   type PageStorageEnvironmentSource,
   parse_page_storage_config,
@@ -37,19 +38,36 @@ Deno.test("page storage configuration defaults explicitly to memory", () => {
 });
 
 Deno.test("durable pages inherit the configured ownership KV path", () => {
+  for (
+    const selector of [
+      PAGE_STORAGE_BACKEND_ENV,
+      LEGACY_PAGE_STORAGE_BACKEND_ENV,
+    ]
+  ) {
+    assertEquals(
+      parse_page_storage_config(
+        environment({ [selector]: "deno-kv" }),
+        { backend: "deno-kv" },
+      ),
+      { backend: "deno-kv" },
+    );
+    assertEquals(
+      parse_page_storage_config(
+        environment({ [selector]: "deno-kv" }),
+        { backend: "deno-kv", path: "/data/ownership.kv" },
+      ),
+      { backend: "deno-kv", path: "/data/ownership.kv" },
+    );
+  }
   assertEquals(
     parse_page_storage_config(
-      environment({ [PAGE_STORAGE_BACKEND_ENV]: "deno-kv" }),
+      environment({
+        [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+        [LEGACY_PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+      }),
       { backend: "deno-kv" },
     ),
     { backend: "deno-kv" },
-  );
-  assertEquals(
-    parse_page_storage_config(
-      environment({ [PAGE_STORAGE_BACKEND_ENV]: "deno-kv" }),
-      { backend: "deno-kv", path: "/data/ownership.kv" },
-    ),
-    { backend: "deno-kv", path: "/data/ownership.kv" },
   );
 });
 
@@ -73,6 +91,18 @@ Deno.test("page storage configuration rejects invalid or dangling durability", (
       ),
     TypeError,
     "requires durable ownership",
+  );
+  assertThrows(
+    () =>
+      parse_page_storage_config(
+        environment({
+          [PAGE_STORAGE_BACKEND_ENV]: "deno-kv",
+          [LEGACY_PAGE_STORAGE_BACKEND_ENV]: "memory",
+        }),
+        { backend: "deno-kv" },
+      ),
+    TypeError,
+    "must match when both are set",
   );
 });
 

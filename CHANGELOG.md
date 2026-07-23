@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23
+
+- Fixed alias-correlated page and asset loss caused by page storage silently
+  falling back to process memory: runtimes now require explicit storage
+  backends, retain the former page selector for deployment compatibility, and
+  verify that alias updates preserve assets across Deno KV reconstruction.
+
 ## 2026-07-22
 
 - Completed creator-facing external storage: a browser-owned connections API

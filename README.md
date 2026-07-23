@@ -192,9 +192,12 @@ deno task hooks:install
 
 ## Persistence
 
-Ownership, sessions, pages, and storage connections default to process memory.
-API keys and storage connections inherit the ownership backend by default,
-preventing durable creator identities from getting process-local credentials.
+Repository factories retain process-memory defaults for tests and direct local
+compositions. The configured runtime refuses to start until ownership, session,
+and page storage are selected explicitly; `deno task dev` deliberately selects
+memory. `DENO_KV_ID` and `DENO_KV_ACCESS_TOKEN` do not select application
+repositories.
+
 For one durable Deno KV composition, set:
 
 ```env
@@ -203,8 +206,11 @@ IAM_PAGER_SESSION_STORAGE_BACKEND=deno-kv
 IAM_PAGER_PAGE_STORAGE_BACKEND=deno-kv
 ```
 
-`IAM_PAGER_API_KEY_STORAGE_BACKEND` can explicitly override API keys to `memory`
-or `deno-kv`; normally no override is needed.
+Deployments using the former `IAM_PAGER_CONTENT_STORAGE_BACKEND` page selector
+remain compatible; new configuration should use
+`IAM_PAGER_PAGE_STORAGE_BACKEND`. `IAM_PAGER_API_KEY_STORAGE_BACKEND` can
+explicitly override API keys to `memory` or `deno-kv`; normally no override is
+needed. API keys and storage connections inherit ownership.
 
 For a self-hosted database, also set the shared path:
 
@@ -212,9 +218,21 @@ For a self-hosted database, also set the shared path:
 IAM_PAGER_OWNERSHIP_DENO_KV_PATH=/var/lib/iam-pager/iam-pager.kv
 ```
 
+For remote Deno KV outside Deno Deploy, the path must be the connection URL and
+the access token must be in the environment; `DENO_KV_ID` is not converted into
+a URL automatically:
+
+```env
+IAM_PAGER_OWNERSHIP_DENO_KV_PATH=https://api.deno.com/v2/databases/<database-id>/connect
+DENO_KV_ACCESS_TOKEN=...
+```
+
 On Deno Deploy, leave the path unset to use the attached database. Durable
 sessions, pages, and API keys require durable ownership so a session, protected
-page, or API key cannot outlive its user and namespace claim.
+page, or API key cannot outlive its user and namespace claim. Selecting a
+backend or path does not migrate data. Adding or removing a page alias
+atomically retains the page's immutable asset; continuity still depends on
+selecting Deno KV rather than process memory.
 
 The Deno KV storage-connection adapter requires a canonical unpadded base64url
 256-bit token-custody key supplied as `IAM_PAGER_STORAGE_TOKEN_KEY`. Keep the

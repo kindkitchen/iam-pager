@@ -169,17 +169,14 @@ function with_atomic_check_counter(
   });
 }
 
-Deno.test("KV page aggregates survive repository reconstruction with exact projections", async () => {
+Deno.test("KV page alias addition survives repository reconstruction with its asset", async () => {
   const kv = await Deno.openKv(":memory:");
   try {
     const writer = new KvPageAggregateRepository(new KvToolboxGateway(kv));
-    await create_asset(writer, "asset-1");
-    const endpoints = endpoint_set("Preview", [
-      binding("Download", "attachment"),
-    ]);
+    const asset = await create_asset(writer, "asset-1");
     const created = await writer.create_managed_page_aggregate({
       page_id: "page-1",
-      endpoint_set: endpoints,
+      endpoint_set: endpoint_set("Preview"),
       owner_user_id: "owner-1",
       access: "public",
       tags: ["reference"],
@@ -187,18 +184,35 @@ Deno.test("KV page aggregates survive repository reconstruction with exact proje
       now: t1,
     });
     assert(created.ok);
+    const updated = await writer.update_managed_page_aggregate({
+      page_id: "page-1",
+      owner_user_id: "owner-1",
+      expected_revision: 1,
+      patch: {
+        endpoint_set: endpoint_set("Preview", [
+          binding("Download", "attachment"),
+        ]),
+      },
+      now: t2,
+    });
+    assert(updated.ok);
+    assertEquals(updated.page.content_asset_id, asset.content_asset_id);
 
     const reader = new KvPageAggregateRepository(new KvToolboxGateway(kv));
     assertEquals(
       await reader.find_page_aggregate_by_id("page-1"),
-      created.page,
+      updated.page,
     );
     assertEquals(
       (await reader.resolve_page_endpoint({
         namespace: "ALICE",
         page_name: "download",
       }))?.page,
-      created.page,
+      updated.page,
+    );
+    assertEquals(
+      await reader.find_content_asset_by_id(asset.content_asset_id),
+      asset,
     );
 
     assertEquals(
