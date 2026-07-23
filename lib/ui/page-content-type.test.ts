@@ -64,7 +64,7 @@ Deno.test("prepared pdf request omits content-type and adds creator CSRF", () =>
 
 Deno.test("prepared pdf request is accepted by the real multipart create contract", async () => {
   const prepared = prepare_pdf_publish_request(
-    draft({ tags: ["docs"] }),
+    draft({ tags: ["docs"], storage_provider_id: "google-drive" }),
     {
       kind: "creator",
       csrf_token: "creator-csrf",
@@ -82,6 +82,9 @@ Deno.test("prepared pdf request is accepted by the real multipart create contrac
   assertEquals(decoded.value.access, "public");
   assertEquals(decoded.value.tags, ["docs"]);
   assertEquals(decoded.value.content.content_type, "pdf");
+  assertEquals(decoded.value.content.storage, {
+    provider_id: "google-drive",
+  });
   assertEquals(decoded.value.content.input.filename, "report.pdf");
   assertEquals([...decoded.value.content.input.bytes], [1, 2, 3, 4]);
   assertEquals(decoded.value.endpoint_set.canonical.delivery_profile, "inline");

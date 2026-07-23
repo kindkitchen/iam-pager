@@ -48,9 +48,13 @@ import {
   GoogleDriveExternalStorageProvider,
   GoogleDriveMockConsentHttpAdapter,
   type GoogleDriveOAuthClient,
+  GoogleDriveStorageConnectionLifecycle,
   MemoryStorageConnectionRepository,
   MemoryStorageOAuthAttemptRepository,
   parse_google_drive_oauth_config,
+  StorageConnectionManagementHttpAdapter,
+  type StorageConnectionManagementHttpHandler,
+  StorageConnectionManagementService,
   type StorageConnectionRepository,
   type StorageOAuthAttemptRepository,
   UnavailableGoogleDriveOAuthClient,
@@ -96,6 +100,10 @@ import {
   CreatorPublicPageViewPresenter,
   type PublicPageViewPresenter,
 } from "./ui/public-page-view.ts";
+import {
+  CreatorStorageConnectionPanelPresenter,
+  type StorageConnectionPanelPresenter,
+} from "./ui/storage-connections.ts";
 import {
   CookieSessionStrategy,
   CryptoCredentialGenerator,
@@ -175,6 +183,8 @@ export interface AppServices {
   google_drive_connections: GoogleDriveConnectionService;
   google_drive_connections_http: GoogleDriveConnectionHttpHandler;
   google_drive_mock_consent_http: GoogleDriveMockConsentHttpAdapter;
+  storage_connections_http: StorageConnectionManagementHttpHandler;
+  storage_connection_panel: StorageConnectionPanelPresenter;
   external_storage_providers: ExternalStorageProviderResolver;
 }
 
@@ -258,6 +268,8 @@ export function create_app_services(
   const external_storage_providers = new ExternalStorageProviderRegistry(
     options.external_storage_providers ?? [],
   );
+  const storage_connection_repository = options.storage_connection_repository ??
+    new MemoryStorageConnectionRepository();
   const api_key_repository = options.api_key_repository ??
     new MemoryApiKeyRepository();
   const api_keys = new ApiKeyService({
@@ -286,6 +298,7 @@ export function create_app_services(
       namespace_repository,
     ),
     external_storage_providers,
+    storage_connections: storage_connection_repository,
     clock,
   });
   const pages_http = new PageHttpAdapter({
@@ -341,8 +354,6 @@ export function create_app_services(
   const google_mock_consent_http = new GoogleMockConsentHttpAdapter({
     screen: options.google_mock_consent_screen ?? null,
   });
-  const storage_connection_repository = options.storage_connection_repository ??
-    new MemoryStorageConnectionRepository();
   const storage_oauth_attempt_repository =
     options.storage_oauth_attempt_repository ??
       new MemoryStorageOAuthAttemptRepository();
@@ -361,6 +372,19 @@ export function create_app_services(
   });
   const google_drive_mock_consent_http = new GoogleDriveMockConsentHttpAdapter(
     options.google_drive_mock_consent_screen ?? null,
+  );
+  const storage_connection_management = new StorageConnectionManagementService({
+    connections: storage_connection_repository,
+    providers: external_storage_providers,
+    lifecycles: [
+      new GoogleDriveStorageConnectionLifecycle(google_drive_connections),
+    ],
+  });
+  const storage_connections_http = new StorageConnectionManagementHttpAdapter(
+    storage_connection_management,
+  );
+  const storage_connection_panel = new CreatorStorageConnectionPanelPresenter(
+    storage_connection_management,
   );
   return {
     engine,
@@ -391,6 +415,8 @@ export function create_app_services(
     google_drive_connections,
     google_drive_connections_http,
     google_drive_mock_consent_http,
+    storage_connections_http,
+    storage_connection_panel,
     external_storage_providers,
   };
 }

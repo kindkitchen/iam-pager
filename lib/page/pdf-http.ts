@@ -15,6 +15,7 @@ export interface PdfMultipartCreateCommand {
   readonly content: {
     readonly content_type: "pdf";
     readonly input: { readonly bytes: Uint8Array; readonly filename: string };
+    readonly storage?: { readonly provider_id: string };
   };
 }
 
@@ -70,11 +71,12 @@ export class WebPdfMultipartDecoder implements PdfMultipartDecoder {
     if (!parsed.ok) return parsed;
     const metadata = decode_create_metadata(parsed.value.metadata);
     if (!metadata.ok) return invalid_metadata(metadata.detail);
+    const { storage, ...command } = metadata.value;
     return {
       ok: true,
       value: {
-        ...metadata.value,
-        content: pdf_content(parsed.value),
+        ...command,
+        content: pdf_content(parsed.value, storage),
       },
     };
   }
@@ -86,11 +88,12 @@ export class WebPdfMultipartDecoder implements PdfMultipartDecoder {
     if (!parsed.ok) return parsed;
     const metadata = decode_update_metadata(parsed.value.metadata);
     if (!metadata.ok) return invalid_metadata(metadata.detail);
+    const { storage, ...command } = metadata.value;
     return {
       ok: true,
       value: {
-        ...metadata.value,
-        content: pdf_content(parsed.value),
+        ...command,
+        content: pdf_content(parsed.value, storage),
       },
     };
   }
@@ -226,10 +229,14 @@ async function parse_pdf_multipart(
   };
 }
 
-function pdf_content(parsed: ParsedPdfMultipart) {
+function pdf_content(
+  parsed: ParsedPdfMultipart,
+  storage?: { provider_id: string },
+) {
   return {
     content_type: "pdf" as const,
     input: { bytes: parsed.bytes, filename: parsed.filename },
+    ...(storage === undefined ? {} : { storage }),
   };
 }
 
@@ -237,8 +244,14 @@ function decode_create_metadata(input: unknown): DecodeResult<{
   endpoint_set: PageEndpointSetIntent;
   access: PageAccess;
   tags?: string[];
+  storage?: { provider_id: string };
 }> {
-  const body = strict_object(input, ["endpoint_set", "access", "tags?"]);
+  const body = strict_object(input, [
+    "endpoint_set",
+    "access",
+    "tags?",
+    "storage?",
+  ]);
   if (!body.ok) return body;
   if (typeof body.value.access !== "string") {
     return { ok: false, detail: "access must be a string" };
@@ -249,12 +262,15 @@ function decode_create_metadata(input: unknown): DecodeResult<{
   if (!endpoint_set.ok) return endpoint_set;
   const tags = decode_tags(body.value.tags);
   if (!tags.ok) return tags;
+  const storage = decode_storage(body.value.storage);
+  if (!storage.ok) return storage;
   return {
     ok: true,
     value: {
       endpoint_set: endpoint_set.value,
       access: body.value.access as PageAccess,
       ...(tags.value === undefined ? {} : { tags: tags.value }),
+      ...(storage.value === undefined ? {} : { storage: storage.value }),
     },
   };
 }
@@ -263,8 +279,14 @@ function decode_update_metadata(input: unknown): DecodeResult<{
   endpoint_set?: PageEndpointSetIntent;
   access?: PageAccess;
   tags?: string[];
+  storage?: { provider_id: string };
 }> {
-  const body = strict_object(input, ["endpoint_set?", "access?", "tags?"]);
+  const body = strict_object(input, [
+    "endpoint_set?",
+    "access?",
+    "tags?",
+    "storage?",
+  ]);
   if (!body.ok) return body;
   if (
     body.value.access !== undefined && typeof body.value.access !== "string"
@@ -279,6 +301,8 @@ function decode_update_metadata(input: unknown): DecodeResult<{
   }
   const tags = decode_tags(body.value.tags);
   if (!tags.ok) return tags;
+  const storage = decode_storage(body.value.storage);
+  if (!storage.ok) return storage;
   return {
     ok: true,
     value: {
@@ -287,8 +311,21 @@ function decode_update_metadata(input: unknown): DecodeResult<{
         ? {}
         : { access: body.value.access as PageAccess }),
       ...(tags.value === undefined ? {} : { tags: tags.value }),
+      ...(storage.value === undefined ? {} : { storage: storage.value }),
     },
   };
+}
+
+function decode_storage(
+  input: unknown,
+): DecodeResult<{ provider_id: string } | undefined> {
+  if (input === undefined) return { ok: true, value: undefined };
+  const storage = strict_object(input, ["provider_id"]);
+  if (!storage.ok) return storage;
+  if (typeof storage.value.provider_id !== "string") {
+    return { ok: false, detail: "storage.provider_id must be a string" };
+  }
+  return { ok: true, value: { provider_id: storage.value.provider_id } };
 }
 
 function decode_tags(input: unknown): DecodeResult<string[] | undefined> {

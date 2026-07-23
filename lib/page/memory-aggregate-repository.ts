@@ -173,6 +173,7 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
       page_name_query: request.page_name_query ?? null,
       access: request.access ?? null,
       tag: request.tag ?? null,
+      external_missing: request.external_missing ?? null,
     };
     let after: PageSortKey | null = null;
     if (request.cursor !== undefined) {

@@ -33,8 +33,8 @@ direct-content routes never carry a key.
 ## CSRF policy
 
 - **Browser user** mutations require the exact session synchronizer token —
-  `x-csrf-token` header on page and API-key operations, the `csrf_token` body
-  field on namespace reservation. Reads need no token.
+  `x-csrf-token` header on page, API-key, and storage-connection operations, the
+  `csrf_token` body field on namespace reservation. Reads need no token.
 - **API key** requests carry no CSRF token in any position. Each operation
   instead requires the mapped permission below; a valid key without it receives
   `403` `insufficient_permission`.
@@ -51,33 +51,38 @@ callers alike.
 Key permissions are explicit `read`, `write`, and `delete` grants (`all` expands
 at creation time; see [the API-key contract](api-keys.md)).
 
-| Operation                           | Guest browser | Browser user          | API key             |
-| ----------------------------------- | ------------- | --------------------- | ------------------- |
-| `GET /api/pages`                    | never         | yes                   | `read`              |
-| `POST /api/pages`                   | trial only    | yes + CSRF            | `write` (managed)   |
-| `GET /api/pages/:id`                | never         | yes                   | `read`              |
-| `PATCH /api/pages/:id`              | never         | yes + CSRF + If-Match | `write` + If-Match  |
-| `DELETE /api/pages/:id`             | never         | yes + CSRF + If-Match | `delete` + If-Match |
-| `POST /api/pages/:id/rename`        | never         | yes + CSRF + If-Match | `write` + If-Match  |
-| `POST /api/pages/:id/duplicate`     | never         | yes + CSRF + If-Match | `write` + If-Match  |
-| `POST /api/pages/bulk/access`       | never         | yes + CSRF            | `write`             |
-| `POST /api/pages/bulk/delete`       | never         | yes + CSRF            | `delete`            |
-| `GET /api/namespaces`               | never         | yes                   | `read`              |
-| `POST /api/namespaces`              | never         | yes + body CSRF       | `write`             |
-| `GET /api/api-keys`                 | never         | yes                   | never               |
-| `POST /api/api-keys`                | never         | yes + CSRF            | never               |
-| `GET /api/api-keys/:id`             | never         | yes                   | never               |
-| `PATCH /api/api-keys/:id`           | never         | yes + CSRF + If-Match | never               |
-| `DELETE /api/api-keys/:id`          | never         | yes + CSRF + If-Match | never               |
-| `DELETE /api/api-keys` (revoke-all) | never         | yes + CSRF            | `delete`            |
+| Operation                             | Guest browser | Browser user          | API key             |
+| ------------------------------------- | ------------- | --------------------- | ------------------- |
+| `GET /api/pages`                      | never         | yes                   | `read`              |
+| `POST /api/pages`                     | trial only    | yes + CSRF            | `write` (managed)   |
+| `GET /api/pages/:id`                  | never         | yes                   | `read`              |
+| `PATCH /api/pages/:id`                | never         | yes + CSRF + If-Match | `write` + If-Match  |
+| `POST /api/pages/:id/relink`          | never         | yes + CSRF + If-Match | `write` + If-Match  |
+| `DELETE /api/pages/:id`               | never         | yes + CSRF + If-Match | `delete` + If-Match |
+| `POST /api/pages/:id/rename`          | never         | yes + CSRF + If-Match | `write` + If-Match  |
+| `POST /api/pages/:id/duplicate`       | never         | yes + CSRF + If-Match | `write` + If-Match  |
+| `POST /api/pages/bulk/access`         | never         | yes + CSRF            | `write`             |
+| `POST /api/pages/bulk/delete`         | never         | yes + CSRF            | `delete`            |
+| `GET /api/namespaces`                 | never         | yes                   | `read`              |
+| `POST /api/namespaces`                | never         | yes + body CSRF       | `write`             |
+| `GET /api/api-keys`                   | never         | yes                   | never               |
+| `POST /api/api-keys`                  | never         | yes + CSRF            | never               |
+| `GET /api/api-keys/:id`               | never         | yes                   | never               |
+| `PATCH /api/api-keys/:id`             | never         | yes + CSRF + If-Match | never               |
+| `DELETE /api/api-keys/:id`            | never         | yes + CSRF + If-Match | never               |
+| `DELETE /api/api-keys` (revoke-all)   | never         | yes + CSRF            | `delete`            |
+| `GET /api/storage-connections`        | never         | yes                   | never               |
+| `POST /api/storage-connections/:id`   | never         | yes + CSRF            | never               |
+| `DELETE /api/storage-connections/:id` | never         | yes + CSRF            | never               |
 
 Notes:
 
 - A key-authenticated `POST /api/pages` is always a managed owner create; trial
   publication exists only for a guest browser session.
-- Key management stays browser-owned. An explicit bearer on any key-management
-  operation other than revoke-all is rejected with the non-disclosing `401`
-  regardless of its grants. Bearer revoke-all revokes the calling key too.
+- Key and storage-connection management stay browser-owned. An explicit bearer
+  on any storage-connection operation or key-management operation other than
+  revoke-all is rejected with the non-disclosing `401` regardless of its grants.
+  Bearer revoke-all revokes the calling key too.
 - Keys never authenticate site routes, `/auth/**`, or direct-content delivery,
   including private direct content.
 

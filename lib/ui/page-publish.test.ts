@@ -41,6 +41,7 @@ Deno.test("Markdown publish sends an explicit multi-reference endpoint set", () 
     }],
     markdown: "# Notes",
     css: "body { color: navy; }",
+    storage_provider_id: "google-drive",
   };
   const prepared = prepare_page_publish_request(draft, {
     kind: "creator",
@@ -65,6 +66,7 @@ Deno.test("Markdown publish sends an explicit multi-reference endpoint set", () 
     content: {
       content_type: "md-page",
       input: { md: "# Notes", css: "body { color: navy; }" },
+      storage: { provider_id: "google-drive" },
     },
   });
   assertEquals(draft.primary.namespace, "  Alice  ");

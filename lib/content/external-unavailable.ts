@@ -13,6 +13,7 @@ export class ExternalUnavailableContentHandler implements
     ExternalUnavailableContent
   > {
   readonly content_type = "external-unavailable";
+  readonly canonical_codec_version = "external-unavailable-v1";
   readonly supported_delivery_profiles = ["inline"] as const;
 
   validate(input: unknown): ContentResult<null> {

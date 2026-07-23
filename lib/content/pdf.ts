@@ -68,6 +68,7 @@ export class PdfHandler
   implements
     ContentTypeHandler<PdfInput, PdfData, PdfManagementRepresentation> {
   readonly content_type = "pdf";
+  readonly canonical_codec_version = "pdf-v1";
   readonly supported_delivery_profiles = ["inline", "attachment"] as const;
   readonly #max_bytes: number;
 

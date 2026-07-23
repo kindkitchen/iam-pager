@@ -1,8 +1,13 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { BearerFirstApiRequestAuthenticator } from "../api-auth/mod.ts";
 import type { ApiKeyBearerResolver, ApiKeyPrincipal } from "../api-key/mod.ts";
+import type { ContentAsset } from "../content/asset.ts";
 import { MdPageHandler } from "../content/md-page.ts";
 import { PdfHandler } from "../content/pdf.ts";
+import {
+  ExternalStorageProviderRegistry,
+  MemoryExternalStorageProvider,
+} from "../external-storage/mod.ts";
 import { LocatorEngine } from "../locator/engine.ts";
 import { PathSlugStrategy } from "../locator/path-slug-strategy.ts";
 import { MemoryNamespaceRepository } from "../namespace/memory-repository.ts";
@@ -129,12 +134,16 @@ async function make_fixture() {
     strategies: [new PathSlugStrategy()],
     forbidden_namespaces: ["site", "api", "auth"],
   });
+  const external_provider = new MemoryExternalStorageProvider();
   const pages = new PageService({
     engine,
     repository,
     namespace_authority: new RepositoryNamespaceAuthorityResolver(namespaces),
     handlers: [new MdPageHandler(), new PdfHandler()],
     page_id_generator: new SequenceIds(),
+    external_storage_providers: new ExternalStorageProviderRegistry([
+      external_provider,
+    ]),
     clock: new AdvancingClock(),
   });
   return {
@@ -147,6 +156,7 @@ async function make_fixture() {
     engine,
     pages,
     repository,
+    external_provider,
   };
 }
 
@@ -833,6 +843,104 @@ Deno.test("page HTTP list accepts name, access, and tag filters strictly", async
     assertEquals(response.status, 400, query);
     assertEquals((await response.json()).error, "invalid_filter");
   }
+});
+
+Deno.test("page HTTP exposes, filters, and repairs external health", async () => {
+  const { adapter, repository, external_provider } = await make_fixture();
+  const body = text_encoder.encode("<!doctype html><h1>External</h1>");
+  const digest = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", body)),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const old_ref = {
+    provider_id: "memory",
+    connection_id: "connection-1",
+    external_ref: "old-object",
+    version_hint: "version-1",
+  } as const;
+  const asset: ContentAsset = {
+    content_asset_id: "external-http-asset",
+    content_type: "md-page",
+    source: { kind: "external", ref: old_ref },
+    meta: {
+      media_type: "text/html; charset=utf-8",
+      size_bytes: body.byteLength,
+      sha256: digest,
+      codec_version: "md-page-html-v1",
+    },
+    created_at: now,
+  };
+  assert((await repository.create_content_asset(asset)).ok);
+  const created = await repository.create_managed_page_aggregate({
+    page_id: "external-http-page",
+    endpoint_set: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "broken" },
+        delivery_profile: "inline",
+      },
+      alternates: [],
+    },
+    owner_user_id: owner_session.user_id,
+    access: "public",
+    content_asset_id: asset.content_asset_id,
+    now,
+  });
+  assert(created.ok);
+  assert(
+    (await repository.update_external_content_health({
+      page_id: "external-http-page",
+      content_asset_id: asset.content_asset_id,
+      external_missing: {
+        cause: "external_content_missing",
+        detected_at: now,
+      },
+    })).ok,
+  );
+  external_provider.seed_content(old_ref, body);
+  external_provider.seed_content(
+    { ...old_ref, external_ref: "new-object" },
+    body,
+  );
+
+  const inspected = await adapter.item(
+    request("/api/pages/external-http-page"),
+    context(owner_session),
+  );
+  assertEquals(inspected.status, 200);
+  const inspected_body = await inspected.json();
+  assertEquals(inspected_body.page.external_missing, {
+    cause: "external_content_missing",
+    detected_at: now.toISOString(),
+  });
+  assertEquals(inspected_body.page.content.external_source, {
+    provider_id: "memory",
+    external_ref: "old-object",
+  });
+  const filtered = await adapter.collection(
+    request("/api/pages?external_missing=true"),
+    context(owner_session),
+  );
+  assertEquals(filtered.status, 200);
+  assertEquals((await filtered.json()).pages.length, 1);
+  const invalid_filter = await adapter.collection(
+    request("/api/pages?external_missing=yes"),
+    context(owner_session),
+  );
+  assertEquals(invalid_filter.status, 400);
+
+  const repaired = await adapter.item_action(
+    request("/api/pages/external-http-page/relink", {
+      method: "POST",
+      headers: creator_headers('"page-external-http-page-r1"'),
+      body: { external_ref: "new-object" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(repaired.status, 200);
+  const repaired_body = await repaired.json();
+  assertEquals(repaired_body.outcome, "relinked");
+  assertEquals(repaired_body.page.external_missing, undefined);
+  assertEquals(repaired_body.page.revision, 2);
 });
 
 Deno.test("page HTTP rename is authenticated, revision-bound, and conflict-safe", async () => {

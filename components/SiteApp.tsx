@@ -11,12 +11,14 @@ import type {
 } from "../lib/ui/site-navigation.ts";
 import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
 import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
+import type { StorageConnectionPanel } from "../lib/ui/storage-connections.ts";
 
 export interface SiteAppProps {
   readonly navigation: SiteNavigation;
   readonly breadcrumb?: SiteBreadcrumbTrail;
   readonly namespace_panel: NamespacePanel;
   readonly page_management: PageManagementPanelModel;
+  readonly storage_connections: StorageConnectionPanel;
 }
 
 /** Site shell served at `/` and `/site/*`; raw delivery stays separate. */
@@ -26,6 +28,7 @@ export function SiteApp(
     breadcrumb,
     namespace_panel,
     page_management,
+    storage_connections,
   }: SiteAppProps,
 ) {
   const initial_namespace = new FourWordRandomNameGenerator().generate();
@@ -59,6 +62,9 @@ export function SiteApp(
         <PageManagementPanel
           csrf_token={page_management.csrf_token}
           owned_namespaces={page_management.owned_namespaces}
+          storage_options={storage_connections.kind === "creator"
+            ? storage_connections.writable_options
+            : []}
           initial_pages={page_management.pages}
           initial_next_cursor={page_management.next_cursor}
         />
@@ -67,6 +73,9 @@ export function SiteApp(
       <PagePublishForm
         initial_namespace={initial_namespace}
         authorization={page_publish_authorization(namespace_panel)}
+        storage_options={storage_connections.kind === "creator"
+          ? storage_connections.writable_options
+          : []}
       />
 
       <aside class="guest-notice">

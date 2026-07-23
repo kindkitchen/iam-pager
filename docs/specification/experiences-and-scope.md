@@ -8,10 +8,9 @@ disposition headers and without the site's navigation shell.
 
 An invalid, absent, private, or unauthorized locator returns a real,
 non-disclosing missing response. Platform routes are never consumed as page
-locators. Once external storage is enabled, an otherwise eligible page whose
-external payload is missing or unreachable instead returns the bounded,
-platform-owned `503` placeholder from `ES-DELIVERY`; provider details remain
-hidden.
+locators. An otherwise eligible page whose external payload is missing or
+unreachable instead returns the bounded, platform-owned `503` placeholder from
+`ES-DELIVERY`; provider details remain hidden.
 
 ## EX-WRAPPED — View through the site
 
@@ -45,10 +44,10 @@ bounded and typed.
 
 A guest can create or replace only a public untagged trial when every referenced
 namespace is unreserved. An authenticated creator must own every referenced
-namespace and send the current session CSRF token. Guest assets remain inline.
-After the selected external-storage capability lands, a creator may choose a
-write-capable connection; validation and upload must both succeed before the
-page can reference the new asset, with no silent inline fallback.
+namespace and send the current session CSRF token. Guest assets remain inline. A
+creator may choose an active write-capable storage connection during publish or
+content replacement; validation and upload must both succeed before the page can
+reference the new external asset, with no silent inline fallback.
 
 Markdown uses strict JSON. PDF uses exactly one bounded JSON metadata part and
 one bounded PDF file part. Every format uses the same non-empty endpoint intent:
@@ -71,11 +70,13 @@ A signed-in creator can reserve namespaces and then:
   owned-namespace path controls;
 - rename within the namespace;
 - duplicate into fresh endpoints;
+- identify externally unavailable pages, re-link byte-identical provider copies,
+  or replace inline to detach;
 - delete one page;
 - bulk-change access or delete explicit selections;
-- once external storage is enabled, connect or disconnect one account per
-  provider, choose eligible storage during publish/replace, inspect bounded
-  connection health, and repair pages with unavailable external content.
+- connect or disconnect one account per provider, choose eligible storage during
+  publish/replace, inspect bounded owner-safe connection status, and repair
+  pages with unavailable external content.
 
 Every mutation uses server-derived identity, namespace authority, CSRF, and an
 exact page revision. Stale UI operations refresh affected rows but never retry a

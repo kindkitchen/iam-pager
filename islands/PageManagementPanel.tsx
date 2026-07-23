@@ -6,6 +6,7 @@ import {
   format_size_bytes,
   managed_bulk_access_from_api,
   managed_bulk_delete_from_api,
+  managed_external_content_source,
   managed_list_from_api,
   managed_md_page_draft,
   managed_pdf_delivery_links,
@@ -26,11 +27,13 @@ import {
   prepare_managed_inspect_request,
   prepare_managed_list_request,
   prepare_managed_pdf_replace_request,
+  prepare_managed_relink_request,
   prepare_managed_rename_request,
   prepare_managed_update_request,
   type PreparedManagedRequest,
 } from "../lib/ui/page-management.ts";
 import { page_api_failure_presenter } from "../lib/ui/page-api-failure.ts";
+import type { WritableStorageOption } from "../lib/ui/storage-connections.ts";
 import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
 import {
   describe_pdf_file,
@@ -47,6 +50,7 @@ interface MdEditorState {
   markdown: string;
   css: string;
   tags_input: string;
+  storage_provider_id: string;
   saving: boolean;
 }
 
@@ -56,6 +60,7 @@ interface PdfEditorState {
   metadata: ManagedPdfMetadata;
   selected_file: File | null;
   tags_input: string;
+  storage_provider_id: string;
   saving: boolean;
 }
 
@@ -64,6 +69,12 @@ type EditorState = MdEditorState | PdfEditorState;
 interface RenameState {
   page_id: string;
   page_name: string;
+}
+
+interface RelinkState {
+  page_id: string;
+  external_ref: string;
+  saving: boolean;
 }
 
 interface ManagedReferenceRow extends ManagedEndpointDraft {
@@ -88,9 +99,15 @@ interface FilterDraft {
   name: string;
   access: "" | "public" | "private";
   tag: string;
+  broken_only: boolean;
 }
 
-const empty_filter_draft: FilterDraft = { name: "", access: "", tag: "" };
+const empty_filter_draft: FilterDraft = {
+  name: "",
+  access: "",
+  tag: "",
+  broken_only: false,
+};
 const max_ui_selection = 100;
 
 export interface PageManagementPanelProps {
@@ -98,6 +115,8 @@ export interface PageManagementPanelProps {
   csrf_token: string;
   /** Namespace choices authorized and loaded by the server presenter. */
   owned_namespaces: readonly string[];
+  /** Active write-capable external custody choices derived server-side. */
+  storage_options?: readonly WritableStorageOption[];
   /** Server-rendered snapshot; the island continues through `/api/pages`. */
   initial_pages: readonly PageManagementSummary[];
   initial_next_cursor: string | null;
@@ -137,6 +156,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     null,
   );
   const [rename, set_rename] = useState<RenameState | null>(null);
+  const [relink, set_relink] = useState<RelinkState | null>(null);
   const [reference_editor, set_reference_editor] = useState<
     ReferenceEditorState | null
   >(null);
@@ -206,6 +226,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       current?.page_id === page_id ? null : current
     );
     set_rename((current) => current?.page_id === page_id ? null : current);
+    set_relink((current) => current?.page_id === page_id ? null : current);
     set_confirming_delete((current) => current === page_id ? null : current);
   }
 
@@ -291,6 +312,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       set_confirming_bulk_delete(false);
       set_confirming_delete(null);
       set_rename(null);
+      set_relink(null);
       set_editor(null);
     } catch (error) {
       fail(error instanceof Error ? error.message : String(error));
@@ -307,6 +329,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       ...(filter_draft.name.trim() === "" ? {} : { name: filter_draft.name }),
       ...(filter_draft.access === "" ? {} : { access: filter_draft.access }),
       ...(filter_draft.tag.trim() === "" ? {} : { tag: filter_draft.tag }),
+      ...(filter_draft.broken_only ? { external_missing: true } : {}),
     };
     await replace_list(filters);
   }
@@ -446,7 +469,13 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         fail("page inspection response was not understood");
         return;
       }
-      const md_draft = managed_md_page_draft(body?.page?.content);
+      const external_source = managed_external_content_source(
+        body?.page?.content,
+      );
+      const md_draft = managed_md_page_draft(body?.page?.content) ??
+        (external_source !== null && refreshed.content_type === "md-page"
+          ? { markdown: "", css: "" }
+          : null);
       const pdf_metadata = managed_pdf_metadata(
         body?.page?.content,
         refreshed.size_bytes,
@@ -458,6 +487,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
       update_filtered_row(page.page_id, refreshed);
       set_confirming_delete(null);
       set_rename(null);
+      set_relink(null);
       set_reference_editor(null);
       set_editor(
         md_draft !== null
@@ -467,6 +497,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
             markdown: md_draft.markdown,
             css: md_draft.css,
             tags_input: refreshed.tags.join(", "),
+            storage_provider_id: "",
             saving: false,
           }
           : {
@@ -475,6 +506,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
             metadata: pdf_metadata!,
             selected_file: null,
             tags_input: refreshed.tags.join(", "),
+            storage_provider_id: "",
             saving: false,
           },
       );
@@ -494,7 +526,13 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         page,
         {
           tags: managed_tags_from_input(editor.tags_input),
-          content: { markdown: editor.markdown, css: editor.css },
+          content: {
+            markdown: editor.markdown,
+            css: editor.css,
+            ...(editor.storage_provider_id === "" ? {} : {
+              storage_provider_id: editor.storage_provider_id,
+            }),
+          },
         },
         props.csrf_token,
       );
@@ -536,6 +574,53 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     }
   }
 
+  async function repair_external_reference(page: PageManagementSummary) {
+    if (
+      relink === null || relink.page_id !== page.page_id || relink.saving
+    ) return;
+    if (relink.external_ref.trim() === "") {
+      fail("Enter the replacement external file reference.");
+      return;
+    }
+    const current = relink;
+    set_relink({ ...current, saving: true });
+    set_notice(null);
+    try {
+      const response = await send(prepare_managed_relink_request(
+        page,
+        current.external_ref,
+        props.csrf_token,
+      ));
+      if (response.status === 412) {
+        fail(`${page.path} changed elsewhere; the row was refreshed.`);
+        await refresh_row(page);
+        set_relink(null);
+        return;
+      }
+      if (!response.ok) {
+        fail(await read_error(response));
+        set_relink((next) => next === null ? null : { ...next, saving: false });
+        return;
+      }
+      const body = await response.json();
+      const updated = management_summary_from_api(body?.page);
+      if (updated === null) {
+        fail("re-link response was not understood");
+        set_relink((next) => next === null ? null : { ...next, saving: false });
+        return;
+      }
+      update_filtered_row(page.page_id, updated);
+      set_relink(null);
+      set_notice({
+        kind: "success",
+        message: `${updated.path} was re-linked and is healthy.`,
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+      set_relink((next) => next === null ? null : { ...next, saving: false });
+    }
+  }
+
   async function save_pdf_editor(page: PageManagementSummary) {
     if (editor?.kind !== "pdf" || editor.saving) return;
     const selected_file = editor.selected_file;
@@ -552,6 +637,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         filename: selected_file.name,
         bytes,
         tags: managed_tags_from_input(current_editor.tags_input),
+        ...(current_editor.storage_provider_id === "" ? {} : {
+          storage_provider_id: current_editor.storage_provider_id,
+        }),
       };
       const violation = managed_pdf_replacement_violation(draft);
       if (violation !== null) {
@@ -622,6 +710,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     });
     set_editor(null);
     set_rename(null);
+    set_relink(null);
     set_reference_editor({
       page_id: page.page_id,
       primary: row(page.endpoints.canonical, 0),
@@ -1054,6 +1143,18 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
               })}
           />
         </label>
+        <label class="page-management-broken-filter">
+          <input
+            type="checkbox"
+            checked={filter_draft.broken_only}
+            onChange={(event) =>
+              set_filter_draft({
+                ...filter_draft,
+                broken_only: event.currentTarget.checked,
+              })}
+          />
+          External content unavailable
+        </label>
         <div class="page-management-filter-actions">
           <button type="submit" disabled={controls_busy}>
             {filtering ? "Filtering…" : "Apply filters"}
@@ -1164,6 +1265,11 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                     {page.path}
                   </a>
                   <ManagedDeliveryActions page={page} />
+                  {page.external_missing !== undefined && (
+                    <span class="page-management-external-missing-indicator">
+                      External content unavailable
+                    </span>
+                  )}
                   <span
                     class={`page-management-access page-management-access-${page.access}`}
                   >
@@ -1279,6 +1385,79 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                   </div>
                 </div>
 
+                {page.external_missing !== undefined && (
+                  <section
+                    class="page-management-external-warning"
+                    role="alert"
+                  >
+                    <h3>External content is unavailable</h3>
+                    <p>
+                      Visitors see a temporary placeholder.{" "}
+                      {external_missing_message(
+                        page.external_missing.cause,
+                      )} Detected{" "}
+                      {page.external_missing.detected_at.slice(0, 10)}.
+                    </p>
+                    <p>
+                      Re-link a byte-identical copy on the current storage
+                      connection, or replace the content inline to detach it
+                      from external storage.
+                    </p>
+                    <div class="page-management-actions">
+                      <button
+                        type="button"
+                        disabled={controls_busy}
+                        onClick={() => {
+                          set_editor(null);
+                          set_relink(
+                            relink?.page_id === page.page_id ? null : {
+                              page_id: page.page_id,
+                              external_ref: "",
+                              saving: false,
+                            },
+                          );
+                        }}
+                      >
+                        {relink?.page_id === page.page_id
+                          ? "Close re-link"
+                          : "Re-link external file"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={controls_busy}
+                        onClick={() => open_editor(page)}
+                      >
+                        Replace inline and detach
+                      </button>
+                    </div>
+                    {relink?.page_id === page.page_id && (
+                      <form
+                        class="page-management-relink"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          repair_external_reference(page);
+                        }}
+                      >
+                        <label>
+                          External file reference
+                          <input
+                            value={relink.external_ref}
+                            required
+                            onInput={(event) =>
+                              set_relink({
+                                ...relink,
+                                external_ref: event.currentTarget.value,
+                              })}
+                          />
+                        </label>
+                        <button type="submit" disabled={relink.saving}>
+                          {relink.saving ? "Checking…" : "Verify and re-link"}
+                        </button>
+                      </form>
+                    )}
+                  </section>
+                )}
+
                 {rename?.page_id === page.page_id && (
                   <form
                     class="page-management-rename"
@@ -1380,6 +1559,16 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                             : { ...current, tags_input: value }
                         )}
                     />
+                    <ManagedStorageTarget
+                      value={editor.storage_provider_id}
+                      options={props.storage_options ?? []}
+                      on_change={(storage_provider_id) =>
+                        set_editor((current) =>
+                          current?.kind !== "md-page"
+                            ? current
+                            : { ...current, storage_provider_id }
+                        )}
+                    />
                     <PageEditor
                       markdown={editor.markdown}
                       css={editor.css}
@@ -1433,7 +1622,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                         <div>
                           <dt>Format</dt>
                           <dd>
-                            PDF {editor.metadata.pdf_version} ·{" "}
+                            {editor.metadata.pdf_version === null
+                              ? "External PDF"
+                              : `PDF ${editor.metadata.pdf_version}`} ·{" "}
                             {format_size_bytes(editor.metadata.size_bytes)}
                           </dd>
                         </div>
@@ -1450,6 +1641,16 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                           current?.kind !== "pdf"
                             ? current
                             : { ...current, tags_input: value }
+                        )}
+                    />
+                    <ManagedStorageTarget
+                      value={editor.storage_provider_id}
+                      options={props.storage_options ?? []}
+                      on_change={(storage_provider_id) =>
+                        set_editor((current) =>
+                          current?.kind !== "pdf"
+                            ? current
+                            : { ...current, storage_provider_id }
                         )}
                     />
                     <PdfFileSelection
@@ -1648,6 +1849,43 @@ function ManagedTagsEditor({ value, on_input }: ManagedTagsEditorProps) {
       </small>
     </label>
   );
+}
+
+function ManagedStorageTarget(props: {
+  readonly value: string;
+  readonly options: readonly WritableStorageOption[];
+  readonly on_change: (provider_id: string) => void;
+}) {
+  if (props.options.length === 0) return null;
+  return (
+    <label>
+      Content storage
+      <select
+        value={props.value}
+        onChange={(event) => props.on_change(event.currentTarget.value)}
+      >
+        <option value="">Store content in iam-pager</option>
+        {props.options.map((option) => (
+          <option value={option.provider_id}>
+            Store content in {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function external_missing_message(
+  cause: NonNullable<PageManagementSummary["external_missing"]>["cause"],
+): string {
+  switch (cause) {
+    case "connection_revoked":
+      return "The storage connection was revoked.";
+    case "integrity_mismatch":
+      return "The external bytes no longer match this page.";
+    case "external_content_missing":
+      return "The external file could not be found.";
+  }
 }
 
 function page_word(count: number): string {

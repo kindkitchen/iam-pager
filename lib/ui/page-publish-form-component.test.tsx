@@ -42,6 +42,26 @@ Deno.test("PDF publish starts with one path and a downloadable checkbox", () => 
   assertEquals(html.includes("Write. Style. Preview. Publish."), false);
 });
 
+Deno.test("creator publishing offers active writable external storage", () => {
+  const html = render_to_string(
+    <PagePublishForm
+      initial_namespace="ignored-random"
+      authorization={{
+        kind: "creator",
+        csrf_token: "csrf",
+        owned_namespaces: ["Alice"],
+      }}
+      storage_options={[{
+        provider_id: "google-drive",
+        label: "Google Drive",
+      }]}
+    />,
+  );
+  assertStringIncludes(html, "Content storage");
+  assertStringIncludes(html, "Store content in iam-pager");
+  assertStringIncludes(html, "Store content in Google Drive");
+});
+
 Deno.test("creator publishing selects owned namespaces and blocks an empty owner", () => {
   const creator_html = render_to_string(
     <PagePublishForm

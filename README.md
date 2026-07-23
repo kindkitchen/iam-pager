@@ -52,10 +52,18 @@ private, invalid, and unauthorized visitor lookups share a non-disclosing 404.
 Google authentication establishes an application user. A creator can reserve one
 or more namespaces and then create, inspect, update, rename, duplicate, make
 public or private, tag, filter, bulk-change, and delete pages in those
-namespaces. Publishing and reference editing select from the creator's owned
-namespaces, including cross-namespace aliases; a newly reserved namespace is
-available to the publishing selector immediately. Every managed mutation is
-owner-checked and revision-bound.
+namespaces. External delivery failures are visible and filterable in page
+management; creators can re-link a byte-identical external copy or replace the
+content inline to detach it. Publishing and reference editing select from the
+creator's owned namespaces, including cross-namespace aliases; a newly reserved
+namespace is available to the publishing selector immediately. Every managed
+mutation is owner-checked and revision-bound.
+
+Signed-in creators manage connected storage at `/site/manage`: connect or
+reauthorize Google Drive, inspect owner-safe account/scope/status metadata,
+disconnect with a dependent-page warning, and choose an active write-capable
+provider when publishing or replacing Markdown/PDF content. Requested external
+writes validate and upload before the page commit and never fall back inline.
 
 Signed-in creators also manage their API keys at `/site/api-keys`: generate a
 key with a typed or shared four-word random label, explicit permissions, and
@@ -90,8 +98,11 @@ size and SHA-256 facts, and serves them through iam-pager without redirecting.
 Missing, revoked, altered, or temporarily unreachable sources return the same
 platform-owned `503` placeholder; definitive failures are recorded idempotently
 on the page and verified recovery clears that revision-neutral health state.
-Creator-facing external publishing, warnings, and repair controls remain to be
-implemented.
+Management summaries expose the safe cause and detection time to owners, the web
+shows warning/repair controls, and a revision-bound repair either re-links a
+verified byte-identical file or replaces content inline. Creator-facing external
+publishing and storage settings are available on the site and through the
+browser-owned storage-connections API.
 
 ## Architecture
 
@@ -148,7 +159,8 @@ sets.
 See [the project specification](docs/specification/README.md),
 [the external-storage contract](docs/specification/external-storage.md),
 [the page API contract](docs/api/pages.md),
-[the API authentication reference](docs/api/authentication.md), and
+[the API authentication reference](docs/api/authentication.md),
+[the storage-connections contract](docs/api/storage-connections.md), and
 [the API-key contract](docs/api/api-keys.md).
 
 ## Local development

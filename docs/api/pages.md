@@ -22,8 +22,8 @@ clients:
   cookie. Key requests carry no CSRF token; instead each operation requires the
   mapped permission, otherwise `403` `insufficient_permission`:
   - `read` — page list and inspect, namespace list;
-  - `write` — page create, update, rename, duplicate, bulk access change, and
-    namespace reservation;
+  - `write` — page create, update, external re-link, rename, duplicate, bulk
+    access change, and namespace reservation;
   - `delete` — page delete and bulk delete.
 
   A key-authenticated create is always a managed owner create, never trial
@@ -59,7 +59,11 @@ Managed summaries contain:
   "updated_at": "2026-07-19T12:00:00.000Z",
   "revision": 1,
   "etag": "\"page-opaque-id-r1\"",
-  "management_url": "/api/pages/opaque-id"
+  "management_url": "/api/pages/opaque-id",
+  "external_missing": {
+    "cause": "external_content_missing",
+    "detected_at": "2026-07-22T12:00:00.000Z"
+  }
 }
 ```
 
@@ -69,11 +73,15 @@ an implied profile. `endpoints` is the complete non-empty locator-reference set
 in deterministic order. References may cross namespaces; managed creation and
 mutation require the actor to own every namespace. Paths are
 application-relative values formatted by the locator boundary. Tags are
-lowercase sorted unique values; trial pages have none.
+lowercase sorted unique values; trial pages have none. `external_missing` is
+owner-only and omitted for healthy pages. Its causes are
+`external_content_missing`, `connection_revoked`, and `integrity_mismatch`.
 
 List output omits editable content. Inspection adds handler-approved input:
 Markdown source/CSS or bounded PDF filename, media type, size, version, and
-replaceability. PDF bytes and storage IDs are never returned.
+replaceability. An external inspection instead identifies its safe provider and
+opaque object reference under `content.external_source`; connection identity,
+credentials, and payload bytes are never returned.
 
 ## Create — `POST /api/pages`
 
@@ -97,7 +105,8 @@ replaceability. PDF bytes and storage IDs are never returned.
   "tags": ["notes", "work"],
   "content": {
     "content_type": "md-page",
-    "input": { "md": "# Notes", "css": "body { color: navy; }" }
+    "input": { "md": "# Notes", "css": "body { color: navy; }" },
+    "storage": { "provider_id": "google-drive" }
   }
 }
 ```
@@ -111,6 +120,14 @@ explicit shape. A guest may create or replace only a public, untagged trial when
 every referenced namespace is unreserved. An authenticated request always
 attempts managed creation, requires CSRF, and must own every referenced
 namespace; it never falls back to trial publication.
+
+`content.storage` is optional and available only to managed creators. It selects
+the caller's active connection for that provider; clients never supply a
+connection ID. The provider must be currently composed with `write` capability.
+Validation and derivation happen first, then the canonical bytes are uploaded,
+and only a successful upload can commit the payload-free external asset and
+page. Omission keeps inline custody. A requested external write never silently
+falls back inline.
 
 Create returns `201`; trial replacement returns `200`. Success includes
 `outcome`, page summary, direct `path`/absolute `url`, `Location`, and, for a
@@ -142,7 +159,8 @@ Metadata is strict UTF-8 JSON:
     ]
   },
   "access": "private",
-  "tags": ["reports"]
+  "tags": ["reports"],
+  "storage": { "provider_id": "google-drive" }
 }
 ```
 
@@ -168,6 +186,7 @@ Requires authentication. Optional query fields:
   characters;
 - `access`: `public` or `private`;
 - `tag`: exact canonical tag;
+- `external_missing`: strict `true` or `false` health selection;
 - `limit`: canonical decimal `1`–`100`, default `50`;
 - `cursor`: opaque continuation from the same normalized filter scope.
 
@@ -204,13 +223,37 @@ profiles against the replacement format.
 
 PDF replacement uses the same exact two-part multipart boundary and always
 includes a new file. Metadata may include the complete `endpoint_set`, `access`,
-and `tags`; each omitted field is preserved. Content and optional endpoint
-changes commit once at the supplied revision.
+and `tags`; each omitted field is preserved. Metadata may also include the same
+optional `storage` provider selector used by create. Markdown replacement puts
+that selector inside `content`. Content and optional endpoint changes commit
+once at the supplied revision.
 
 Success returns the complete inspection and next ETag. Missing preconditions
 return `428`, malformed validators `400`, a stale/different-page validator
 `412`, missing/foreign pages `404`, conflicts `409`, invalid input `422`, and a
-selected-storage endpoint-capacity failure `507`.
+selected-storage endpoint-capacity failure `507`. Replacing content inline
+creates a new immutable asset and clears any `external_missing` warning;
+selecting external storage uploads and commits a fresh external asset instead.
+Connection absence/revocation and providers without write capability return
+`409`; transient or unavailable provider writes return `503`.
+
+## Re-link external content — `POST /api/pages/:page_id/relink`
+
+Requires owner authentication with `write`, CSRF for browser sessions, and an
+exact `If-Match`. The strict body supplies a provider-native object reference:
+
+```json
+{ "external_ref": "1AbCdEf..." }
+```
+
+The service keeps the page's existing owner-proven provider connection, stats
+and fetches the candidate within the current asset's byte bound, and requires a
+byte-identical SHA-256 match. Success creates a new immutable external asset,
+advances the page revision, and clears `external_missing`; it never mutates the
+old asset. Missing candidates and byte mismatches return `422`, revoked
+connections `409`, transient provider failures `503`, and stale intent `412`.
+Changed content must use the ordinary validated inline replacement flow rather
+than re-linking arbitrary provider bytes.
 
 ## Delete — `DELETE /api/pages/:page_id`
 

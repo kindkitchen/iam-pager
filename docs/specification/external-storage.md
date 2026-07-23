@@ -3,9 +3,10 @@
 This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
 storage-connection repository with encrypted token custody, the separate Google
-Drive OAuth connect/disconnect flow, the production Google Drive provider, and
-verified direct and wrapped delivery with fallback behavior are implemented.
-External publishing and creator warning/repair management remain unavailable.
+Drive OAuth connect/disconnect flow, the production Google Drive provider,
+verified direct and wrapped delivery with fallback behavior, creator warning and
+repair management, external publish/replace, and creator connection settings are
+implemented.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -35,7 +36,11 @@ publishing remains inline. Markdown and PDF remain the only content types.
 Publication and replacement accept content through the existing bounded content
 handlers. iam-pager validates and derives the canonical stored payload before a
 provider with write capability receives it. Only after upload succeeds does the
-application commit an external asset and atomically point the page at it.
+application commit an external asset and atomically point the page at it. The
+strict page API accepts an optional provider selector, resolves the creator's
+active connection server-side, and never accepts a client-selected connection
+ID. The web offers only active providers whose composed adapter declares
+`write`.
 
 The local asset record is authoritative and contains:
 
@@ -153,7 +158,10 @@ before exchange. Connect and callback require the same authenticated session.
 Successful consent creates or same-subject reauthorizes one connection while
 preserving an existing refresh token if Google omits it. CSRF-protected POST
 disconnect attempts provider revocation, then revokes locally and destroys
-credentials even when the remote request fails.
+credentials even when the remote request fails. The browser-owned
+`/api/storage-connections` surface lists only safe metadata/capabilities and
+initiates or disconnects supported providers; explicit API-key bearers are
+rejected without cookie fallback.
 
 ## ES-DELIVERY — Resolution and failure behavior
 
@@ -186,15 +194,20 @@ mark an asset missing. V1 has no persistent payload cache, so stale bytes are
 not served during an outage. Success clears a previous observational warning
 only after full integrity verification.
 
-Owners see a bounded warning and safe cause category for affected pages. Repair
-creates or selects a valid replacement asset at an exact page revision by:
+Owners see a bounded warning and safe cause category in page lists and
+inspection, and can filter the managed list to affected pages. Repair creates or
+selects a valid replacement asset at an exact page revision by:
 
 - reauthorizing the existing connection when the provider object still matches;
-- uploading the validated content again, externally or inline; or
-- replacing the page's asset reference with another validated source.
+- replacing content through the validated inline upload flow, which also serves
+  as detach because V1 has no persistent cache; or
+- re-linking the existing owner-proven connection to a byte-identical external
+  copy after provider stat, bounded fetch, size, and SHA-256 verification.
 
-Repair never mutates an immutable asset or silently changes every page that may
-share it.
+The re-link action deliberately cannot import changed arbitrary provider bytes;
+changed content must pass the normal content handler. Every successful repair
+clears `external_missing`. Repair never mutates an immutable asset or silently
+changes every page that may share it.
 
 ## ES-LIFECYCLE — Operations
 

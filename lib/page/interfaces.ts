@@ -6,6 +6,7 @@ import type {
   PageEndpointSetIntent,
   PlanPageEndpointSetResult,
 } from "./endpoint.ts";
+import type { ExternalContentMissingState } from "./aggregate.ts";
 import type { PageAccess, PageId, PageTag } from "./model.ts";
 
 /** HTTP-independent caller authority, derived by an outer transport boundary. */
@@ -75,6 +76,8 @@ export interface PageSummary {
   created_at: Date;
   updated_at: Date;
   revision: number;
+  /** Owner-only external delivery health; omitted from visitor projections. */
+  external_missing?: ExternalContentMissingState;
 }
 
 export interface ManagedPageInspection extends PageSummary {
@@ -82,13 +85,30 @@ export interface ManagedPageInspection extends PageSummary {
     content_type: string;
     /** Handler-owned bounded projection; binary types must omit payload bytes. */
     input: unknown;
+    /** Owner-safe pointer details; connection identity remains server-side. */
+    external_source?: {
+      provider_id: string;
+      external_ref: string;
+    };
   };
 }
 
 export interface PageContentCommand {
   content_type: string;
   input: unknown;
+  /** Omit for inline custody; provider selection never accepts a connection ID. */
+  storage?: { readonly provider_id: string };
 }
+
+export type ExternalPublicationFailureReason =
+  | "external_storage_requires_managed_page"
+  | "invalid_storage_provider"
+  | "storage_connection_not_found"
+  | "storage_provider_unavailable"
+  | "storage_provider_not_writable"
+  | "external_content_missing"
+  | "connection_revoked"
+  | "external_source_unreachable";
 
 /**
  * Inline canonical-locator shorthand or a complete publisher-configured
@@ -130,6 +150,7 @@ export type PublishTrialPageResult =
       | "endpoint_capacity_exceeded"
       | "revision_exhausted"
       | "unknown_content_type"
+      | ExternalPublicationFailureReason
       | "page_id_generation_exhausted";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -158,6 +179,7 @@ export type CreateManagedPageResult =
       | "page_exists"
       | "endpoint_capacity_exceeded"
       | "unknown_content_type"
+      | ExternalPublicationFailureReason
       | "page_id_generation_exhausted";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -170,6 +192,8 @@ export interface ListManagedPagesRequest {
   page_name_query?: string;
   access?: PageAccess;
   tag?: string;
+  /** When present, selects pages by external delivery health. */
+  external_missing?: boolean;
   limit: number;
   cursor?: string;
 }
@@ -224,7 +248,8 @@ export type UpdateManagedPageResult =
       | "namespace_reserved"
       | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
-      | "unknown_content_type";
+      | "unknown_content_type"
+      | ExternalPublicationFailureReason;
   }
   | { ok: false; reason: "invalid_input"; detail: string };
 
@@ -237,6 +262,31 @@ export interface DeleteManagedPageRequest {
 export type DeleteManagedPageResult =
   | { ok: true }
   | { ok: false; reason: "not_found" | "revision_conflict" };
+
+export interface RelinkManagedExternalContentRequest {
+  actor: UserPageActor;
+  page_id: PageId;
+  expected_revision: number;
+  /** Provider-native object ID on the page's existing owner-proven connection. */
+  external_ref: string;
+}
+
+export type RelinkManagedExternalContentResult =
+  | { ok: true; page: ManagedPageInspection }
+  | {
+    ok: false;
+    reason:
+      | "not_found"
+      | "revision_conflict"
+      | "revision_exhausted"
+      | "content_not_external"
+      | "invalid_external_ref"
+      | "provider_unavailable"
+      | "external_content_missing"
+      | "connection_revoked"
+      | "external_source_unreachable"
+      | "external_content_mismatch";
+  };
 
 /** Maximum number of distinct pages accepted by one bulk management command. */
 export const max_bulk_managed_pages = 100;
@@ -438,6 +488,12 @@ export interface ManagedPageDeleter {
   delete_managed(
     request: DeleteManagedPageRequest,
   ): Promise<DeleteManagedPageResult>;
+}
+
+export interface ManagedExternalContentRelinker {
+  relink_managed_external_content(
+    request: RelinkManagedExternalContentRequest,
+  ): Promise<RelinkManagedExternalContentResult>;
 }
 
 export interface ManagedPageBulkAccessChanger {

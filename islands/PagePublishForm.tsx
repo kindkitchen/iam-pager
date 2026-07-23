@@ -16,6 +16,7 @@ import {
   page_api_failure_presenter,
   type PageApiFailure,
 } from "../lib/ui/page-api-failure.ts";
+import type { WritableStorageOption } from "../lib/ui/storage-connections.ts";
 import {
   page_publish_success_from_api,
   type PagePublishAuthorization,
@@ -60,6 +61,7 @@ interface PagePublishFormBaseProps {
 
 export interface PagePublishFormProps extends PagePublishFormBaseProps {
   readonly authorization: PagePublishAuthorization;
+  readonly storage_options?: readonly WritableStorageOption[];
 }
 
 export default function PagePublishForm(props: PagePublishFormProps) {
@@ -91,6 +93,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
   const [markdown, set_markdown] = useState(initial_markdown);
   const [css, set_css] = useState(default_page_style_preset.css);
   const [pdf_file, set_pdf_file] = useState<File | null>(null);
+  const [storage_provider_id, set_storage_provider_id] = useState("");
   const [state, set_state] = useState<PublishState>({ status: "idle" });
   const next_alias_id = useRef(1);
   const generated_names = useRef(new Set([initial_primary_namespace]));
@@ -225,6 +228,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
             aliases: alias_drafts,
             markdown,
             css,
+            ...(storage_provider_id === "" ? {} : { storage_provider_id }),
           },
           props.authorization,
         );
@@ -244,6 +248,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
           canonical: primary_draft,
           alternates: alias_drafts,
           tags: [],
+          ...(storage_provider_id === "" ? {} : { storage_provider_id }),
         };
         const violation = pdf_publish_draft_violation(draft);
         if (violation !== null) {
@@ -425,6 +430,37 @@ export default function PagePublishForm(props: PagePublishFormProps) {
               previewer={page_previewer}
             />
           )}
+
+        {(props.storage_options?.length ?? 0) > 0 && (
+          <fieldset class="storage-target-chooser">
+            <legend>Content storage</legend>
+            <label>
+              <input
+                type="radio"
+                name="storage_provider_id"
+                value=""
+                checked={storage_provider_id === ""}
+                onChange={() => update_draft(() => set_storage_provider_id(""))}
+              />
+              Store content in iam-pager
+            </label>
+            {props.storage_options?.map((option) => (
+              <label key={option.provider_id}>
+                <input
+                  type="radio"
+                  name="storage_provider_id"
+                  value={option.provider_id}
+                  checked={storage_provider_id === option.provider_id}
+                  onChange={() =>
+                    update_draft(() =>
+                      set_storage_provider_id(option.provider_id)
+                    )}
+                />
+                Store content in {option.label}
+              </label>
+            ))}
+          </fieldset>
+        )}
 
         <button
           type="submit"

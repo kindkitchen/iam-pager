@@ -94,6 +94,7 @@ Deno.test("managed cursor binds every active filter", () => {
     page_name_query: "note",
     access: "public" as const,
     tag: "deno",
+    external_missing: true,
   };
   const encoded = encode_managed_page_list_cursor(key, scope);
   assertEquals(decode_managed_page_list_cursor(encoded, scope), key);
@@ -103,6 +104,13 @@ Deno.test("managed cursor binds every active filter", () => {
   );
   assertEquals(
     decode_managed_page_list_cursor(encoded, { ...scope, access: "private" }),
+    null,
+  );
+  assertEquals(
+    decode_managed_page_list_cursor(encoded, {
+      ...scope,
+      external_missing: false,
+    }),
     null,
   );
 });

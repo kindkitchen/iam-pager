@@ -46,7 +46,7 @@ const sort_key_fields = [
   "page_id",
 ] as const;
 
-type CursorScope = Readonly<Record<string, string | null>>;
+type CursorScope = Readonly<Record<string, string | boolean | null>>;
 
 function encode_cursor(
   kind: string,
@@ -138,6 +138,7 @@ export interface ManagedPageListCursorScope {
   page_name_query: string | null;
   access: "public" | "private" | null;
   tag: string | null;
+  external_missing: boolean | null;
 }
 
 export function encode_managed_page_list_cursor(

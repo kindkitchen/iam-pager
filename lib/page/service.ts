@@ -1,6 +1,7 @@
 import {
   type ContentAsset,
   type ContentAssetId,
+  type ExternalContentAssetSource,
   is_inline_content_asset,
   is_valid_content_asset_id,
 } from "../content/asset.ts";
@@ -11,7 +12,14 @@ import type {
   ContentTypeHandler,
 } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
+import type { StorageConnectionRepository } from "../external-storage/connection-repository.ts";
 import type { ExternalStorageProviderResolver } from "../external-storage/interfaces.ts";
+import {
+  external_content_ref_violation,
+  type ExternalContentRef,
+  has_external_storage_capability,
+  is_external_provider_id,
+} from "../external-storage/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
 import {
@@ -58,6 +66,7 @@ import type {
   ListManagedPagesResult,
   ListPublicPagesRequest,
   ListPublicPagesResult,
+  ManagedExternalContentRelinker,
   ManagedPageBulkAccessChanger,
   ManagedPageBulkDeleter,
   ManagedPageCreator,
@@ -82,6 +91,8 @@ import type {
   PublicPageViewer,
   PublishTrialPageRequest,
   PublishTrialPageResult,
+  RelinkManagedExternalContentRequest,
+  RelinkManagedExternalContentResult,
   RenameManagedPageRequest,
   RenameManagedPageResult,
   TrialPagePublisher,
@@ -107,6 +118,7 @@ export interface PageServiceOptions {
   namespace_authority: NamespaceAuthorityResolver;
   handlers: readonly ContentTypeHandler<unknown, unknown>[];
   external_storage_providers?: ExternalStorageProviderResolver;
+  storage_connections?: StorageConnectionRepository;
   page_id_generator?: PageIdGenerator;
   content_asset_id_generator?: ContentAssetIdGenerator;
   endpoint_planner?: PageEndpointPlanner;
@@ -119,9 +131,30 @@ export interface PageServiceOptions {
   max_page_name_attempts?: number;
 }
 
+type PreparedPageContent =
+  | { readonly kind: "inline"; readonly content: PageContent }
+  | {
+    readonly kind: "external";
+    readonly content_type: string;
+    readonly source: ExternalContentAssetSource;
+    readonly meta: ContentMeta;
+  };
+
 type ContentPreparationResult =
-  | { ok: true; content: PageContent }
-  | { ok: false; reason: "unknown_content_type" }
+  | { ok: true; content: PreparedPageContent }
+  | {
+    ok: false;
+    reason:
+      | "unknown_content_type"
+      | "external_storage_requires_managed_page"
+      | "invalid_storage_provider"
+      | "storage_connection_not_found"
+      | "storage_provider_unavailable"
+      | "storage_provider_not_writable"
+      | "external_content_missing"
+      | "connection_revoked"
+      | "external_source_unreachable";
+  }
   | { ok: false; reason: "invalid_input"; detail: string };
 
 type EndpointPreparationResult =
@@ -138,7 +171,23 @@ type SummaryPage = PageAggregate & {
   readonly content: Pick<PageContent, "content_type" | "meta">;
 };
 
-type MaterializedPage = PageAggregate & { readonly content: PageContent };
+type MaterializedContent =
+  | {
+    readonly kind: "inline";
+    readonly content_type: string;
+    readonly data: unknown;
+    readonly meta: ContentMeta;
+  }
+  | {
+    readonly kind: "external";
+    readonly content_type: string;
+    readonly meta: ContentMeta;
+    readonly source: ExternalContentAssetSource;
+  };
+
+type MaterializedPage = PageAggregate & {
+  readonly content: MaterializedContent;
+};
 
 type ResolvedDeliveryRecord = {
   readonly page: PageAggregate;
@@ -192,6 +241,7 @@ export class PageService
     ManagedPageInspector,
     ManagedPageUpdater,
     ManagedPageDeleter,
+    ManagedExternalContentRelinker,
     ManagedPageBulkAccessChanger,
     ManagedPageBulkDeleter,
     ManagedPageRenamer,
@@ -215,6 +265,7 @@ export class PageService
   readonly #page_name_generator: RandomNameGenerator;
   readonly #max_page_name_attempts: number;
   readonly #external_storage_providers: ExternalStorageProviderResolver;
+  readonly #storage_connections?: StorageConnectionRepository;
   readonly #external_unavailable_handler =
     new ExternalUnavailableContentHandler();
 
@@ -240,6 +291,7 @@ export class PageService
     this.#external_storage_providers = options.external_storage_providers ?? {
       resolve: () => null,
     };
+    this.#storage_connections = options.storage_connections;
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
     this.#content_asset_id_generator = options.content_asset_id_generator ??
@@ -282,7 +334,10 @@ export class PageService
     if (authorities.some((authority) => authority !== "unreserved")) {
       return { ok: false, reason: "namespace_reserved" };
     }
-    const prepared = this.#prepare_content(request.content);
+    const prepared = await this.#prepare_content(
+      request.content,
+      request.actor,
+    );
     if (!prepared.ok) return prepared;
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
@@ -336,7 +391,10 @@ export class PageService
     if (authority_failure !== null) {
       return { ok: false, reason: authority_failure };
     }
-    const prepared = this.#prepare_content(request.content);
+    const prepared = await this.#prepare_content(
+      request.content,
+      request.actor,
+    );
     if (!prepared.ok) return prepared;
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
@@ -411,6 +469,9 @@ export class PageService
         ...(page_name_query === undefined ? {} : { page_name_query }),
         ...(request.access === undefined ? {} : { access: request.access }),
         ...(tag === undefined ? {} : { tag }),
+        ...(request.external_missing === undefined
+          ? {}
+          : { external_missing: request.external_missing }),
         limit: request.limit,
         cursor: request.cursor,
       }),
@@ -466,9 +527,12 @@ export class PageService
       return { ok: false, reason: "revision_exhausted" };
     }
     this.#require_handler(page.content.content_type);
-    let content: PageContent | undefined;
+    let content: PreparedPageContent | undefined;
     if (request.patch.content !== undefined) {
-      const prepared = this.#prepare_content(request.patch.content);
+      const prepared = await this.#prepare_content(
+        request.patch.content,
+        request.actor,
+      );
       if (!prepared.ok) return prepared;
       content = prepared.content;
     }
@@ -478,7 +542,9 @@ export class PageService
     if (has_endpoints || content !== undefined) {
       const planned = this.#prepare_endpoint_intent(
         request.patch.endpoint_set ?? current_endpoint_set,
-        content?.content_type ?? page.content.content_type,
+        content === undefined
+          ? page.content.content_type
+          : prepared_content_type(content),
       );
       if (!planned.ok) return planned;
       if (has_endpoints) {
@@ -521,6 +587,105 @@ export class PageService
       return { ok: false, reason: replaced.reason };
     }
     return { ok: true, page: this.#inspection(replaced.page) };
+  }
+
+  async relink_managed_external_content(
+    request: RelinkManagedExternalContentRequest,
+  ): Promise<RelinkManagedExternalContentResult> {
+    this.#require_user(request.actor);
+    if (!is_valid_page_revision(request.expected_revision)) {
+      throw new Error("expected_revision must be a positive safe integer");
+    }
+    const page = await this.#find_authorized_page(
+      request.actor,
+      request.page_id,
+    );
+    if (page === null) return { ok: false, reason: "not_found" };
+    if (page.revision !== request.expected_revision) {
+      return { ok: false, reason: "revision_conflict" };
+    }
+    if (page.revision === Number.MAX_SAFE_INTEGER) {
+      return { ok: false, reason: "revision_exhausted" };
+    }
+    if (page.content.kind !== "external") {
+      return { ok: false, reason: "content_not_external" };
+    }
+
+    const candidate_without_version: ExternalContentRef = {
+      provider_id: page.content.source.ref.provider_id,
+      connection_id: page.content.source.ref.connection_id,
+      external_ref: request.external_ref,
+    };
+    if (external_content_ref_violation(candidate_without_version) !== null) {
+      return { ok: false, reason: "invalid_external_ref" };
+    }
+    const provider = this.#external_storage_providers.resolve(
+      candidate_without_version.provider_id,
+    );
+    if (provider === null) {
+      return { ok: false, reason: "provider_unavailable" };
+    }
+
+    let stated: Awaited<ReturnType<typeof provider.stat_content>>;
+    try {
+      stated = await provider.stat_content(candidate_without_version);
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!stated.ok) return stated;
+    if (stated.value.size_bytes !== page.content.meta.size_bytes) {
+      return { ok: false, reason: "external_content_mismatch" };
+    }
+    const candidate: ExternalContentRef = {
+      ...candidate_without_version,
+      ...(stated.value.version_hint === undefined
+        ? {}
+        : { version_hint: stated.value.version_hint }),
+    };
+    let fetched: Awaited<ReturnType<typeof provider.fetch_content>>;
+    try {
+      fetched = await provider.fetch_content({
+        content_ref: candidate,
+        max_bytes: page.content.meta.size_bytes,
+      });
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!fetched.ok) return fetched;
+    if (
+      fetched.value.stat.size_bytes !== page.content.meta.size_bytes ||
+      fetched.value.body.byteLength !== page.content.meta.size_bytes ||
+      await sha256(fetched.value.body) !== page.content.meta.sha256
+    ) {
+      return { ok: false, reason: "external_content_mismatch" };
+    }
+
+    const now = this.#operation_time();
+    const content_asset_id = await this.#stage_external_content_asset({
+      content_type: page.content.content_type,
+      source: { kind: "external", ref: candidate },
+      meta: page.content.meta,
+      created_at: now,
+    });
+    const updated = await this.#repository.update_managed_page_aggregate({
+      page_id: page.page_id,
+      owner_user_id: request.actor.user_id,
+      expected_revision: request.expected_revision,
+      patch: { content_asset_id },
+      now,
+    });
+    if (!updated.ok) {
+      if (
+        updated.reason === "not_found" ||
+        updated.reason === "revision_conflict" ||
+        updated.reason === "revision_exhausted"
+      ) return { ok: false, reason: updated.reason };
+      throw new Error(`page service persistence: ${updated.reason}`);
+    }
+    return {
+      ok: true,
+      page: this.#inspection(await this.#materialize_aggregate(updated.page)),
+    };
   }
 
   async bulk_change_managed_access(
@@ -1005,7 +1170,7 @@ export class PageService
   async #put_trial(request: {
     page_id: string;
     endpoint_set: PageEndpointSet;
-    content: PageContent;
+    content: PreparedPageContent;
     now: Date;
   }): Promise<
     MaterializedPageMutationResult<
@@ -1017,7 +1182,7 @@ export class PageService
       | "revision_exhausted"
     >
   > {
-    const content_asset_id = await this.#stage_content_asset(
+    const content_asset_id = await this.#stage_prepared_content_asset(
       request.content,
       request.now,
     );
@@ -1052,7 +1217,7 @@ export class PageService
     owner_user_id: string;
     access: "public" | "private";
     tags: readonly string[];
-    content: PageContent;
+    content: PreparedPageContent;
     now: Date;
   }): Promise<
     MaterializedPageMutationResult<
@@ -1060,7 +1225,7 @@ export class PageService
       "managed_conflict" | "page_id_conflict" | "endpoint_capacity_exceeded"
     >
   > {
-    const content_asset_id = await this.#stage_content_asset(
+    const content_asset_id = await this.#stage_prepared_content_asset(
       request.content,
       request.now,
     );
@@ -1111,13 +1276,13 @@ export class PageService
     expected_revision: number;
     access: "public" | "private";
     tags?: readonly string[];
-    content?: PageContent;
+    content?: PreparedPageContent;
     endpoint_set?: PageEndpointSet;
     now: Date;
   }): Promise<MaterializedPageUpdateResult> {
     const content_asset_id = request.content === undefined
       ? undefined
-      : await this.#stage_content_asset(request.content, request.now);
+      : await this.#stage_prepared_content_asset(request.content, request.now);
     const result = await this.#repository.update_managed_page_aggregate({
       page_id: request.page_id,
       owner_user_id: request.owner_user_id,
@@ -1352,10 +1517,18 @@ export class PageService
     };
   }
 
-  async #stage_content_asset(
-    content: PageContent,
+  async #stage_prepared_content_asset(
+    content: PreparedPageContent,
     created_at: Date,
   ): Promise<ContentAssetId> {
+    if (content.kind === "external") {
+      return await this.#stage_external_content_asset({
+        content_type: content.content_type,
+        source: content.source,
+        meta: content.meta,
+        created_at,
+      });
+    }
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt += 1) {
       const content_asset_id = this.#content_asset_id_generator.generate();
       if (!is_valid_content_asset_id(content_asset_id)) {
@@ -1365,10 +1538,10 @@ export class PageService
       }
       const asset: ContentAsset = {
         content_asset_id,
-        content_type: content.content_type,
+        content_type: content.content.content_type,
         source: { kind: "inline" },
-        data: content.data,
-        meta: content.meta,
+        data: content.content.data,
+        meta: content.content.meta,
         created_at,
       };
       const result = await this.#repository.create_content_asset(asset);
@@ -1393,6 +1566,31 @@ export class PageService
     };
   }
 
+  async #stage_external_content_asset(input: {
+    readonly content_type: string;
+    readonly source: ExternalContentAssetSource;
+    readonly meta: ContentMeta;
+    readonly created_at: Date;
+  }): Promise<ContentAssetId> {
+    for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt += 1) {
+      const content_asset_id = this.#content_asset_id_generator.generate();
+      if (!is_valid_content_asset_id(content_asset_id)) {
+        throw new Error(
+          "ContentAssetIdGenerator produced an invalid content asset id",
+        );
+      }
+      const result = await this.#repository.create_content_asset({
+        content_asset_id,
+        content_type: input.content_type,
+        source: structuredClone(input.source),
+        meta: structuredClone(input.meta),
+        created_at: new Date(input.created_at),
+      });
+      if (result.ok) return result.asset.content_asset_id;
+    }
+    throw new Error("content asset id generation exhausted");
+  }
+
   async #materialize_aggregate(
     page: PageAggregate,
   ): Promise<MaterializedPage> {
@@ -1409,16 +1607,21 @@ export class PageService
     page: PageAggregate,
     asset: ContentAsset,
   ): MaterializedPage {
-    if (!is_inline_content_asset(asset)) {
-      throw new Error("external content asset requires delivery resolution");
-    }
     return {
       ...structuredClone(page),
-      content: {
-        content_type: asset.content_type,
-        data: structuredClone(asset.data),
-        meta: structuredClone(asset.meta),
-      },
+      content: is_inline_content_asset(asset)
+        ? {
+          kind: "inline",
+          content_type: asset.content_type,
+          data: structuredClone(asset.data),
+          meta: structuredClone(asset.meta),
+        }
+        : {
+          kind: "external",
+          content_type: asset.content_type,
+          source: structuredClone(asset.source),
+          meta: structuredClone(asset.meta),
+        },
     };
   }
 
@@ -1520,7 +1723,10 @@ export class PageService
     return planned.endpoint_set;
   }
 
-  #prepare_content(command: PageContentCommand): ContentPreparationResult {
+  async #prepare_content(
+    command: PageContentCommand,
+    actor: { kind: "guest" } | UserPageActor,
+  ): Promise<ContentPreparationResult> {
     const handler = this.#handlers.get(command.content_type);
     if (handler === undefined) {
       return { ok: false, reason: "unknown_content_type" };
@@ -1530,10 +1736,83 @@ export class PageService
       return { ok: false, reason: "invalid_input", detail: validated.reason };
     }
     const data = handler.derive(validated.value);
-    const meta = meta_from_payload(handler.render(data));
+    const payload = handler.render(data);
+    const meta = meta_from_payload(payload);
+    if (command.storage === undefined) {
+      return {
+        ok: true,
+        content: {
+          kind: "inline",
+          content: { content_type: handler.content_type, data, meta },
+        },
+      };
+    }
+    if (actor.kind !== "user") {
+      return { ok: false, reason: "external_storage_requires_managed_page" };
+    }
+    if (
+      typeof command.storage !== "object" || command.storage === null ||
+      !is_external_provider_id(command.storage.provider_id)
+    ) {
+      return { ok: false, reason: "invalid_storage_provider" };
+    }
+    const connection = await this.#storage_connections
+      ?.find_active_by_user_provider(
+        actor.user_id,
+        command.storage.provider_id,
+      );
+    if (connection === undefined || connection === null) {
+      return { ok: false, reason: "storage_connection_not_found" };
+    }
+    const provider = this.#external_storage_providers.resolve(
+      command.storage.provider_id,
+    );
+    if (provider === null) {
+      return { ok: false, reason: "storage_provider_unavailable" };
+    }
+    const put_content = provider.put_content;
+    if (
+      !has_external_storage_capability(provider.capabilities, "write") ||
+      put_content === undefined
+    ) {
+      return { ok: false, reason: "storage_provider_not_writable" };
+    }
+    const body = typeof payload.body === "string"
+      ? new TextEncoder().encode(payload.body)
+      : payload.body.slice();
+    let uploaded: Awaited<ReturnType<typeof put_content>>;
+    try {
+      uploaded = await put_content.call(provider, {
+        connection_id: connection.connection_id,
+        body,
+        media_type: payload.media_type,
+        ...(payload.download_filename === undefined ? {} : {
+          download_filename: payload.download_filename,
+        }),
+      });
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!uploaded.ok) return uploaded;
+    if (
+      external_content_ref_violation(uploaded.value) !== null ||
+      uploaded.value.provider_id !== provider.provider_id ||
+      uploaded.value.connection_id !== connection.connection_id
+    ) {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
     return {
       ok: true,
-      content: { content_type: handler.content_type, data, meta },
+      content: {
+        kind: "external",
+        content_type: handler.content_type,
+        source: { kind: "external", ref: structuredClone(uploaded.value) },
+        meta: {
+          ...meta,
+          sha256: await sha256(body),
+          codec_version: handler.canonical_codec_version,
+        },
+      },
     };
   }
 
@@ -1559,12 +1838,26 @@ export class PageService
   }
 
   #inspection(page: MaterializedPage): ManagedPageInspection {
-    const handler = this.#require_handler(page.content.content_type);
+    const content = page.content;
+    const handler = this.#require_handler(content.content_type);
+    if (content.kind === "inline") {
+      return {
+        ...this.#summary(page),
+        content: {
+          content_type: content.content_type,
+          input: handler.to_management(content.data),
+        },
+      };
+    }
     return {
       ...this.#summary(page),
       content: {
-        content_type: page.content.content_type,
-        input: handler.to_management(page.content.data),
+        content_type: content.content_type,
+        input: external_management_input(content),
+        external_source: {
+          provider_id: content.source.ref.provider_id,
+          external_ref: content.source.ref.external_ref,
+        },
       },
     };
   }
@@ -1624,6 +1917,12 @@ export class PageService
       created_at: new Date(page.created_at),
       updated_at: new Date(page.updated_at),
       revision: page.revision,
+      ...(page.external_missing === undefined ? {} : {
+        external_missing: {
+          cause: page.external_missing.cause,
+          detected_at: new Date(page.external_missing.detected_at),
+        },
+      }),
     };
   }
 
@@ -1660,6 +1959,24 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function prepared_content_type(content: PreparedPageContent): string {
+  return content.kind === "inline"
+    ? content.content.content_type
+    : content.content_type;
+}
+
+function external_management_input(
+  content: Extract<MaterializedContent, { kind: "external" }>,
+): unknown {
+  if (content.content_type !== "pdf") return null;
+  return {
+    filename: content.meta.download_filename ?? "external.pdf",
+    media_type: content.meta.media_type,
+    size_bytes: content.meta.size_bytes,
+    replaceable: true,
+  };
 }
 
 function public_view_payload(payload: DeliveryPayload): DeliveryPayload {
