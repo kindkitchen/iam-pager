@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Added a complete, credential-free environment catalog with runtime-context and
+  plain-text/secret annotations, plus a Deno Deploy setup guide covering safe
+  private copies, dotenv batch import, secret-name inference, and the lack of
+  file syntax for automatic context assignment.
 - Fixed alias-correlated page and asset loss caused by page storage silently
   falling back to process memory: runtimes now require explicit storage
   backends, retain the former page selector for deployment compatibility, and

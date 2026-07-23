@@ -175,6 +175,13 @@ Open <http://localhost:5173>. The development task selects the localhost session
 cookie and gauth's loopback-only mock Google sign-in and Drive-consent flows.
 Neither fake mode may be exposed in production.
 
+[`.env.example`](.env.example) is the tracked, credential-free catalog of every
+application environment variable, including its runtime context and Deno Deploy
+plain-text/secret classification. Copy it to the gitignored
+`.env.production.local` before adding real values. See the
+[deployment environment guide](docs/deployment-environment.md) for context
+setup, Deno Deploy bulk import, and the importer's metadata limitations.
+
 Useful commands:
 
 ```sh
@@ -325,7 +332,8 @@ deno task --env-file=.env.production.local start
 
 `PORT` is optional and must be an integer from 0 through 65535. Deno Deploy uses
 `deno task build` and `_fresh/server.js` with the same production environment
-and storage selectors.
+and storage selectors. The application requires no Build-context variables; its
+configuration belongs to the Production and Development runtime contexts.
 
 After deployment, verify that direct-content, framework-level, and wrapped-page
 404 responses are HTML pages with a working home link:
