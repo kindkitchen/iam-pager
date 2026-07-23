@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Fixed Google Drive publication rejections being reported as missing external
+  files; upload-specific 403 responses now use the provider-unavailable path
+  while inaccessible existing files retain non-disclosing missing semantics.
+  Production setup now explicitly requires enabling the Google Drive API.
 - Fixed production Google Drive consent callbacks to accept Google's bounded
   authorization-response metadata (`iss`, `scope`, `authuser`, and `prompt`),
   validate the optional issuer, avoid token requests for malformed callbacks,

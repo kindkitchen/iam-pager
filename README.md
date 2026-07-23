@@ -64,6 +64,8 @@ reauthorize Google Drive, inspect owner-safe account/scope/status metadata,
 disconnect with a dependent-page warning, and choose an active write-capable
 provider when publishing or replacing Markdown/PDF content. Requested external
 writes validate and upload before the page commit and never fall back inline.
+Drive upload rejections use the temporary external-storage failure path rather
+than incorrectly claiming that a not-yet-created external file is missing.
 
 Signed-in creators also manage their API keys at `/site/api-keys`: generate a
 key with a typed or shared four-word random label, explicit permissions, and
@@ -267,15 +269,18 @@ IAM_PAGER_GOOGLE_DRIVE_CLIENT_ID=...
 IAM_PAGER_GOOGLE_DRIVE_CLIENT_SECRET=...
 ```
 
-Drive requests `drive.file` as its only content permission, plus the identity
-scopes gauth needs to verify the provider account, and forces offline explicit
-consent. The callback accepts bounded Google authorization-response metadata,
-validates Google's issuer when present, and exchanges only a non-empty code. In
-`original` mode those same Drive client credentials compose the `google-drive`
-external provider; local mode mocks consent only and does not register a
-remote-content provider. Connect and callback require an authenticated browser
-session; disconnect is POST-only and requires that session's CSRF token. The
-routes are `/auth/storage/google-drive/{start,callback,disconnect}`.
+In the Google Cloud project that owns the Drive OAuth client, enable the
+**Google Drive API** before connecting storage; OAuth consent can succeed while
+file uploads are still rejected if the API is disabled. Drive requests
+`drive.file` as its only content permission, plus the identity scopes gauth
+needs to verify the provider account, and forces offline explicit consent. The
+callback accepts bounded Google authorization-response metadata, validates
+Google's issuer when present, and exchanges only a non-empty code. In `original`
+mode those same Drive client credentials compose the `google-drive` external
+provider; local mode mocks consent only and does not register a remote-content
+provider. Connect and callback require an authenticated browser session;
+disconnect is POST-only and requires that session's CSRF token. The routes are
+`/auth/storage/google-drive/{start,callback,disconnect}`.
 
 An explicitly designated HTTPS preview can use credential-free local OAuth by
 setting both integrations to `local` and allowlisting its full request host:

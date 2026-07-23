@@ -22,6 +22,15 @@ attached database. `DENO_KV_ACCESS_TOKEN` is only for a self-hosted process
 opening remote KV; the current Deploy platform rejects user-defined `DENO_` keys
 and does not need it for an attached database.
 
+## Google Drive production prerequisite
+
+For `IAM_PAGER_GOOGLE_DRIVE_MODE=original`, open **APIs & Services > Library**
+in the Google Cloud project that owns `IAM_PAGER_GOOGLE_DRIVE_CLIENT_ID` and
+enable the **Google Drive API**. OAuth consent and callback completion do not
+prove that the Drive API is enabled; without it, publishing reaches Drive but
+the file creation request is rejected. If the OAuth consent screen remains in
+testing mode, also register each creator account as a test user.
+
 ## Deno Deploy bulk import
 
 Research checked against the current Deno Deploy documentation and CLI on
