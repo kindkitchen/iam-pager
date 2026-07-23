@@ -2,6 +2,9 @@
 
 ## 2026-07-23
 
+- Fixed local Google Drive OAuth to inherit Google auth's validated preview-host
+  pattern when no Drive-specific override or complete static URL pair exists,
+  avoiding a static mock-consent URL requirement on dynamic preview deployments.
 - Hardened credential-free Google Drive OAuth for HTTPS previews with explicit
   local-mode composition coverage, mode-aware credential errors, complete
   environment examples, and documented request-host allowlisting semantics.

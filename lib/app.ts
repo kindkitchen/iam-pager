@@ -451,7 +451,10 @@ export async function create_configured_app_services(
     );
   const google_auth_config = parse_google_auth_config(environment);
   const google_gauth = await compose_google_gauth(google_auth_config);
-  const google_drive_config = parse_google_drive_oauth_config(environment);
+  const google_drive_config = parse_google_drive_oauth_config(environment, {
+    fallback_local_request_host_pattern:
+      google_auth_config.request_host_pattern,
+  });
   const google_drive_oauth = await compose_google_drive_oauth(
     google_drive_config,
   );

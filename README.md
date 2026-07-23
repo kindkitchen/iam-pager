@@ -283,12 +283,14 @@ setting both integrations to `local` and allowlisting its full request host:
 IAM_PAGER_GOOGLE_AUTH_MODE=local
 IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 IAM_PAGER_GOOGLE_DRIVE_MODE=local
-IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
 ```
 
-In this profile, omit both redirect URIs, mock-consent URLs, client IDs, and
-client secrets. Each callback origin comes from the HTTPS request URL only after
-a complete host-pattern match; the application retains the fixed callback and
+Local Drive inherits the validated auth host pattern when its own
+`IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN` and a complete static Drive URL
+pair are unset; set the Drive variable only for a narrower override. In this
+profile, omit both redirect URIs, mock-consent URLs, client IDs, and client
+secrets. Each callback origin comes from the HTTPS request URL only after a
+complete host-pattern match; the application retains the fixed callback and
 mock-consent paths. `Origin` and `Referer` are never callback authorities. Local
 mode grants fake authentication or Drive consent on every matched host, does not
 register the remote Drive provider, and must exclude production.
