@@ -109,6 +109,59 @@ Deno.test("Drive HTTP callback rejects state mismatch through the owner-safe pag
     true,
   );
   assertEquals(manager.calls, [`complete:${state}:code`]);
+  assertEquals(
+    response.headers.get("content-security-policy"),
+    "default-src 'none'; img-src 'self'; frame-ancestors 'none'",
+  );
+});
+
+Deno.test("Drive HTTP callback accepts bounded Google response metadata", async () => {
+  const manager = new FakeManager();
+  const handler = new GoogleDriveConnectionHttpAdapter({
+    connections: manager,
+  });
+  const state = "s".repeat(43);
+  const query = new URLSearchParams({
+    state,
+    iss: "https://accounts.google.com",
+    code: "provider-code",
+    scope: "email profile https://www.googleapis.com/auth/drive.file openid",
+    authuser: "0",
+    prompt: "consent",
+  });
+
+  const response = await handler.callback(
+    new Request(
+      `https://pager.example/auth/storage/google-drive/callback?${query}`,
+    ),
+    context(authenticated_session),
+  );
+
+  assertEquals(response.status, 400);
+  assertEquals(manager.calls, [`complete:${state}:provider-code`]);
+});
+
+Deno.test("Drive HTTP callback consumes invalid provider metadata without a code", async () => {
+  const manager = new FakeManager();
+  const handler = new GoogleDriveConnectionHttpAdapter({
+    connections: manager,
+  });
+  const state = "s".repeat(43);
+  const query = new URLSearchParams({
+    state,
+    code: "provider-code",
+    iss: "https://attacker.example",
+  });
+
+  const response = await handler.callback(
+    new Request(
+      `https://pager.example/auth/storage/google-drive/callback?${query}`,
+    ),
+    context(authenticated_session),
+  );
+
+  assertEquals(response.status, 400);
+  assertEquals(manager.calls, [`complete:${state}:`]);
 });
 
 Deno.test("Drive HTTP disconnect enforces synchronizer CSRF", async () => {

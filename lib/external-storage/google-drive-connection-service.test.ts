@@ -130,6 +130,24 @@ Deno.test("Drive connection state is authenticated-session-bound and one-use", a
   });
 });
 
+Deno.test("Drive callback consumes malformed attempts before provider exchange", async () => {
+  const { oauth, service } = fixture();
+  await service.start(
+    session(),
+    "https://pager.example/auth/storage/google-drive/callback",
+  );
+
+  assertEquals(await service.complete(session(), "s".repeat(43), ""), {
+    ok: false,
+    reason: "invalid_attempt",
+  });
+  assertEquals(oauth.callback_inputs, []);
+  assertEquals(await service.complete(session(), "s".repeat(43), "code"), {
+    ok: false,
+    reason: "invalid_attempt",
+  });
+});
+
 Deno.test("Drive reauthorization keeps a refresh token omitted by Google", async () => {
   const { oauth, repository, service } = fixture();
   await service.start(

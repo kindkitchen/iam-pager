@@ -121,7 +121,9 @@ export class GoogleDriveConnectionService
     } catch {
       return { ok: false, reason: "persistence_failure" };
     }
-    if (attempt === null) return { ok: false, reason: "invalid_attempt" };
+    if (attempt === null || code.length === 0) {
+      return { ok: false, reason: "invalid_attempt" };
+    }
 
     const completed = await this.#oauth.complete({
       code,

@@ -7,6 +7,10 @@ import type { GoogleDriveConnectionManager } from "./google-drive-connection-ser
 
 const state_pattern = /^[A-Za-z0-9_-]{43}$/;
 const max_code_length = 4096;
+const max_callback_parameter_count = 16;
+const max_callback_parameter_name_length = 64;
+const max_callback_parameter_value_length = 4096;
+const google_accounts_issuer = "https://accounts.google.com";
 const max_disconnect_body_bytes = 256;
 
 export interface GoogleDriveConnectionHttpHandler {
@@ -64,10 +68,9 @@ export class GoogleDriveConnectionHttpAdapter
       return failure_page(400);
     }
     // Consume a recognizable state even when the provider callback is malformed.
-    const code = codes.length === 1 && codes[0].length <= max_code_length &&
-        [...url.searchParams].every(([name]) =>
-          name === "state" || name === "code"
-        )
+    const code = codes.length === 1 && codes[0].length > 0 &&
+        codes[0].length <= max_code_length &&
+        has_valid_callback_parameters(url)
       ? codes[0]
       : "";
     const result = await this.#connections.complete(
@@ -136,13 +139,28 @@ function failure_response(
 function failure_page(status: number): Response {
   return new Response(
     `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connection failed | iam-pager</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.ico"><title>Connection failed | iam-pager</title></head>
 <body><main><h1>Google Drive connection failed</h1><p>Your existing storage connection is unchanged.</p><p><a href="/auth/storage/google-drive/start">Try again</a></p><p><a href="/site/manage">Return to management</a></p></main></body></html>\n`,
     {
       status,
       headers: response_headers("text/html; charset=utf-8"),
     },
   );
+}
+
+function has_valid_callback_parameters(url: URL): boolean {
+  const parameters = [...url.searchParams];
+  if (
+    parameters.length > max_callback_parameter_count ||
+    parameters.some(([name, value]) =>
+      name.length === 0 || name.length > max_callback_parameter_name_length ||
+      value.length > max_callback_parameter_value_length
+    )
+  ) return false;
+
+  const issuers = url.searchParams.getAll("iss");
+  return issuers.length === 0 ||
+    (issuers.length === 1 && issuers[0] === google_accounts_issuer);
 }
 
 function redirect_response(location: string): Response {
@@ -163,7 +181,8 @@ function response_headers(content_type: string | null): Headers {
   const headers = new Headers({
     "cache-control": "no-store",
     "referrer-policy": "no-referrer",
-    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+    "content-security-policy":
+      "default-src 'none'; img-src 'self'; frame-ancestors 'none'",
     "x-content-type-options": "nosniff",
   });
   if (content_type !== null) headers.set("content-type", content_type);

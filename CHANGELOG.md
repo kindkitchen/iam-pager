@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Fixed production Google Drive consent callbacks to accept Google's bounded
+  authorization-response metadata (`iss`, `scope`, `authuser`, and `prompt`),
+  validate the optional issuer, avoid token requests for malformed callbacks,
+  and permit the callback failure page's same-origin favicon under CSP.
 - Fixed local Google Drive OAuth to inherit Google auth's validated preview-host
   pattern when no Drive-specific override or complete static URL pair exists,
   avoiding a static mock-consent URL requirement on dynamic preview deployments.
