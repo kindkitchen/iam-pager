@@ -103,13 +103,14 @@ an externally durable provider.
 The `google-drive` adapter implements Drive v3 metadata/media reads and bounded
 multipart writes through a small injected HTTP gateway. It stores Drive's
 `md5Checksum` as the provider version hint, treats trashed, gone, or
-definitively inaccessible files as missing, preserves bounded retry hints for
-rate limits and outages, and refreshes expiring or rejected access tokens
-through single-flight credential updates. Invalid grants and access that remains
-unauthorized after refresh revoke the local connection. The provider-neutral API
-reports that safe `connection_revoked` category separately from missing content
-so page health can preserve the repair-relevant cause without exposing
-credential details to visitors.
+definitively inaccessible existing files as missing, maps upload rejection to
+provider unavailability instead of the read-only missing category, preserves
+bounded retry hints for rate limits and outages, and refreshes expiring or
+rejected access tokens through single-flight credential updates. Invalid grants
+and access that remains unauthorized after refresh revoke the local connection.
+The provider-neutral API reports that safe `connection_revoked` category
+separately from missing content so page health can preserve the repair-relevant
+cause without exposing credential details to visitors.
 
 ## ES-CONNECTION — Credential custody and revocation
 

@@ -175,7 +175,7 @@ export class FetchGoogleDriveGateway implements GoogleDriveGateway {
     });
     if (!response.ok) return response;
     if (!response.value.ok) {
-      return await classify_drive_response(response.value);
+      return await classify_drive_response(response.value, "provider_error");
     }
     return await parse_file_stat(response.value);
   }
@@ -246,6 +246,7 @@ export class FetchGoogleDriveGateway implements GoogleDriveGateway {
 
 async function classify_drive_response(
   response: Response,
+  forbidden_reason: "missing" | "provider_error" = "missing",
 ): Promise<GoogleDriveGatewayResult<never>> {
   if (response.status === 401) return { ok: false, reason: "unauthorized" };
   if (response.status === 404 || response.status === 410) {
@@ -257,7 +258,7 @@ async function classify_drive_response(
     if (reasons.some((reason) => retryable_google_reasons.has(reason))) {
       return unreachable_response(response);
     }
-    return { ok: false, reason: "missing" };
+    return { ok: false, reason: forbidden_reason };
   }
   if (response.status === 429 || response.status >= 500) {
     return unreachable_response(response);

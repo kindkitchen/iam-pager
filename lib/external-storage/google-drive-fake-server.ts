@@ -21,6 +21,7 @@ export class FakeGoogleDriveServer {
 
   readonly #files = new Map<string, FakeDriveFile>();
   readonly #failures = new Map<string, FakeFailure>();
+  #upload_failure: FakeFailure | null = null;
   readonly #access_tokens = new Set<string>();
   readonly #refreshes = new Map<
     string,
@@ -121,6 +122,10 @@ export class FakeGoogleDriveServer {
     else this.#failures.set(file_id, failure);
   }
 
+  set_upload_failure(failure: FakeFailure | null): void {
+    this.#upload_failure = failure;
+  }
+
   #is_authorized(request: Request): boolean {
     const authorization = request.headers.get("authorization");
     return authorization?.startsWith("Bearer ") === true &&
@@ -138,6 +143,9 @@ export class FakeGoogleDriveServer {
   }
 
   async #handle_upload(request: Request): Promise<Response> {
+    if (this.#upload_failure !== null) {
+      return failure_response(this.#upload_failure);
+    }
     const content_type = request.headers.get("content-type") ?? "";
     const boundary = /boundary=([^;]+)/.exec(content_type)?.[1];
     if (boundary === undefined) return new Response(null, { status: 400 });

@@ -276,6 +276,24 @@ Deno.test("Drive gateway bounds media bodies and maps transport errors", async (
   );
 });
 
+Deno.test("Drive upload rejection is unavailable rather than missing", async () => {
+  const { provider, server } = await fixture();
+  server.set_upload_failure({
+    status: 403,
+    reason: "storageQuotaExceeded",
+  });
+
+  assertEquals(
+    await provider.put_content({
+      connection_id: "connection-1",
+      body: new Uint8Array([7, 8, 9]),
+      media_type: "application/pdf",
+      download_filename: "report.pdf",
+    }),
+    { ok: false, reason: "external_source_unreachable" },
+  );
+});
+
 Deno.test("Drive upload captures returned checksum as the version hint", async () => {
   const { provider } = await fixture();
   const written = await provider.put_content({
