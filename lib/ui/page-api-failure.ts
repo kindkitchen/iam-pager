@@ -193,11 +193,25 @@ export class TypedPageApiFailurePresenter implements PageApiFailurePresenter {
           code,
           "The selected file is not a byte-identical copy of this page.",
         );
+      case "external_storage_requires_managed_page":
+        return failure(
+          "authority",
+          code,
+          "Sign in before publishing to external storage.",
+        );
+      case "storage_connection_not_found":
       case "connection_revoked":
         return failure(
           "authority",
           code,
-          "Reconnect external storage before re-linking this page.",
+          "Reconnect external storage before trying again.",
+        );
+      case "invalid_storage_provider":
+      case "storage_provider_not_writable":
+        return failure(
+          "request",
+          code,
+          "This storage option is no longer available. Refresh the page and choose again.",
         );
       case "content_not_external":
         return failure(
@@ -206,6 +220,7 @@ export class TypedPageApiFailurePresenter implements PageApiFailurePresenter {
           "This page already stores its content inline.",
         );
       case "provider_unavailable":
+      case "storage_provider_unavailable":
       case "external_source_unreachable":
       case "page_unavailable":
       case "page_id_generation_exhausted":

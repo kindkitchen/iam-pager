@@ -24,8 +24,10 @@ link presentation use this one boundary.
 
 It accepts typed guest/user actors, resolves every referenced namespace through
 an authority interface, validates content through registered handlers, plans
-non-empty complete endpoint sets, and returns presentation-safe results. It has
-no dependency on sessions, HTTP, Fresh, or a concrete repository.
+non-empty complete endpoint sets, resolves creator storage connections through
+an interface, uploads canonical bytes only through write-capable providers, and
+returns presentation-safe results. It has no dependency on sessions, HTTP,
+Fresh, or a concrete repository.
 
 ## CP-PERSISTENCE — Page persistence capability
 
@@ -68,9 +70,11 @@ reference implementation and test double.
 owner-safe retained revocation metadata, and provider-only token access. Its
 memory and Deno KV implementations share conformance; KV credentials are
 separate connection-bound AES-256-GCM ciphertext and are deleted on revocation.
-Later OAuth and management capabilities will own reauthorization and connection
-health. Asset repositories persist only the external source reference and
-authoritative local integrity metadata. Delivery authorizes the page first,
+OAuth and `StorageConnectionManagement` own reauthorization, safe listing,
+connect routing, and disconnect. Asset repositories persist only the external
+source reference and authoritative local integrity metadata. Publication
+validates and renders first, uploads through an active owner connection, and
+commits only after provider success. Delivery authorizes the page first,
 resolves the source through these interfaces, verifies complete bytes, and maps
 missing or retryable provider outcomes through `ES-DELIVERY`. Web routes and
 components do not call provider adapters directly.
@@ -123,10 +127,10 @@ provider tokens and failures do not cross its adapter boundary.
 ## CP-PRESENTATION — Site capability
 
 Presenters under `lib/ui/` map raw capability results into complete bounded view
-models for navigation, namespace reservation, publishing, management,
-exploration, and wrapped viewing. Components render those models and prepare
-requests; they receive neither owner identity nor responsibility for deciding
-authority.
+models for navigation, namespace reservation, publishing, storage connections,
+management, exploration, and wrapped viewing. Components render those models and
+prepare requests; they receive neither owner identity nor responsibility for
+deciding authority.
 
 ## CP-HTTP — HTTP capability
 

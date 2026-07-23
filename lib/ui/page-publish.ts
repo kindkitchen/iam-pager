@@ -23,6 +23,7 @@ export interface PagePublishDraft {
   readonly aliases: readonly PagePublishReferenceDraft[];
   readonly markdown: string;
   readonly css: string;
+  readonly storage_provider_id?: string;
 }
 
 export interface PagePublishSuccess {
@@ -52,6 +53,7 @@ export interface PreparedPagePublishRequest {
     readonly content: {
       readonly content_type: "md-page";
       readonly input: { readonly md: string; readonly css?: string };
+      readonly storage?: { readonly provider_id: string };
     };
   };
 }
@@ -111,6 +113,9 @@ export function prepare_page_publish_request(
           md: draft.markdown,
           ...(draft.css === "" ? {} : { css: draft.css }),
         },
+        ...(draft.storage_provider_id === undefined ? {} : {
+          storage: { provider_id: draft.storage_provider_id },
+        }),
       },
     },
   };

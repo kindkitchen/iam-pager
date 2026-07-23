@@ -36,6 +36,8 @@ export type ContentResult<T> =
  */
 export interface ContentTypeHandler<Input, Data, Management = Input> {
   readonly content_type: string;
+  /** Stable codec/schema identity for canonical externally stored bytes. */
+  readonly canonical_codec_version: string;
   /** Non-empty set of bounded profile identifiers this type can deliver. */
   readonly supported_delivery_profiles: readonly DeliveryProfile[];
   /** Check untrusted input and narrow it to the type's input shape. */

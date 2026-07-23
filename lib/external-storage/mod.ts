@@ -123,6 +123,19 @@ export type {
   GoogleDriveConnectionResult,
 } from "./google-drive-connection-service.ts";
 export { GoogleDriveConnectionService } from "./google-drive-connection-service.ts";
+export type {
+  ManagedStorageConnection,
+  StorageConnectionConnectOption,
+  StorageConnectionLifecycle,
+  StorageConnectionManagement,
+} from "./connection-management.ts";
+export {
+  GoogleDriveStorageConnectionLifecycle,
+  provider_label,
+  StorageConnectionManagementService,
+} from "./connection-management.ts";
+export type { StorageConnectionManagementHttpHandler } from "./connection-management-http.ts";
+export { StorageConnectionManagementHttpAdapter } from "./connection-management-http.ts";
 export type { GoogleDriveConnectionHttpHandler } from "./google-drive-connection-http.ts";
 export { GoogleDriveConnectionHttpAdapter } from "./google-drive-connection-http.ts";
 export { GoogleDriveMockConsentHttpAdapter } from "./google-drive-mock-consent-http.ts";

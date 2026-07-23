@@ -4,9 +4,9 @@ This document selects the product and technical boundary for externally stored
 content. The provider interface family, external asset-source persistence, and
 storage-connection repository with encrypted token custody, the separate Google
 Drive OAuth connect/disconnect flow, the production Google Drive provider,
-verified direct and wrapped delivery with fallback behavior, and creator warning
-and repair management are implemented. External publishing and connection
-settings UI remain unavailable.
+verified direct and wrapped delivery with fallback behavior, creator warning and
+repair management, external publish/replace, and creator connection settings are
+implemented.
 
 ## ES-BOUNDARY — Custody and meaning
 
@@ -36,7 +36,11 @@ publishing remains inline. Markdown and PDF remain the only content types.
 Publication and replacement accept content through the existing bounded content
 handlers. iam-pager validates and derives the canonical stored payload before a
 provider with write capability receives it. Only after upload succeeds does the
-application commit an external asset and atomically point the page at it.
+application commit an external asset and atomically point the page at it. The
+strict page API accepts an optional provider selector, resolves the creator's
+active connection server-side, and never accepts a client-selected connection
+ID. The web offers only active providers whose composed adapter declares
+`write`.
 
 The local asset record is authoritative and contains:
 
@@ -154,7 +158,10 @@ before exchange. Connect and callback require the same authenticated session.
 Successful consent creates or same-subject reauthorizes one connection while
 preserving an existing refresh token if Google omits it. CSRF-protected POST
 disconnect attempts provider revocation, then revokes locally and destroys
-credentials even when the remote request fails.
+credentials even when the remote request fails. The browser-owned
+`/api/storage-connections` surface lists only safe metadata/capabilities and
+initiates or disconnects supported providers; explicit API-key bearers are
+rejected without cookie fallback.
 
 ## ES-DELIVERY — Resolution and failure behavior
 

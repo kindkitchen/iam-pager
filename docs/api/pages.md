@@ -105,7 +105,8 @@ credentials, and payload bytes are never returned.
   "tags": ["notes", "work"],
   "content": {
     "content_type": "md-page",
-    "input": { "md": "# Notes", "css": "body { color: navy; }" }
+    "input": { "md": "# Notes", "css": "body { color: navy; }" },
+    "storage": { "provider_id": "google-drive" }
   }
 }
 ```
@@ -119,6 +120,14 @@ explicit shape. A guest may create or replace only a public, untagged trial when
 every referenced namespace is unreserved. An authenticated request always
 attempts managed creation, requires CSRF, and must own every referenced
 namespace; it never falls back to trial publication.
+
+`content.storage` is optional and available only to managed creators. It selects
+the caller's active connection for that provider; clients never supply a
+connection ID. The provider must be currently composed with `write` capability.
+Validation and derivation happen first, then the canonical bytes are uploaded,
+and only a successful upload can commit the payload-free external asset and
+page. Omission keeps inline custody. A requested external write never silently
+falls back inline.
 
 Create returns `201`; trial replacement returns `200`. Success includes
 `outcome`, page summary, direct `path`/absolute `url`, `Location`, and, for a
@@ -150,7 +159,8 @@ Metadata is strict UTF-8 JSON:
     ]
   },
   "access": "private",
-  "tags": ["reports"]
+  "tags": ["reports"],
+  "storage": { "provider_id": "google-drive" }
 }
 ```
 
@@ -213,14 +223,19 @@ profiles against the replacement format.
 
 PDF replacement uses the same exact two-part multipart boundary and always
 includes a new file. Metadata may include the complete `endpoint_set`, `access`,
-and `tags`; each omitted field is preserved. Content and optional endpoint
-changes commit once at the supplied revision.
+and `tags`; each omitted field is preserved. Metadata may also include the same
+optional `storage` provider selector used by create. Markdown replacement puts
+that selector inside `content`. Content and optional endpoint changes commit
+once at the supplied revision.
 
 Success returns the complete inspection and next ETag. Missing preconditions
 return `428`, malformed validators `400`, a stale/different-page validator
 `412`, missing/foreign pages `404`, conflicts `409`, invalid input `422`, and a
 selected-storage endpoint-capacity failure `507`. Replacing content inline
-creates a new immutable asset and clears any `external_missing` warning.
+creates a new immutable asset and clears any `external_missing` warning;
+selecting external storage uploads and commits a fresh external asset instead.
+Connection absence/revocation and providers without write capability return
+`409`; transient or unavailable provider writes return `503`.
 
 ## Re-link external content — `POST /api/pages/:page_id/relink`
 

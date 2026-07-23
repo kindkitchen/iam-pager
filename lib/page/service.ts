@@ -12,10 +12,13 @@ import type {
   ContentTypeHandler,
 } from "../content/interfaces.ts";
 import type { ContentMeta, DeliveryPayload } from "../content/model.ts";
+import type { StorageConnectionRepository } from "../external-storage/connection-repository.ts";
 import type { ExternalStorageProviderResolver } from "../external-storage/interfaces.ts";
 import {
   external_content_ref_violation,
   type ExternalContentRef,
+  has_external_storage_capability,
+  is_external_provider_id,
 } from "../external-storage/model.ts";
 import type { LocatorEngine } from "../locator/engine.ts";
 import type { Locator } from "../locator/model.ts";
@@ -115,6 +118,7 @@ export interface PageServiceOptions {
   namespace_authority: NamespaceAuthorityResolver;
   handlers: readonly ContentTypeHandler<unknown, unknown>[];
   external_storage_providers?: ExternalStorageProviderResolver;
+  storage_connections?: StorageConnectionRepository;
   page_id_generator?: PageIdGenerator;
   content_asset_id_generator?: ContentAssetIdGenerator;
   endpoint_planner?: PageEndpointPlanner;
@@ -127,9 +131,30 @@ export interface PageServiceOptions {
   max_page_name_attempts?: number;
 }
 
+type PreparedPageContent =
+  | { readonly kind: "inline"; readonly content: PageContent }
+  | {
+    readonly kind: "external";
+    readonly content_type: string;
+    readonly source: ExternalContentAssetSource;
+    readonly meta: ContentMeta;
+  };
+
 type ContentPreparationResult =
-  | { ok: true; content: PageContent }
-  | { ok: false; reason: "unknown_content_type" }
+  | { ok: true; content: PreparedPageContent }
+  | {
+    ok: false;
+    reason:
+      | "unknown_content_type"
+      | "external_storage_requires_managed_page"
+      | "invalid_storage_provider"
+      | "storage_connection_not_found"
+      | "storage_provider_unavailable"
+      | "storage_provider_not_writable"
+      | "external_content_missing"
+      | "connection_revoked"
+      | "external_source_unreachable";
+  }
   | { ok: false; reason: "invalid_input"; detail: string };
 
 type EndpointPreparationResult =
@@ -240,6 +265,7 @@ export class PageService
   readonly #page_name_generator: RandomNameGenerator;
   readonly #max_page_name_attempts: number;
   readonly #external_storage_providers: ExternalStorageProviderResolver;
+  readonly #storage_connections?: StorageConnectionRepository;
   readonly #external_unavailable_handler =
     new ExternalUnavailableContentHandler();
 
@@ -265,6 +291,7 @@ export class PageService
     this.#external_storage_providers = options.external_storage_providers ?? {
       resolve: () => null,
     };
+    this.#storage_connections = options.storage_connections;
     this.#page_id_generator = options.page_id_generator ??
       new CryptoPageIdGenerator();
     this.#content_asset_id_generator = options.content_asset_id_generator ??
@@ -307,7 +334,10 @@ export class PageService
     if (authorities.some((authority) => authority !== "unreserved")) {
       return { ok: false, reason: "namespace_reserved" };
     }
-    const prepared = this.#prepare_content(request.content);
+    const prepared = await this.#prepare_content(
+      request.content,
+      request.actor,
+    );
     if (!prepared.ok) return prepared;
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
@@ -361,7 +391,10 @@ export class PageService
     if (authority_failure !== null) {
       return { ok: false, reason: authority_failure };
     }
-    const prepared = this.#prepare_content(request.content);
+    const prepared = await this.#prepare_content(
+      request.content,
+      request.actor,
+    );
     if (!prepared.ok) return prepared;
     const now = this.#operation_time();
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt++) {
@@ -494,9 +527,12 @@ export class PageService
       return { ok: false, reason: "revision_exhausted" };
     }
     this.#require_handler(page.content.content_type);
-    let content: PageContent | undefined;
+    let content: PreparedPageContent | undefined;
     if (request.patch.content !== undefined) {
-      const prepared = this.#prepare_content(request.patch.content);
+      const prepared = await this.#prepare_content(
+        request.patch.content,
+        request.actor,
+      );
       if (!prepared.ok) return prepared;
       content = prepared.content;
     }
@@ -506,7 +542,9 @@ export class PageService
     if (has_endpoints || content !== undefined) {
       const planned = this.#prepare_endpoint_intent(
         request.patch.endpoint_set ?? current_endpoint_set,
-        content?.content_type ?? page.content.content_type,
+        content === undefined
+          ? page.content.content_type
+          : prepared_content_type(content),
       );
       if (!planned.ok) return planned;
       if (has_endpoints) {
@@ -1132,7 +1170,7 @@ export class PageService
   async #put_trial(request: {
     page_id: string;
     endpoint_set: PageEndpointSet;
-    content: PageContent;
+    content: PreparedPageContent;
     now: Date;
   }): Promise<
     MaterializedPageMutationResult<
@@ -1144,7 +1182,7 @@ export class PageService
       | "revision_exhausted"
     >
   > {
-    const content_asset_id = await this.#stage_content_asset(
+    const content_asset_id = await this.#stage_prepared_content_asset(
       request.content,
       request.now,
     );
@@ -1179,7 +1217,7 @@ export class PageService
     owner_user_id: string;
     access: "public" | "private";
     tags: readonly string[];
-    content: PageContent;
+    content: PreparedPageContent;
     now: Date;
   }): Promise<
     MaterializedPageMutationResult<
@@ -1187,7 +1225,7 @@ export class PageService
       "managed_conflict" | "page_id_conflict" | "endpoint_capacity_exceeded"
     >
   > {
-    const content_asset_id = await this.#stage_content_asset(
+    const content_asset_id = await this.#stage_prepared_content_asset(
       request.content,
       request.now,
     );
@@ -1238,13 +1276,13 @@ export class PageService
     expected_revision: number;
     access: "public" | "private";
     tags?: readonly string[];
-    content?: PageContent;
+    content?: PreparedPageContent;
     endpoint_set?: PageEndpointSet;
     now: Date;
   }): Promise<MaterializedPageUpdateResult> {
     const content_asset_id = request.content === undefined
       ? undefined
-      : await this.#stage_content_asset(request.content, request.now);
+      : await this.#stage_prepared_content_asset(request.content, request.now);
     const result = await this.#repository.update_managed_page_aggregate({
       page_id: request.page_id,
       owner_user_id: request.owner_user_id,
@@ -1479,10 +1517,18 @@ export class PageService
     };
   }
 
-  async #stage_content_asset(
-    content: PageContent,
+  async #stage_prepared_content_asset(
+    content: PreparedPageContent,
     created_at: Date,
   ): Promise<ContentAssetId> {
+    if (content.kind === "external") {
+      return await this.#stage_external_content_asset({
+        content_type: content.content_type,
+        source: content.source,
+        meta: content.meta,
+        created_at,
+      });
+    }
     for (let attempt = 0; attempt < this.#max_page_id_attempts; attempt += 1) {
       const content_asset_id = this.#content_asset_id_generator.generate();
       if (!is_valid_content_asset_id(content_asset_id)) {
@@ -1492,10 +1538,10 @@ export class PageService
       }
       const asset: ContentAsset = {
         content_asset_id,
-        content_type: content.content_type,
+        content_type: content.content.content_type,
         source: { kind: "inline" },
-        data: content.data,
-        meta: content.meta,
+        data: content.content.data,
+        meta: content.content.meta,
         created_at,
       };
       const result = await this.#repository.create_content_asset(asset);
@@ -1677,7 +1723,10 @@ export class PageService
     return planned.endpoint_set;
   }
 
-  #prepare_content(command: PageContentCommand): ContentPreparationResult {
+  async #prepare_content(
+    command: PageContentCommand,
+    actor: { kind: "guest" } | UserPageActor,
+  ): Promise<ContentPreparationResult> {
     const handler = this.#handlers.get(command.content_type);
     if (handler === undefined) {
       return { ok: false, reason: "unknown_content_type" };
@@ -1687,10 +1736,83 @@ export class PageService
       return { ok: false, reason: "invalid_input", detail: validated.reason };
     }
     const data = handler.derive(validated.value);
-    const meta = meta_from_payload(handler.render(data));
+    const payload = handler.render(data);
+    const meta = meta_from_payload(payload);
+    if (command.storage === undefined) {
+      return {
+        ok: true,
+        content: {
+          kind: "inline",
+          content: { content_type: handler.content_type, data, meta },
+        },
+      };
+    }
+    if (actor.kind !== "user") {
+      return { ok: false, reason: "external_storage_requires_managed_page" };
+    }
+    if (
+      typeof command.storage !== "object" || command.storage === null ||
+      !is_external_provider_id(command.storage.provider_id)
+    ) {
+      return { ok: false, reason: "invalid_storage_provider" };
+    }
+    const connection = await this.#storage_connections
+      ?.find_active_by_user_provider(
+        actor.user_id,
+        command.storage.provider_id,
+      );
+    if (connection === undefined || connection === null) {
+      return { ok: false, reason: "storage_connection_not_found" };
+    }
+    const provider = this.#external_storage_providers.resolve(
+      command.storage.provider_id,
+    );
+    if (provider === null) {
+      return { ok: false, reason: "storage_provider_unavailable" };
+    }
+    const put_content = provider.put_content;
+    if (
+      !has_external_storage_capability(provider.capabilities, "write") ||
+      put_content === undefined
+    ) {
+      return { ok: false, reason: "storage_provider_not_writable" };
+    }
+    const body = typeof payload.body === "string"
+      ? new TextEncoder().encode(payload.body)
+      : payload.body.slice();
+    let uploaded: Awaited<ReturnType<typeof put_content>>;
+    try {
+      uploaded = await put_content.call(provider, {
+        connection_id: connection.connection_id,
+        body,
+        media_type: payload.media_type,
+        ...(payload.download_filename === undefined ? {} : {
+          download_filename: payload.download_filename,
+        }),
+      });
+    } catch {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
+    if (!uploaded.ok) return uploaded;
+    if (
+      external_content_ref_violation(uploaded.value) !== null ||
+      uploaded.value.provider_id !== provider.provider_id ||
+      uploaded.value.connection_id !== connection.connection_id
+    ) {
+      return { ok: false, reason: "external_source_unreachable" };
+    }
     return {
       ok: true,
-      content: { content_type: handler.content_type, data, meta },
+      content: {
+        kind: "external",
+        content_type: handler.content_type,
+        source: { kind: "external", ref: structuredClone(uploaded.value) },
+        meta: {
+          ...meta,
+          sha256: await sha256(body),
+          codec_version: handler.canonical_codec_version,
+        },
+      },
     };
   }
 
@@ -1837,6 +1959,12 @@ export class PageService
       throw new Error("managed actor must be an authenticated user");
     }
   }
+}
+
+function prepared_content_type(content: PreparedPageContent): string {
+  return content.kind === "inline"
+    ? content.content.content_type
+    : content.content_type;
 }
 
 function external_management_input(

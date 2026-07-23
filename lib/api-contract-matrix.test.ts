@@ -423,6 +423,45 @@ Deno.test("contract matrix: every page and namespace endpoint enforces the docum
   }
 });
 
+Deno.test("contract matrix: storage connection management is browser-owned", async () => {
+  const fixture = await setup();
+  const { services, bearers } = fixture;
+  const list = (headers: Record<string, string>, session: Session) =>
+    services.storage_connections_http.list(
+      new Request("https://pager.test/api/storage-connections", { headers }),
+      { request_id: "r", session },
+    );
+
+  assertEquals((await list({}, owner_session)).status, 200);
+  assertEquals((await list({}, guest_session)).status, 401);
+  for (const bearer of [bearers.read, bearers.revoked, invalid_bearer]) {
+    const response = await list(
+      { authorization: `Bearer ${bearer}` },
+      owner_session,
+    );
+    assertEquals(response.status, 401);
+    assertEquals((await response.json()).error, "invalid_bearer");
+  }
+
+  const denied = await services.storage_connections_http.connect(
+    new Request("https://pager.test/api/storage-connections/google-drive", {
+      method: "POST",
+    }),
+    { request_id: "r", session: owner_session },
+    "google-drive",
+  );
+  assertEquals(denied.status, 403);
+  const allowed = await services.storage_connections_http.connect(
+    new Request("https://pager.test/api/storage-connections/google-drive", {
+      method: "POST",
+      headers: { "x-csrf-token": csrf_token },
+    }),
+    { request_id: "r", session: owner_session },
+    "google-drive",
+  );
+  assertEquals(allowed.status, 303);
+});
+
 Deno.test("contract matrix: key management is browser-owned except bearer revoke-all", async (t) => {
   const fixture = await setup();
   const { services, bearers } = fixture;

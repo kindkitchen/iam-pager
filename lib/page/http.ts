@@ -110,13 +110,21 @@ type CreateBody =
   & {
     access: PageAccess;
     tags?: string[];
-    content: { content_type: string; input: unknown };
+    content: {
+      content_type: string;
+      input: unknown;
+      storage?: { provider_id: string };
+    };
   };
 
 interface PatchBody {
   access?: PageAccess;
   tags?: string[];
-  content?: { content_type: string; input: unknown };
+  content?: {
+    content_type: string;
+    input: unknown;
+    storage?: { provider_id: string };
+  };
   endpoint_set?: PageEndpointSetIntent;
 }
 
@@ -898,17 +906,34 @@ function decode_bulk_selection(
 
 function decode_content_command(
   input: unknown,
-): DecodeResult<{ content_type: string; input: unknown }> {
-  const content = strict_object(input, ["content_type", "input"]);
+): DecodeResult<{
+  content_type: string;
+  input: unknown;
+  storage?: { provider_id: string };
+}> {
+  const content = strict_object(input, ["content_type", "input", "storage?"]);
   if (!content.ok) return prefixed(content, "content");
   if (typeof content.value.content_type !== "string") {
     return { ok: false, detail: "content.content_type must be a string" };
+  }
+  let storage: { provider_id: string } | undefined;
+  if (content.value.storage !== undefined) {
+    const decoded = strict_object(content.value.storage, ["provider_id"]);
+    if (!decoded.ok) return prefixed(decoded, "content.storage");
+    if (typeof decoded.value.provider_id !== "string") {
+      return {
+        ok: false,
+        detail: "content.storage.provider_id must be a string",
+      };
+    }
+    storage = { provider_id: decoded.value.provider_id };
   }
   return {
     ok: true,
     value: {
       content_type: content.value.content_type,
       input: content.value.input,
+      ...(storage === undefined ? {} : { storage }),
     },
   };
 }
@@ -1225,6 +1250,45 @@ function create_failure_response(
         result.reason,
         "content_type is not supported",
       );
+    case "external_storage_requires_managed_page":
+      return error_response(
+        403,
+        result.reason,
+        "external storage requires a signed-in creator",
+      );
+    case "invalid_storage_provider":
+      return error_response(422, result.reason, "storage provider is invalid");
+    case "storage_connection_not_found":
+      return error_response(
+        409,
+        result.reason,
+        "storage connection is not active",
+      );
+    case "storage_provider_not_writable":
+      return error_response(
+        409,
+        result.reason,
+        "storage provider does not support publishing",
+      );
+    case "connection_revoked":
+      return error_response(
+        409,
+        result.reason,
+        "storage connection must be reauthorized",
+      );
+    case "external_content_missing":
+      return error_response(
+        422,
+        result.reason,
+        "external content could not be created",
+      );
+    case "storage_provider_unavailable":
+    case "external_source_unreachable":
+      return error_response(
+        503,
+        result.reason,
+        "external storage is temporarily unavailable",
+      );
     case "invalid_input":
       return error_response(422, result.reason, result.detail);
     case "page_id_generation_exhausted":
@@ -1318,6 +1382,45 @@ function update_failure_response(
         422,
         result.reason,
         "content_type is not supported",
+      );
+    case "external_storage_requires_managed_page":
+      return error_response(
+        403,
+        result.reason,
+        "external storage requires a signed-in creator",
+      );
+    case "invalid_storage_provider":
+      return error_response(422, result.reason, "storage provider is invalid");
+    case "storage_connection_not_found":
+      return error_response(
+        409,
+        result.reason,
+        "storage connection is not active",
+      );
+    case "storage_provider_not_writable":
+      return error_response(
+        409,
+        result.reason,
+        "storage provider does not support publishing",
+      );
+    case "connection_revoked":
+      return error_response(
+        409,
+        result.reason,
+        "storage connection must be reauthorized",
+      );
+    case "external_content_missing":
+      return error_response(
+        422,
+        result.reason,
+        "external content could not be created",
+      );
+    case "storage_provider_unavailable":
+    case "external_source_unreachable":
+      return error_response(
+        503,
+        result.reason,
+        "external storage is temporarily unavailable",
       );
     case "revision_exhausted":
       return error_response(

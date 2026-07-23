@@ -230,6 +230,7 @@ export interface ManagedPageTarget {
 export interface ManagedMdPageDraft {
   readonly markdown: string;
   readonly css: string;
+  readonly storage_provider_id?: string;
 }
 
 /** Editable reference state; profile is explicit and never inferred from path. */
@@ -398,6 +399,9 @@ export function prepare_managed_update_request(
             md: patch.content.markdown,
             ...(patch.content.css === "" ? {} : { css: patch.content.css }),
           },
+          ...(patch.content.storage_provider_id === undefined ? {} : {
+            storage: { provider_id: patch.content.storage_provider_id },
+          }),
         },
       }),
     },
@@ -409,6 +413,7 @@ export interface ManagedPdfReplacementDraft {
   readonly bytes: Uint8Array;
   /** Omit to preserve current tags; provide a complete set to replace them. */
   readonly tags?: readonly string[];
+  readonly storage_provider_id?: string;
 }
 
 /**
@@ -425,6 +430,9 @@ export function prepare_managed_pdf_replace_request(
   if (violation !== null) throw new Error(violation);
   const metadata = {
     ...(draft.tags === undefined ? {} : { tags: [...draft.tags] }),
+    ...(draft.storage_provider_id === undefined ? {} : {
+      storage: { provider_id: draft.storage_provider_id },
+    }),
   };
   const form_data = new FormData();
   form_data.append(

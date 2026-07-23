@@ -33,6 +33,7 @@ import {
   type PreparedManagedRequest,
 } from "../lib/ui/page-management.ts";
 import { page_api_failure_presenter } from "../lib/ui/page-api-failure.ts";
+import type { WritableStorageOption } from "../lib/ui/storage-connections.ts";
 import { ClientPagePreviewer } from "../lib/ui/page-preview.ts";
 import {
   describe_pdf_file,
@@ -49,6 +50,7 @@ interface MdEditorState {
   markdown: string;
   css: string;
   tags_input: string;
+  storage_provider_id: string;
   saving: boolean;
 }
 
@@ -58,6 +60,7 @@ interface PdfEditorState {
   metadata: ManagedPdfMetadata;
   selected_file: File | null;
   tags_input: string;
+  storage_provider_id: string;
   saving: boolean;
 }
 
@@ -112,6 +115,8 @@ export interface PageManagementPanelProps {
   csrf_token: string;
   /** Namespace choices authorized and loaded by the server presenter. */
   owned_namespaces: readonly string[];
+  /** Active write-capable external custody choices derived server-side. */
+  storage_options?: readonly WritableStorageOption[];
   /** Server-rendered snapshot; the island continues through `/api/pages`. */
   initial_pages: readonly PageManagementSummary[];
   initial_next_cursor: string | null;
@@ -492,6 +497,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
             markdown: md_draft.markdown,
             css: md_draft.css,
             tags_input: refreshed.tags.join(", "),
+            storage_provider_id: "",
             saving: false,
           }
           : {
@@ -500,6 +506,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
             metadata: pdf_metadata!,
             selected_file: null,
             tags_input: refreshed.tags.join(", "),
+            storage_provider_id: "",
             saving: false,
           },
       );
@@ -519,7 +526,13 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         page,
         {
           tags: managed_tags_from_input(editor.tags_input),
-          content: { markdown: editor.markdown, css: editor.css },
+          content: {
+            markdown: editor.markdown,
+            css: editor.css,
+            ...(editor.storage_provider_id === "" ? {} : {
+              storage_provider_id: editor.storage_provider_id,
+            }),
+          },
         },
         props.csrf_token,
       );
@@ -624,6 +637,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
         filename: selected_file.name,
         bytes,
         tags: managed_tags_from_input(current_editor.tags_input),
+        ...(current_editor.storage_provider_id === "" ? {} : {
+          storage_provider_id: current_editor.storage_provider_id,
+        }),
       };
       const violation = managed_pdf_replacement_violation(draft);
       if (violation !== null) {
@@ -1543,6 +1559,16 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                             : { ...current, tags_input: value }
                         )}
                     />
+                    <ManagedStorageTarget
+                      value={editor.storage_provider_id}
+                      options={props.storage_options ?? []}
+                      on_change={(storage_provider_id) =>
+                        set_editor((current) =>
+                          current?.kind !== "md-page"
+                            ? current
+                            : { ...current, storage_provider_id }
+                        )}
+                    />
                     <PageEditor
                       markdown={editor.markdown}
                       css={editor.css}
@@ -1615,6 +1641,16 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                           current?.kind !== "pdf"
                             ? current
                             : { ...current, tags_input: value }
+                        )}
+                    />
+                    <ManagedStorageTarget
+                      value={editor.storage_provider_id}
+                      options={props.storage_options ?? []}
+                      on_change={(storage_provider_id) =>
+                        set_editor((current) =>
+                          current?.kind !== "pdf"
+                            ? current
+                            : { ...current, storage_provider_id }
                         )}
                     />
                     <PdfFileSelection
@@ -1811,6 +1847,30 @@ function ManagedTagsEditor({ value, on_input }: ManagedTagsEditorProps) {
       <small>
         Comma-separated; up to 10 canonical tags. Empty clears all tags.
       </small>
+    </label>
+  );
+}
+
+function ManagedStorageTarget(props: {
+  readonly value: string;
+  readonly options: readonly WritableStorageOption[];
+  readonly on_change: (provider_id: string) => void;
+}) {
+  if (props.options.length === 0) return null;
+  return (
+    <label>
+      Content storage
+      <select
+        value={props.value}
+        onChange={(event) => props.on_change(event.currentTarget.value)}
+      >
+        <option value="">Store content in iam-pager</option>
+        {props.options.map((option) => (
+          <option value={option.provider_id}>
+            Store content in {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

@@ -69,6 +69,7 @@ export interface PdfPublishDraft {
   readonly canonical: PdfEndpointDraft;
   readonly alternates: readonly PdfEndpointDraft[];
   readonly tags: readonly string[];
+  readonly storage_provider_id?: string;
 }
 
 /**
@@ -89,6 +90,7 @@ interface PdfCreateMetadata {
   };
   readonly access: PageAccess;
   readonly tags?: readonly string[];
+  readonly storage?: { readonly provider_id: string };
 }
 
 const pdf_publish_url = "/api/pages";
@@ -113,6 +115,9 @@ export function prepare_pdf_publish_request(
     },
     access: draft.access,
     ...(draft.tags.length === 0 ? {} : { tags: [...draft.tags] }),
+    ...(draft.storage_provider_id === undefined ? {} : {
+      storage: { provider_id: draft.storage_provider_id },
+    }),
   };
 
   const headers = new Headers();

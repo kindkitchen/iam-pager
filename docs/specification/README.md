@@ -29,7 +29,6 @@ code, tests, and future tasks without depending on section order.
 - A logical content item is independent of its non-empty locator-reference set;
   one or many explicit delivery endpoints may expose the same current asset
   while it remains one managed and explored item.
-- Markdown and PDF are the supported content types. External storage is a
-  selected next capability for their validated payloads, with local metadata and
-  iam-pager delivery; it remains unavailable until its implementation tasks
-  land.
+- Markdown and PDF are the supported content types. Authenticated creators may
+  keep their validated payloads in connected external storage while metadata
+  remains local and delivery continues through iam-pager.

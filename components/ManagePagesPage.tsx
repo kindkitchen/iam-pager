@@ -4,16 +4,24 @@ import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
 import type { SiteNavigation } from "../lib/ui/site-navigation.ts";
 import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
 import { SiteSessionNavigation } from "./SiteApp.tsx";
+import type { StorageConnectionPanel as StorageConnectionPanelModel } from "../lib/ui/storage-connections.ts";
+import { StorageConnectionsPanel } from "./StorageConnectionsPanel.tsx";
 
 export interface ManagePagesPageProps {
   readonly navigation: SiteNavigation;
   readonly breadcrumb: SiteBreadcrumbTrail;
   readonly page_management: PageManagementPanelModel;
+  readonly storage_connections: StorageConnectionPanelModel;
 }
 
 /** Creator page management as a dedicated site view. */
 export function ManagePagesPage(
-  { navigation, breadcrumb, page_management }: ManagePagesPageProps,
+  {
+    navigation,
+    breadcrumb,
+    page_management,
+    storage_connections,
+  }: ManagePagesPageProps,
 ) {
   return (
     <main class="site-app manage-pages-shell">
@@ -25,12 +33,18 @@ export function ManagePagesPage(
 
       {page_management.kind === "creator"
         ? (
-          <PageManagementPanel
-            csrf_token={page_management.csrf_token}
-            owned_namespaces={page_management.owned_namespaces}
-            initial_pages={page_management.pages}
-            initial_next_cursor={page_management.next_cursor}
-          />
+          <>
+            <StorageConnectionsPanel panel={storage_connections} />
+            <PageManagementPanel
+              csrf_token={page_management.csrf_token}
+              owned_namespaces={page_management.owned_namespaces}
+              storage_options={storage_connections.kind === "creator"
+                ? storage_connections.writable_options
+                : []}
+              initial_pages={page_management.pages}
+              initial_next_cursor={page_management.next_cursor}
+            />
+          </>
         )
         : (
           <section class="manage-pages-guest">

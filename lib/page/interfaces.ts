@@ -96,7 +96,19 @@ export interface ManagedPageInspection extends PageSummary {
 export interface PageContentCommand {
   content_type: string;
   input: unknown;
+  /** Omit for inline custody; provider selection never accepts a connection ID. */
+  storage?: { readonly provider_id: string };
 }
+
+export type ExternalPublicationFailureReason =
+  | "external_storage_requires_managed_page"
+  | "invalid_storage_provider"
+  | "storage_connection_not_found"
+  | "storage_provider_unavailable"
+  | "storage_provider_not_writable"
+  | "external_content_missing"
+  | "connection_revoked"
+  | "external_source_unreachable";
 
 /**
  * Inline canonical-locator shorthand or a complete publisher-configured
@@ -138,6 +150,7 @@ export type PublishTrialPageResult =
       | "endpoint_capacity_exceeded"
       | "revision_exhausted"
       | "unknown_content_type"
+      | ExternalPublicationFailureReason
       | "page_id_generation_exhausted";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -166,6 +179,7 @@ export type CreateManagedPageResult =
       | "page_exists"
       | "endpoint_capacity_exceeded"
       | "unknown_content_type"
+      | ExternalPublicationFailureReason
       | "page_id_generation_exhausted";
   }
   | { ok: false; reason: "invalid_input"; detail: string };
@@ -234,7 +248,8 @@ export type UpdateManagedPageResult =
       | "namespace_reserved"
       | "endpoint_capacity_exceeded"
       | PageEndpointCommandFailureReason
-      | "unknown_content_type";
+      | "unknown_content_type"
+      | ExternalPublicationFailureReason;
   }
   | { ok: false; reason: "invalid_input"; detail: string };
 

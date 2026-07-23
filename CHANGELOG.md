@@ -2,6 +2,15 @@
 
 ## 2026-07-22
 
+- Completed creator-facing external storage: a browser-owned connections API
+  lists token-free provider metadata and initiates or disconnects Google Drive;
+  `/site/manage` now presents connection status, reconnect/disconnect controls,
+  and the dependent-page warning. Active write-capable connections appear in
+  publish and revision-bound replacement flows for Markdown and PDF. Selected
+  external writes validate and render canonical bytes, upload before commit,
+  persist payload-free assets with SHA-256/codec facts, and never silently fall
+  back inline. Added API/specification docs and end-to-end service, HTTP,
+  multipart, presenter, and component coverage.
 - Added owner-facing external-content health and repair management. Managed page
   summaries now expose safe missing causes and detection times, list cursors
   bind a strict missing/healthy filter, and the creator UI shows affected-page

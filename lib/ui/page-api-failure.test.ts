@@ -117,8 +117,24 @@ Deno.test("page API failures make external repairs actionable", () => {
     {
       kind: "authority",
       code: "connection_revoked",
-      message: "Reconnect external storage before re-linking this page.",
+      message: "Reconnect external storage before trying again.",
     },
+  );
+  assertEquals(
+    presenter.present(409, body("storage_connection_not_found"), {
+      operation: "publish",
+    }),
+    {
+      kind: "authority",
+      code: "storage_connection_not_found",
+      message: "Reconnect external storage before trying again.",
+    },
+  );
+  assertEquals(
+    presenter.present(503, body("storage_provider_unavailable"), {
+      operation: "publish",
+    }).kind,
+    "availability",
   );
 });
 

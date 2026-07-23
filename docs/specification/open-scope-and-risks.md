@@ -31,20 +31,20 @@ substrings and exact tags. Text extraction, indexing, relevance, and view-count
 sorting remain later capabilities. Any index must preserve immediate privacy
 when access becomes private.
 
-## OS-EXTERNAL — External storage implementation risk
+## OS-EXTERNAL — External storage operational risk
 
-The product boundary is selected in [external-storage.md](external-storage.md):
-iam-pager keeps authoritative metadata locally, fetches and verifies provider
-bytes, never redirects visitors, and uses a non-disclosing `503` placeholder
-after an eligible page loses content. The provider interface family, registry,
-conformance suite, and memory reference adapter now exist; connection,
-asset-source, delivery, warning/repair, and management remain open work.
+The implemented boundary is defined in
+[external-storage.md](external-storage.md): iam-pager keeps authoritative
+metadata locally, fetches and verifies provider bytes, never redirects visitors,
+and uses a non-disclosing `503` placeholder after an eligible page loses
+content.
 
-Until that chain lands, external storage must not be presented as available.
-Implementation must preserve local page/locator/authority/privacy semantics,
-prevent provider-side edits from mutating immutable assets, keep tokens
-encrypted and server-only, distinguish definitive missing state from retryable
-outages, and avoid automatic remote deletion or stale-byte delivery.
+Current residual risks are operational: losing the external token-custody key
+loses stored credentials; provider outages have no stale-byte cache; failed page
+commits after successful uploads can leave unreferenced provider objects; and
+provider-side deletion or edits can make pages unavailable until owner repair.
+Automatic remote deletion, orphan cleanup, background synchronization, multiple
+accounts per provider, and stale-byte delivery remain intentionally absent.
 
 ## OS-ISOLATION — Active content
 

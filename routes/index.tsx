@@ -18,11 +18,18 @@ export const handler = define.handlers({
     }
     const session = ctx.state.request_context.session;
     const services = await app_services();
+    const [namespace_panel, page_management, storage_connections] =
+      await Promise.all([
+        services.namespace_panel.present(session),
+        services.page_management_panel.present(session),
+        services.storage_connection_panel.present(session),
+      ]);
     return page({
       navigation: site_navigation_presenter.present(session, ctx.url),
       breadcrumb: site_breadcrumb_presenter.present({ kind: "home" }),
-      namespace_panel: await services.namespace_panel.present(session),
-      page_management: await services.page_management_panel.present(session),
+      namespace_panel,
+      page_management,
+      storage_connections,
     });
   },
 });
