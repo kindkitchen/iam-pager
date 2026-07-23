@@ -163,6 +163,13 @@ credentials even when the remote request fails. The browser-owned
 initiates or disconnects supported providers; explicit API-key bearers are
 rejected without cookie fallback.
 
+Credential-free local Drive mode needs no redirect URI, client ID, or client
+secret when a request-host pattern is configured. Start requests derive the
+callback origin only from a fully matched HTTPS request host and retain the
+application-owned callback path; mock consent enforces the same origin and
+allowlist. This mode never registers the remote Drive content provider and must
+not match production hosts.
+
 ## ES-DELIVERY — Resolution and failure behavior
 
 Page authority and visibility are resolved before the content source. Invalid,

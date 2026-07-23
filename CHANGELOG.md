@@ -2,6 +2,9 @@
 
 ## 2026-07-23
 
+- Hardened credential-free Google Drive OAuth for HTTPS previews with explicit
+  local-mode composition coverage, mode-aware credential errors, complete
+  environment examples, and documented request-host allowlisting semantics.
 - Added a complete, credential-free environment catalog with runtime-context and
   plain-text/secret annotations, plus a Deno Deploy setup guide covering safe
   private copies, dotenv batch import, secret-name inference, and the lack of

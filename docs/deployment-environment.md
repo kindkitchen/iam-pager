@@ -58,6 +58,11 @@ deno deploy env --org YOUR_ORG --app YOUR_APP load \
   IAM_PAGER_GOOGLE_AUTH_MOCK_CONSENT_URL \
   IAM_PAGER_GOOGLE_AUTH_CLIENT_ID \
   IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN \
+  IAM_PAGER_GOOGLE_DRIVE_MODE \
+  IAM_PAGER_GOOGLE_DRIVE_REDIRECT_URI \
+  IAM_PAGER_GOOGLE_DRIVE_MOCK_CONSENT_URL \
+  IAM_PAGER_GOOGLE_DRIVE_CLIENT_ID \
+  IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN \
   IAM_PAGER_API_KEY_STORAGE_BACKEND
 ```
 
@@ -67,6 +72,21 @@ variable, but there is no supported dotenv annotation that applies those
 contexts automatically. Production and Development may use different values for
 the same name; configure non-overlapping context-specific rows in the Dashboard
 when needed, especially for OAuth callback URLs and credentials.
+
+A credential-free HTTPS preview must explicitly select local mode for both
+Google integrations. A host pattern alone does not override `original` mode:
+
+```env
+IAM_PAGER_GOOGLE_AUTH_MODE=local
+IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
+IAM_PAGER_GOOGLE_DRIVE_MODE=local
+IAM_PAGER_GOOGLE_DRIVE_REQUEST_HOST_PATTERN=iam-pager-pr-[a-z0-9-]+\.example\.com
+```
+
+Do not assign the corresponding redirect URIs, mock-consent URLs, client IDs, or
+client secrets to that preview context. The matched HTTPS request supplies the
+origin; application-owned callback paths remain fixed. Local mode grants fake
+identity and Drive consent, so the pattern must not match production.
 
 Sources:
 

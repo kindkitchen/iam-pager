@@ -196,8 +196,16 @@ export function parse_google_drive_oauth_config(
   return {
     mode,
     redirect_uri,
-    client_id: require_value(environment, GOOGLE_DRIVE_CLIENT_ID_ENV),
-    client_secret: require_value(environment, GOOGLE_DRIVE_CLIENT_SECRET_ENV),
+    client_id: require_value(
+      environment,
+      GOOGLE_DRIVE_CLIENT_ID_ENV,
+      `${GOOGLE_DRIVE_MODE_ENV}=original`,
+    ),
+    client_secret: require_value(
+      environment,
+      GOOGLE_DRIVE_CLIENT_SECRET_ENV,
+      `${GOOGLE_DRIVE_MODE_ENV}=original`,
+    ),
     ...(request_host_pattern === undefined ? {} : { request_host_pattern }),
   };
 }
@@ -206,12 +214,23 @@ export async function compose_google_drive_oauth(
   config: GoogleDriveOAuthConfig,
 ): Promise<GoogleDriveOAuthComposition> {
   if (config.mode === "local") {
-    const dynamic = config.request_host_pattern !== undefined;
+    const uses_dynamic_urls = config.request_host_pattern !== undefined;
     const { Requirements } = await GAuth.load_preset.local();
-    const service = dynamic ? null : await compose_local_service(
-      config.redirect_uri!,
-      config.mocked_google_consent_screen_url!,
-    );
+    let service: GAuthService | null = null;
+    if (!uses_dynamic_urls) {
+      if (
+        config.redirect_uri === undefined ||
+        config.mocked_google_consent_screen_url === undefined
+      ) {
+        throw new TypeError(
+          "local Google Drive OAuth requires static URLs or a request host pattern",
+        );
+      }
+      service = await compose_local_service(
+        config.redirect_uri,
+        config.mocked_google_consent_screen_url,
+      );
+    }
     const resolver = new GoogleDriveGAuthServiceResolver(config, service);
     return {
       client: new GoogleDriveGAuthClient({
@@ -240,12 +259,20 @@ export async function compose_google_drive_oauth(
 function require_value(
   environment: GoogleDriveEnvironmentSource,
   name: string,
+  required_for?: string,
 ): string {
   const value = environment.get(name);
   if (
     value === undefined || value.length === 0 || value.length > 4096 ||
     value.trim() !== value
-  ) throw new TypeError(`${name} must be a non-empty configured value`);
+  ) {
+    const mode_context = required_for === undefined
+      ? ""
+      : ` when ${required_for}`;
+    throw new TypeError(
+      `${name} must be a non-empty configured value${mode_context}`,
+    );
+  }
   return value;
 }
 
