@@ -11,6 +11,7 @@ import {
   GOOGLE_AUTH_MOCK_CONSENT_URL_ENV,
   GOOGLE_AUTH_MODE_ENV,
   GOOGLE_AUTH_REDIRECT_URI_ENV,
+  GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
   MemoryIdentityRepository,
 } from "./auth/mod.ts";
 import {
@@ -20,6 +21,7 @@ import {
   GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV,
   GOOGLE_DRIVE_MODE_ENV,
   GOOGLE_DRIVE_REDIRECT_URI_ENV,
+  GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV,
   MemoryStorageConnectionRepository,
   MemoryStorageOAuthAttemptRepository,
 } from "./external-storage/mod.ts";
@@ -74,6 +76,16 @@ const local_google_environment: Readonly<Record<string, string>> = {
     "http://localhost:5173/auth/storage/google-drive/callback",
   [GOOGLE_DRIVE_MOCK_CONSENT_URL_ENV]:
     "http://localhost:5173/auth/storage/google-drive/mock-consent",
+};
+const preview_google_drive_environment: Readonly<Record<string, string>> = {
+  ...memory_storage_environment,
+  [SESSION_COOKIE_MODE_ENV]: "production",
+  [GOOGLE_AUTH_MODE_ENV]: "local",
+  [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]:
+    "iam-pager-pr-[a-z0-9-]+\\.example\\.com",
+  [GOOGLE_DRIVE_MODE_ENV]: "local",
+  [GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV]:
+    "iam-pager-pr-[a-z0-9-]+\\.example\\.com",
 };
 const original_google_environment: Readonly<Record<string, string>> = {
   ...memory_storage_environment,
@@ -418,6 +430,64 @@ Deno.test("configured local Google flow upgrades its guest session", async () =>
   assertEquals(
     response_cookie_header(callback.response) === guest_cookie,
     false,
+  );
+});
+
+Deno.test("configured preview Drive flow derives an allowlisted request host without credentials", async () => {
+  const services = await create_configured_app_services({
+    get: (name) => preview_google_drive_environment[name],
+  });
+  const now = new Date("2026-07-23T12:00:00.000Z");
+  const context = {
+    request_id: "request-preview-drive",
+    session: {
+      kind: "authenticated" as const,
+      session_id: "session-preview-drive",
+      session_version: 1,
+      user_id: "user-preview-drive",
+      csrf_token: "c".repeat(43),
+      created_at: now,
+      last_seen_at: now,
+      authenticated_at: now,
+      idle_expires_at: new Date("2026-08-23T12:00:00.000Z"),
+      absolute_expires_at: new Date("2026-10-23T12:00:00.000Z"),
+    },
+  };
+  const preview_origin = "https://iam-pager-pr-change-42.example.com";
+  const started = await services.google_drive_connections_http.start(
+    new Request(`${preview_origin}/auth/storage/google-drive/start`),
+    context,
+  );
+  assertEquals(started.status, 303);
+  const consent_location = started.headers.get("location");
+  assertExists(consent_location);
+  const consent_url = new URL(consent_location);
+  assertEquals(
+    `${consent_url.origin}${consent_url.pathname}`,
+    `${preview_origin}/auth/storage/google-drive/mock-consent`,
+  );
+  assertEquals(
+    consent_url.searchParams.get("redirect_uri"),
+    `${preview_origin}/auth/storage/google-drive/callback`,
+  );
+  assertEquals(
+    services.google_drive_mock_consent_http.handle(
+      new Request(consent_location),
+    ).status,
+    200,
+  );
+  assertEquals(
+    (await services.google_drive_connections_http.start(
+      new Request(
+        `${preview_origin}.attacker.test/auth/storage/google-drive/start`,
+      ),
+      context,
+    )).status,
+    400,
+  );
+  assertEquals(
+    services.external_storage_providers.resolve("google-drive"),
+    null,
   );
 });
 

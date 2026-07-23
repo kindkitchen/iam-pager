@@ -33,6 +33,17 @@ Deno.test("Google Drive OAuth configuration uses its own exact routes and creden
   );
   assertEquals(
     parse_google_drive_oauth_config(environment({
+      [GOOGLE_DRIVE_MODE_ENV]: "local",
+      [GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV]:
+        "pager-pr-[a-z0-9-]+\\.example\\.com",
+    })),
+    {
+      mode: "local",
+      request_host_pattern: "pager-pr-[a-z0-9-]+\\.example\\.com",
+    },
+  );
+  assertEquals(
+    parse_google_drive_oauth_config(environment({
       [GOOGLE_DRIVE_MODE_ENV]: "original",
       [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
         "https://pager.example/auth/storage/google-drive/callback",
@@ -66,6 +77,16 @@ Deno.test("Google Drive OAuth configuration uses its own exact routes and creden
       })),
     TypeError,
     GOOGLE_DRIVE_REQUEST_HOST_PATTERN_ENV,
+  );
+  assertThrows(
+    () =>
+      parse_google_drive_oauth_config(environment({
+        [GOOGLE_DRIVE_MODE_ENV]: "original",
+        [GOOGLE_DRIVE_REDIRECT_URI_ENV]:
+          "https://pager.example/auth/storage/google-drive/callback",
+      })),
+    TypeError,
+    `${GOOGLE_DRIVE_CLIENT_ID_ENV} must be a non-empty configured value when ${GOOGLE_DRIVE_MODE_ENV}=original`,
   );
 });
 
