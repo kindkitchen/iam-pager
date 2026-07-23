@@ -269,12 +269,13 @@ IAM_PAGER_GOOGLE_DRIVE_CLIENT_SECRET=...
 
 Drive requests `drive.file` as its only content permission, plus the identity
 scopes gauth needs to verify the provider account, and forces offline explicit
-consent. In `original` mode those same Drive client credentials compose the
-`google-drive` external provider; local mode mocks consent only and does not
-register a remote-content provider. Connect and callback require an
-authenticated browser session; disconnect is POST-only and requires that
-session's CSRF token. The routes are
-`/auth/storage/google-drive/{start,callback,disconnect}`.
+consent. The callback accepts bounded Google authorization-response metadata,
+validates Google's issuer when present, and exchanges only a non-empty code. In
+`original` mode those same Drive client credentials compose the `google-drive`
+external provider; local mode mocks consent only and does not register a
+remote-content provider. Connect and callback require an authenticated browser
+session; disconnect is POST-only and requires that session's CSRF token. The
+routes are `/auth/storage/google-drive/{start,callback,disconnect}`.
 
 An explicitly designated HTTPS preview can use credential-free local OAuth by
 setting both integrations to `local` and allowlisting its full request host:

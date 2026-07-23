@@ -154,14 +154,16 @@ the only Drive permission alongside gauth's verified-account identity scopes,
 and forces offline explicit consent. Raw state is never stored: its hash, PKCE
 context, exact callback, session ID, user ID, and expiry use a separate
 `storage-oauth-attempts/google-drive` persistence prefix and are consumed once
-before exchange. Connect and callback require the same authenticated session.
-Successful consent creates or same-subject reauthorizes one connection while
-preserving an existing refresh token if Google omits it. CSRF-protected POST
-disconnect attempts provider revocation, then revokes locally and destroys
-credentials even when the remote request fails. The browser-owned
-`/api/storage-connections` surface lists only safe metadata/capabilities and
-initiates or disconnects supported providers; explicit API-key bearers are
-rejected without cookie fallback.
+before exchange. The callback ignores bounded OAuth extension metadata as
+required by the protocol, validates Google's issuer when supplied, and consumes
+malformed attempts without making a token request. Connect and callback require
+the same authenticated session. Successful consent creates or same-subject
+reauthorizes one connection while preserving an existing refresh token if Google
+omits it. CSRF-protected POST disconnect attempts provider revocation, then
+revokes locally and destroys credentials even when the remote request fails. The
+browser-owned `/api/storage-connections` surface lists only safe
+metadata/capabilities and initiates or disconnects supported providers; explicit
+API-key bearers are rejected without cookie fallback.
 
 Credential-free local Drive mode needs no redirect URI, client ID, or client
 secret when a request-host pattern is available. A Drive-specific pattern takes
