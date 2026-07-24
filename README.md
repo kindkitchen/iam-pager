@@ -269,6 +269,15 @@ IAM_PAGER_GOOGLE_DRIVE_CLIENT_ID=...
 IAM_PAGER_GOOGLE_DRIVE_CLIENT_SECRET=...
 ```
 
+Real Google sign-in always sends the exact `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI`;
+request-host patterns are ignored in `original` mode. Register that complete URI
+under the sign-in OAuth client's **Authorized redirect URIs** in Google Cloud,
+including scheme, host, optional port, path, and trailing-slash choice. An
+existing iam-pager session can hide a changed client or callback setting until
+logout requires a new authorization request. Logout revokes only the iam-pager
+session, not the browser's Google session, so Google may reuse the previous
+account without showing its chooser.
+
 In the Google Cloud project that owns the Drive OAuth client, enable the
 **Google Drive API** before connecting storage; OAuth consent can succeed while
 file uploads are still rejected if the API is disabled. Drive requests
@@ -283,7 +292,9 @@ disconnect is POST-only and requires that session's CSRF token. The routes are
 `/auth/storage/google-drive/{start,callback,disconnect}`.
 
 An explicitly designated HTTPS preview can use credential-free local OAuth by
-setting both integrations to `local` and allowlisting its full request host:
+setting both integrations to `local` and allowlisting its full request host.
+Dynamic callbacks are deliberately unavailable with real Google sign-in because
+Google requires each redirect URI to be registered exactly:
 
 ```env
 IAM_PAGER_GOOGLE_AUTH_MODE=local

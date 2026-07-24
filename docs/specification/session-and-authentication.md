@@ -77,8 +77,10 @@ credential, and control-byte forms.
 Callback errors use site-owned restrictive HTML and a safe retry link. Callback
 values and provider causes never enter the model or diagnostics. Logout accepts
 one bounded form CSRF token, atomically revokes the current authenticated
-bearer, and publishes a distinct fresh guest session. Stale, cross-session, and
-replayed tokens cannot log out another session.
+bearer, and publishes a distinct fresh guest session. It does not revoke the
+browser's provider session, so Google may reuse the prior account on a later
+sign-in. Stale, cross-session, and replayed tokens cannot log out another
+session.
 
 ## SA-GOOGLE — Google strategy
 
@@ -93,11 +95,14 @@ Startup selects one explicit mode:
   HTTPS request-host pattern for fake-auth previews;
 - `original`: Google credentials and an authorized callback URL.
 
-Without a host pattern, configured callback URLs are authoritative. With a
+Original mode always sends its required configured callback URL unchanged;
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN` is ignored so a request host cannot
+select a URI absent from the Google client's exact registration. Local mode uses
+its configured loopback URLs when no pattern is present. With a local-mode
 pattern, the complete case-insensitive `Request.url` host (including a
 non-default port) must match and the scheme must be HTTPS; fixed callback paths
 are then built with the URL API. `Origin` and `Referer` are never authorities.
-Every local-mode matched host permits fake sign-in and must exclude production.
+Every matched host permits fake sign-in and must exclude production.
 
 The local consent route validates exact state, scope, and same-origin callback
 before rendering gauth's screen. It is unavailable in original mode.

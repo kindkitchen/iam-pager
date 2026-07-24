@@ -46,7 +46,8 @@ export interface OriginalGoogleAuthConfig {
   readonly redirect_uri: string;
   readonly client_id: string;
   readonly client_secret: string;
-  readonly request_host_pattern?: string;
+  /** Real Google OAuth always uses its exact registered callback. */
+  readonly request_host_pattern?: undefined;
 }
 
 export type GoogleAuthConfig =
@@ -77,9 +78,10 @@ class PackageGoogleGAuthServiceResolver implements GoogleGAuthServiceResolver {
   ) {
     this.#config = config;
     this.#configured_service = configured_service;
-    this.#request_host_matcher = config.request_host_pattern === undefined
-      ? null
-      : new RequestHostMatcher(config.request_host_pattern);
+    this.#request_host_matcher = config.mode === "local" &&
+        config.request_host_pattern !== undefined
+      ? new RequestHostMatcher(config.request_host_pattern)
+      : null;
   }
 
   resolve(callback_url: string): Promise<GAuthService> {
@@ -90,6 +92,7 @@ class PackageGoogleGAuthServiceResolver implements GoogleGAuthServiceResolver {
       return Promise.resolve(this.#configured_service);
     }
     if (
+      this.#config.mode !== "local" ||
       this.#request_host_matcher === null ||
       !is_dynamic_google_callback_url(
         callback_url,
@@ -98,13 +101,10 @@ class PackageGoogleGAuthServiceResolver implements GoogleGAuthServiceResolver {
     ) {
       return Promise.reject(new TypeError("untrusted Google callback URL"));
     }
-    if (this.#config.mode === "local") {
-      return compose_local_google_gauth_service(
-        callback_url,
-        new URL("/auth/google/mock-consent", callback_url).href,
-      );
-    }
-    return compose_original_google_gauth_service(this.#config, callback_url);
+    return compose_local_google_gauth_service(
+      callback_url,
+      new URL("/auth/google/mock-consent", callback_url).href,
+    );
   }
 }
 
@@ -261,9 +261,8 @@ export function parse_google_auth_config(
     throw new TypeError(`${GOOGLE_AUTH_MODE_ENV} must be local or original`);
   }
 
-  const request_host_pattern = parse_request_host_pattern(environment);
-
   if (mode === "local") {
+    const request_host_pattern = parse_request_host_pattern(environment);
     if (request_host_pattern !== undefined) {
       return { mode, request_host_pattern };
     }
@@ -291,6 +290,9 @@ export function parse_google_auth_config(
     return { mode, redirect_uri, mocked_google_consent_screen_url };
   }
 
+  // Original mode deliberately ignores the preview-host setting. Google
+  // registers redirect URIs exactly, so request-derived hosts can turn a
+  // routine reauthentication into redirect_uri_mismatch after deployment.
   const redirect_uri = require_environment_value(
     environment,
     GOOGLE_AUTH_REDIRECT_URI_ENV,
@@ -314,7 +316,6 @@ export function parse_google_auth_config(
       environment,
       GOOGLE_AUTH_CLIENT_SECRET_ENV,
     ),
-    ...(request_host_pattern === undefined ? {} : { request_host_pattern }),
   };
 }
 

@@ -22,6 +22,25 @@ attached database. `DENO_KV_ACCESS_TOKEN` is only for a self-hosted process
 opening remote KV; the current Deploy platform rejects user-defined `DENO_` keys
 and does not need it for an attached database.
 
+## Google sign-in redirect URI
+
+In `original` mode, `IAM_PAGER_GOOGLE_AUTH_REDIRECT_URI` is the sole sign-in
+callback authority. The application ignores
+`IAM_PAGER_GOOGLE_AUTH_REQUEST_HOST_PATTERN` in this mode and sends the complete
+configured URI unchanged on every authorization attempt, including the first
+attempt after logout. Add that exact URI to **APIs & Services > Credentials >
+OAuth 2.0 Client IDs > Authorized redirect URIs** for
+`IAM_PAGER_GOOGLE_AUTH_CLIENT_ID`. Scheme, host, port, path, and trailing slash
+must match exactly.
+
+A persisted iam-pager session does not re-run Google authorization, so changed
+runtime contexts, client IDs, or redirect settings may appear healthy until the
+user logs out. A Google `redirect_uri_mismatch` page means the URI/client pair
+in the new authorization request does not match Google Cloud registration;
+logout does not mutate that pair. The missing account chooser is also expected
+when the browser still has a Google session, because iam-pager logout does not
+sign the browser out of Google.
+
 ## Google Drive production prerequisite
 
 For `IAM_PAGER_GOOGLE_DRIVE_MODE=original`, open **APIs & Services > Library**
@@ -83,7 +102,8 @@ the same name; configure non-overlapping context-specific rows in the Dashboard
 when needed, especially for OAuth callback URLs and credentials.
 
 A credential-free HTTPS preview must explicitly select local mode for both
-Google integrations. A host pattern alone does not override `original` mode:
+Google integrations. The sign-in host pattern is used only in `local` mode; it
+neither overrides `original` mode nor replaces its configured callback:
 
 ```env
 IAM_PAGER_GOOGLE_AUTH_MODE=local

@@ -351,7 +351,7 @@ Deno.test("configured composition selects every persistence interface together",
   );
 });
 
-Deno.test("configured local Google flow upgrades its guest session", async () => {
+Deno.test("configured local Google flow signs in again with the same callback after logout", async () => {
   const services = await create_configured_app_services({
     get: (name) => local_google_environment[name],
   });
@@ -424,9 +424,66 @@ Deno.test("configured local Google flow upgrades its guest session", async () =>
     callback.state.request_context.session.session_id,
     guest_session_id,
   );
+  const authenticated_cookie = response_cookie_header(callback.response);
+  assertEquals(authenticated_cookie === guest_cookie, false);
+  const authenticated_session = callback.state.request_context.session;
+  if (authenticated_session.kind !== "authenticated") {
+    throw new Error("callback did not authenticate the session");
+  }
+
+  const logout_request = new Request(
+    "http://localhost:5173/auth/logout",
+    {
+      method: "POST",
+      headers: { cookie: authenticated_cookie },
+      body: new URLSearchParams({
+        csrf_token: authenticated_session.csrf_token,
+      }),
+    },
+  );
+  const logged_out = await run_application_request(
+    services,
+    logout_request,
+    async (request_state) => {
+      const result = await services.authentication_http.logout(
+        logout_request,
+        request_state.request_context,
+      );
+      if (result.session_resolution !== undefined) {
+        services.request_context.apply_session_resolution(
+          request_state,
+          result.session_resolution,
+        );
+      }
+      return result.response;
+    },
+  );
+  assertEquals(logged_out.response.status, 303);
+  assertEquals(logged_out.state.request_context.session.kind, "guest");
+  const logged_out_cookie = response_cookie_header(logged_out.response);
+
+  const second_start_request = new Request(
+    "http://localhost:5173/auth/google/start",
+    { headers: { cookie: logged_out_cookie } },
+  );
+  const second_started = await run_application_request(
+    services,
+    second_start_request,
+    async (request_state) =>
+      (await services.authentication_http.start(
+        second_start_request,
+        "google",
+        request_state.request_context,
+      )).response,
+  );
+  assertEquals(second_started.response.status, 303);
+  const second_consent_location = second_started.response.headers.get(
+    "location",
+  );
+  assertExists(second_consent_location);
   assertEquals(
-    response_cookie_header(callback.response) === guest_cookie,
-    false,
+    new URL(second_consent_location).searchParams.get("redirect_uri"),
+    new URL(consent_location).searchParams.get("redirect_uri"),
   );
 });
 
