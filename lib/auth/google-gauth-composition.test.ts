@@ -65,7 +65,6 @@ Deno.test("Google auth configuration validates explicit local and original modes
       redirect_uri: "https://pager.example/auth/google/callback",
       client_id: "test-client-id",
       client_secret: "not-a-real-secret",
-      request_host_pattern: "pager-pr-[a-z0-9-]+\\.example\\.com",
     },
   );
 
@@ -116,18 +115,21 @@ Deno.test("Google auth configuration validates explicit local and original modes
     TypeError,
     GOOGLE_AUTH_REDIRECT_URI_ENV,
   );
-  assertThrows(
-    () =>
-      parse_google_auth_config(environment({
-        [GOOGLE_AUTH_MODE_ENV]: "original",
-        [GOOGLE_AUTH_REDIRECT_URI_ENV]:
-          "https://pager.example/auth/google/callback",
-        [GOOGLE_AUTH_CLIENT_ID_ENV]: "test-client-id",
-        [GOOGLE_AUTH_CLIENT_SECRET_ENV]: "not-a-real-secret",
-        [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]: "[invalid",
-      })),
-    TypeError,
-    GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV,
+  assertEquals(
+    parse_google_auth_config(environment({
+      [GOOGLE_AUTH_MODE_ENV]: "original",
+      [GOOGLE_AUTH_REDIRECT_URI_ENV]:
+        "https://pager.example/auth/google/callback",
+      [GOOGLE_AUTH_CLIENT_ID_ENV]: "test-client-id",
+      [GOOGLE_AUTH_CLIENT_SECRET_ENV]: "not-a-real-secret",
+      [GOOGLE_AUTH_REQUEST_HOST_PATTERN_ENV]: "[ignored-in-original-mode",
+    })),
+    {
+      mode: "original",
+      redirect_uri: "https://pager.example/auth/google/callback",
+      client_id: "test-client-id",
+      client_secret: "not-a-real-secret",
+    },
   );
   assertEquals(
     parse_google_auth_config(environment({
@@ -241,33 +243,32 @@ Deno.test("local gauth composition derives callback and consent URLs from an all
   );
 });
 
-Deno.test("original gauth composition resolves an allowlisted dynamic callback service", async () => {
+Deno.test("original gauth composition keeps its registered callback across repeated starts", async () => {
+  const callback_url = "https://pager.example/auth/google/callback";
   const composition = await compose_google_gauth({
     mode: "original",
-    redirect_uri: "https://pager.example/auth/google/callback",
+    redirect_uri: callback_url,
     client_id: "test-client-id",
     client_secret: "not-a-real-secret",
-    request_host_pattern: "pager-pr-[a-z0-9-]+\\.example\\.com",
   });
   const strategy = new GoogleGAuthStrategy(
     composition.service,
     composition.service_resolver,
   );
-  const result = await strategy.begin({
-    state: "preview-state",
-    callback_url: "https://pager-pr-change-42.example.com/auth/google/callback",
-  });
 
-  assertEquals(result.ok, true);
-  if (!result.ok) return;
-  assertEquals(
-    new URL(result.value.authorization_url).searchParams.get("redirect_uri"),
-    "https://pager-pr-change-42.example.com/auth/google/callback",
-  );
+  for (const state of ["first-state", "second-state"]) {
+    const result = await strategy.begin({ state, callback_url });
+    assertEquals(result.ok, true);
+    if (!result.ok) return;
+    assertEquals(
+      new URL(result.value.authorization_url).searchParams.get("redirect_uri"),
+      callback_url,
+    );
+  }
   await assertRejects(
     () =>
       composition.service_resolver.resolve(
-        "https://pager-pr-change-42.example.com.attacker.test/auth/google/callback",
+        "https://pager-pr-change-42.example.com/auth/google/callback",
       ),
     TypeError,
   );

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-24
+
+- Fixed real Google reauthentication after logout using a request-derived,
+  unregistered callback: `original` mode now always sends its exact configured
+  redirect URI, while dynamic hosts remain limited to local mock previews. Added
+  a full sign-in/logout/sign-in callback-stability regression and clarified that
+  iam-pager logout does not clear the browser's Google session.
+
 ## 2026-07-23
 
 - Fixed Google Drive publication rejections being reported as missing external
