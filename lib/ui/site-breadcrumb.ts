@@ -5,9 +5,13 @@
  */
 export type SiteLocation =
   | { readonly kind: "home" }
+  | { readonly kind: "publish" }
   | { readonly kind: "explore" }
   | { readonly kind: "manage" }
   | { readonly kind: "api_keys" }
+  | { readonly kind: "about" }
+  | { readonly kind: "demo" }
+  | { readonly kind: "invite" }
   | { readonly kind: "public_page"; readonly title: string };
 
 /** One breadcrumb step. The current (last) step carries no link. */
@@ -36,27 +40,20 @@ export class SiteLocationBreadcrumbPresenter
     switch (location.kind) {
       case "home":
         return { steps: [{ label: "Home" }] };
+      case "publish":
+        return branch("Publish a page");
       case "explore":
-        return {
-          steps: [
-            { label: "Home", href: site_home_href },
-            { label: "Explore" },
-          ],
-        };
+        return branch("Explore");
       case "manage":
-        return {
-          steps: [
-            { label: "Home", href: site_home_href },
-            { label: "Manage pages" },
-          ],
-        };
+        return branch("Manage pages");
       case "api_keys":
-        return {
-          steps: [
-            { label: "Home", href: site_home_href },
-            { label: "API keys" },
-          ],
-        };
+        return branch("API keys");
+      case "about":
+        return branch("About");
+      case "demo":
+        return branch("Demo");
+      case "invite":
+        return branch("Invitation");
       case "public_page":
         return {
           steps: [
@@ -66,6 +63,11 @@ export class SiteLocationBreadcrumbPresenter
         };
     }
   }
+}
+
+/** One-level trail below the site root. */
+function branch(label: string): SiteBreadcrumbTrail {
+  return { steps: [{ label: "Home", href: site_home_href }, { label }] };
 }
 
 export const site_breadcrumb_presenter: SiteBreadcrumbPresenter =

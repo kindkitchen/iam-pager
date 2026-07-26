@@ -24,6 +24,20 @@ platform DOM. PDF uses the browser's native inline viewer with explicit preview,
 download, Back, and unsupported-browser fallback links. Trial pages can be
 wrapped by known locator but never expose creator listings.
 
+## EX-NAVIGATE — Reach every destination from home
+
+The site home is a navigation hub over one server-owned site map. Each
+destination declares its audience (`everyone`, `guest`, `creator`), whether the
+compact top navigation carries it, and whether the hub carries it as a card, so
+navigation, hub, and breadcrumbs never disagree and no destination is
+unreachable.
+
+The hub renders grouped cards only; it owns no publishing or management state.
+Guests additionally see an invitation destination explaining what signing in
+adds; creators see management destinations in its place. Explanatory
+destinations (about, demo, invitation) are one presenter-produced model rendered
+by one component.
+
 ## EX-EXPLORE — Find public creator pages
 
 The dedicated `/site/explore` navigation destination browses public managed
@@ -55,9 +69,11 @@ each publisher-chosen locator has an explicit profile supported by that format.
 PDF may therefore be created with one inline or attachment reference, or with
 several references in any supported combination. The web requires one primary
 path and permits removable aliases for every format. Creator namespace fields
-select from owned reservations; guest namespace entry remains free-form. A PDF
-path's `Downloadable` control maps explicitly to attachment rather than deriving
-behavior from an alias or suffix.
+select from owned reservations; guest namespace entry remains free-form.
+Publishing is its own full-width destination (`/site/publish`) rather than a
+section of the home page. A PDF path's delivery control offers both supported
+profiles explicitly — open in browser or download — rather than deriving
+behavior from an alias, suffix, or an implied default.
 
 ## EX-MANAGE — Manage creator pages
 

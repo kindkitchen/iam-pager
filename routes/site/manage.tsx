@@ -8,14 +8,17 @@ import { define } from "../../utils.ts";
 export default define.page(async function SiteManage({ state, url }) {
   const session = state.request_context.session;
   const services = await app_services();
-  const [page_management, storage_connections] = await Promise.all([
-    services.page_management_panel.present(session),
-    services.storage_connection_panel.present(session),
-  ]);
+  const [namespace_panel, page_management, storage_connections] = await Promise
+    .all([
+      services.namespace_panel.present(session),
+      services.page_management_panel.present(session),
+      services.storage_connection_panel.present(session),
+    ]);
   return (
     <ManagePagesPage
       navigation={site_navigation_presenter.present(session, url)}
       breadcrumb={site_breadcrumb_presenter.present({ kind: "manage" })}
+      namespace_panel={namespace_panel}
       page_management={page_management}
       storage_connections={storage_connections}
     />

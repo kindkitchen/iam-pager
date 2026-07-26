@@ -2,7 +2,7 @@ import type { PublicPageView } from "../lib/ui/public-page-view.ts";
 import type { SiteNavigation } from "../lib/ui/site-navigation.ts";
 import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
 import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
-import { SiteSessionNavigation } from "./SiteApp.tsx";
+import { SiteSessionNavigation } from "./SiteNavigation.tsx";
 
 export interface PublicPageViewProps {
   readonly navigation: SiteNavigation;

@@ -1,5 +1,6 @@
 import type { JSX } from "preact";
 import { useMemo, useState } from "preact/hooks";
+import { DeliveryProfileField } from "../components/DeliveryProfileField.tsx";
 import { PageEditor } from "../components/PageEditor.tsx";
 import { PdfFileSelection } from "../components/PdfFileSelection.tsx";
 import {
@@ -1143,7 +1144,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
               })}
           />
         </label>
-        <label class="page-management-broken-filter">
+        <label class="toggle-field page-management-broken-filter">
           <input
             type="checkbox"
             checked={filter_draft.broken_only}
@@ -1809,22 +1810,23 @@ function ManagedReferenceFields(props: ManagedReferenceFieldsProps) {
         </label>
       </div>
       {props.is_pdf && (
-        <label class="delivery-profile-field">
-          <input
-            type="checkbox"
-            checked={props.row.delivery_profile === "attachment"}
-            onChange={(event) =>
-              props.on_change({
-                delivery_profile: event.currentTarget.checked
-                  ? "attachment"
-                  : "inline",
-              })}
-          />
-          Downloadable
-        </label>
+        <DeliveryProfileField
+          name={`managed-delivery-profile-${props.row.id}`}
+          value={props.row.delivery_profile}
+          on_change={(delivery_profile) =>
+            props.on_change({ delivery_profile })}
+        />
       )}
       {props.on_remove !== undefined && (
-        <button type="button" onClick={props.on_remove}>Remove alias</button>
+        <div class="publish-endpoint-actions">
+          <button
+            type="button"
+            class="compact-button"
+            onClick={props.on_remove}
+          >
+            Remove alias
+          </button>
+        </div>
       )}
     </fieldset>
   );

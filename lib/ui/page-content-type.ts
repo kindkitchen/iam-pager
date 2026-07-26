@@ -41,13 +41,22 @@ export const page_content_type_options: readonly PageContentTypeOption[] = [
 export interface PdfDeliveryProfileOption {
   readonly value: DeliveryProfile;
   readonly label: string;
+  readonly description: string;
 }
 
 /** Profiles the PDF endpoint controls may offer without interpreting URLs. */
 export const pdf_delivery_profile_options: readonly PdfDeliveryProfileOption[] =
   [
-    { value: "inline", label: "Open in browser" },
-    { value: "attachment", label: "Download attachment" },
+    {
+      value: "inline",
+      label: "Open in browser",
+      description: "Visitors read the PDF in the browser viewer.",
+    },
+    {
+      value: "attachment",
+      label: "Download",
+      description: "Visitors get a file download at this path.",
+    },
   ];
 
 /**

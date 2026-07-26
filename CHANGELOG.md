@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-07-25
+
+- Rearranged web navigation around one server-owned site map
+  (`lib/ui/site-map.ts`): the home page (`/` and `/site`) is now a pure
+  navigation hub of grouped destination cards, and top navigation, hub cards,
+  and breadcrumbs are all projections of that single declaration.
+- Moved page generation to its own full-width route `/site/publish`, together
+  with namespace reservation and the guest-exposure notice; home no longer
+  embeds the publish form or the management panel, and `/site/manage` now also
+  carries namespace reservation.
+- Added `/site/about`, `/site/demo`, and a guest-only `/site/invite`
+  destination, rendered from one editorial presenter
+  (`lib/ui/site-editorial.ts`) through one component; signed-in creators get
+  creator next steps on the invitation route instead of the sign-up pitch.
+- Replaced the bare `Downloadable` checkbox in publishing and in "Edit paths"
+  with an explicit two-option delivery control (open in browser / download)
+  shared by both islands, and restyled the remaining bare checkboxes
+  (external-content filter, Markdown list toggles) as consistent toggle fields.
+- Extracted the shared site header (`components/SiteNavigation.tsx`) used by
+  every destination, replacing `components/SiteApp.tsx`.
+
 ## 2026-07-24
 
 - Fixed real Google reauthentication after logout using a request-derived,

@@ -1,5 +1,10 @@
 import { normalize_authentication_return_to } from "../auth/model.ts";
 import type { Session } from "../session/model.ts";
+import {
+  is_current_destination,
+  site_map_reader,
+  type SiteMapReader,
+} from "./site-map.ts";
 
 export interface SiteNavigationFormField {
   readonly name: string;
@@ -38,12 +43,21 @@ export interface SiteNavigationPresenter {
 
 /** Keeps site destinations and trusted session actions outside components. */
 export class SessionSiteNavigationPresenter implements SiteNavigationPresenter {
+  readonly #site_map: SiteMapReader;
+
+  constructor(site_map: SiteMapReader = site_map_reader) {
+    this.#site_map = site_map;
+  }
+
   present(session: Session, request_url: URL): SiteNavigation {
     const navigation = {
-      destinations: site_destinations(
-        request_url.pathname,
-        session.kind === "authenticated",
-      ),
+      destinations: this.#site_map.visible(session)
+        .filter((destination) => destination.in_navigation)
+        .map((destination) => ({
+          href: destination.href,
+          label: destination.label,
+          current: is_current_destination(destination, request_url.pathname),
+        })),
       session_label: session.kind === "authenticated"
         ? "Signed in"
         : "Guest session",
@@ -74,39 +88,6 @@ export class SessionSiteNavigationPresenter implements SiteNavigationPresenter {
       },
     };
   }
-}
-
-function site_destinations(
-  pathname: string,
-  authenticated: boolean,
-): SiteNavigationDestination[] {
-  const destinations: SiteNavigationDestination[] = [
-    {
-      href: "/site",
-      label: "Home",
-      current: pathname === "/" || pathname === "/site" ||
-        pathname === "/site/",
-    },
-    {
-      href: "/site/explore",
-      label: "Explore",
-      current: pathname === "/site/explore" ||
-        pathname === "/site/explore/",
-    },
-  ];
-  if (authenticated) {
-    destinations.push({
-      href: "/site/manage",
-      label: "Manage",
-      current: pathname === "/site/manage" || pathname === "/site/manage/",
-    }, {
-      href: "/site/api-keys",
-      label: "API keys",
-      current: pathname === "/site/api-keys" ||
-        pathname === "/site/api-keys/",
-    });
-  }
-  return destinations;
 }
 
 export const site_navigation_presenter: SiteNavigationPresenter =

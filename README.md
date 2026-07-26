@@ -33,6 +33,24 @@ content format. The current profiles are `inline` and `attachment`; paths,
 preferred status, and filename suffixes do not imply delivery behavior. Managed
 references may cross namespaces when the same creator owns all of them.
 
+### Site map
+
+The site home (`/` and `/site`) is a navigation hub only: it renders the
+server-owned site map and holds no publishing or management state. Destinations
+are declared once in `lib/ui/site-map.ts`, and navigation, hub cards, and
+breadcrumbs are projections of that declaration.
+
+| Destination  | Path             | Audience |
+| ------------ | ---------------- | -------- |
+| Home (hub)   | `/site`          | everyone |
+| Publish      | `/site/publish`  | everyone |
+| Explore      | `/site/explore`  | everyone |
+| Demo         | `/site/demo`     | everyone |
+| About        | `/site/about`    | everyone |
+| Invitation   | `/site/invite`   | guests   |
+| Manage pages | `/site/manage`   | creators |
+| API keys     | `/site/api-keys` | creators |
+
 ### Visitors and guests
 
 Anyone can:
@@ -41,7 +59,8 @@ Anyone can:
 - inspect it through `/site/<locator>`;
 - browse and filter public creator pages at `/site/explore` by namespace, page
   name, and exact tag;
-- publish a public trial page when every referenced namespace is unreserved.
+- publish a public trial page at `/site/publish` when every referenced namespace
+  is unreserved.
 
 Trial pages are not discoverable. They have no owner guarantee and may be
 replaced by another guest or by a creator who reserves the namespace. Missing,
@@ -58,6 +77,10 @@ content inline to detach it. Publishing and reference editing select from the
 creator's owned namespaces, including cross-namespace aliases; a newly reserved
 namespace is available to the publishing selector immediately. Every managed
 mutation is owner-checked and revision-bound.
+
+Namespace reservation lives on `/site/publish` (before publishing) and on
+`/site/manage` (alongside existing pages); a newly reserved namespace becomes
+selectable in the open publish form immediately.
 
 Signed-in creators manage connected storage at `/site/manage`: connect or
 reauthorize Google Drive, inspect owner-safe account/scope/status metadata,
@@ -85,10 +108,11 @@ The current handlers are:
 PDF create and replacement use strict bounded multipart requests. PDF has no
 special locator-count or profile-combination rule: one locator is sufficient,
 and optional aliases may expose byte-identical content. In the web UI each PDF
-path has a `Downloadable` checkbox: unchecked is inline delivery and checked is
-attachment delivery. Add an alias only when separate inline and download URLs
-are wanted. Content-only replacement preserves all references. Direct PDF
-delivery supports validators and one byte range.
+path carries an explicit delivery choice — `Open in browser` (inline) or
+`Download` (attachment) — presented as a two-option control in both publishing
+and path editing. Add an alias only when separate inline and download URLs are
+wanted. Content-only replacement preserves all references. Direct PDF delivery
+supports validators and one byte range.
 
 Generic binary publication, text indexing, quotas, publishing rate limits, guest
 expiry, and account deletion are outside the current boundary. External content
