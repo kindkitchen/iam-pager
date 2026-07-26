@@ -1,15 +1,17 @@
+import NamespaceReservationPanel from "../islands/NamespaceReservationPanel.tsx";
 import PageManagementPanel from "../islands/PageManagementPanel.tsx";
+import type { NamespacePanel } from "../lib/ui/namespace-panel.ts";
 import type { PageManagementPanel as PageManagementPanelModel } from "../lib/ui/page-management.ts";
 import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
 import type { SiteNavigation } from "../lib/ui/site-navigation.ts";
-import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
-import { SiteSessionNavigation } from "./SiteApp.tsx";
+import { SitePageHeader } from "./SiteNavigation.tsx";
 import type { StorageConnectionPanel as StorageConnectionPanelModel } from "../lib/ui/storage-connections.ts";
 import { StorageConnectionsPanel } from "./StorageConnectionsPanel.tsx";
 
 export interface ManagePagesPageProps {
   readonly navigation: SiteNavigation;
   readonly breadcrumb: SiteBreadcrumbTrail;
+  readonly namespace_panel: NamespacePanel;
   readonly page_management: PageManagementPanelModel;
   readonly storage_connections: StorageConnectionPanelModel;
 }
@@ -19,21 +21,30 @@ export function ManagePagesPage(
   {
     navigation,
     breadcrumb,
+    namespace_panel,
     page_management,
     storage_connections,
   }: ManagePagesPageProps,
 ) {
   return (
     <main class="site-app manage-pages-shell">
-      <header class="public-page-platform-header">
-        <SiteSessionNavigation navigation={navigation} />
-        <SiteBreadcrumb trail={breadcrumb} />
-        <h1>Manage pages</h1>
-      </header>
+      <SitePageHeader
+        navigation={navigation}
+        breadcrumb={breadcrumb}
+        eyebrow="Your pages"
+        title="Manage pages"
+        intro="Namespaces, storage connections, and every page you published."
+      />
 
       {page_management.kind === "creator"
         ? (
           <>
+            {namespace_panel.kind === "creator" && (
+              <NamespaceReservationPanel
+                csrf_token={namespace_panel.csrf_token}
+                initial_reservations={namespace_panel.reservations}
+              />
+            )}
             <StorageConnectionsPanel panel={storage_connections} />
             <PageManagementPanel
               csrf_token={page_management.csrf_token}
@@ -51,9 +62,9 @@ export function ManagePagesPage(
             <p class="eyebrow">Creators only</p>
             <h2>Sign in to manage pages</h2>
             <p>
-              Page management is available to signed-in creators. Return to the
-              {" "}
-              <a href="/site">site home</a> to publish a page.
+              Page management is available to signed-in creators. Anyone can
+              still <a href="/site/publish">publish a page</a>, or read{" "}
+              <a href="/site/invite">what signing in adds</a>.
             </p>
           </section>
         )}

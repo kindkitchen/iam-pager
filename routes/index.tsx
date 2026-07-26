@@ -1,14 +1,14 @@
 import { page } from "fresh";
-import { SiteApp } from "../components/SiteApp.tsx";
-import { app_services } from "../lib/app.ts";
+import { SiteHome } from "../components/SiteHome.tsx";
 import { site_breadcrumb_presenter } from "../lib/ui/site-breadcrumb.ts";
 import { legacy_exploration_redirect_location } from "../lib/ui/public-exploration.ts";
+import { site_home_presenter } from "../lib/ui/site-home.ts";
 import { site_navigation_presenter } from "../lib/ui/site-navigation.ts";
 import { define } from "../utils.ts";
 
-/** Home renders publishing; legacy exploration queries redirect canonically. */
+/** Home is the navigation hub; legacy exploration queries redirect canonically. */
 export const handler = define.handlers({
-  async GET(ctx) {
+  GET(ctx) {
     const exploration_redirect = legacy_exploration_redirect_location(ctx.url);
     if (exploration_redirect !== null) {
       return new Response(null, {
@@ -17,24 +17,15 @@ export const handler = define.handlers({
       });
     }
     const session = ctx.state.request_context.session;
-    const services = await app_services();
-    const [namespace_panel, page_management, storage_connections] =
-      await Promise.all([
-        services.namespace_panel.present(session),
-        services.page_management_panel.present(session),
-        services.storage_connection_panel.present(session),
-      ]);
     return page({
       navigation: site_navigation_presenter.present(session, ctx.url),
       breadcrumb: site_breadcrumb_presenter.present({ kind: "home" }),
-      namespace_panel,
-      page_management,
-      storage_connections,
+      home: site_home_presenter.present(session),
     });
   },
 });
 
 /** The raw domain root serves the site itself, not raw content. */
 export default define.page<typeof handler>(function Home({ data }) {
-  return <SiteApp {...data} />;
+  return <SiteHome {...data} />;
 });

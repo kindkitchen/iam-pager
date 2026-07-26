@@ -2,8 +2,7 @@ import type { PublicExploration } from "../lib/ui/public-exploration.ts";
 import type { SiteBreadcrumbTrail } from "../lib/ui/site-breadcrumb.ts";
 import type { SiteNavigation } from "../lib/ui/site-navigation.ts";
 import { PublicExplorationPanel } from "./PublicExploration.tsx";
-import { SiteBreadcrumb } from "./SiteBreadcrumb.tsx";
-import { SiteSessionNavigation } from "./SiteApp.tsx";
+import { SitePageHeader } from "./SiteNavigation.tsx";
 
 export interface ExplorePageProps {
   readonly navigation: SiteNavigation;
@@ -17,11 +16,13 @@ export function ExplorePage(
 ) {
   return (
     <main class="site-app explore-page-shell">
-      <header class="public-page-platform-header">
-        <SiteSessionNavigation navigation={navigation} />
-        <SiteBreadcrumb trail={breadcrumb} />
-        <h1>Explore</h1>
-      </header>
+      <SitePageHeader
+        navigation={navigation}
+        breadcrumb={breadcrumb}
+        eyebrow="Public pages"
+        title="Explore"
+        intro="Browse public creator pages and filter them by namespace, page name, or exact tag."
+      />
       <PublicExplorationPanel exploration={exploration} />
     </main>
   );

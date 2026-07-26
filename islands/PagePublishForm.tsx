@@ -1,7 +1,9 @@
 import type { JSX } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { DeliveryProfileField } from "../components/DeliveryProfileField.tsx";
 import { PageEditor } from "../components/PageEditor.tsx";
 import { PdfFileSelection } from "../components/PdfFileSelection.tsx";
+import type { DeliveryProfile } from "../lib/content/model.ts";
 import {
   page_content_type_options,
   type PageContentType,
@@ -45,7 +47,7 @@ interface PublishReferenceState {
   readonly id: number;
   readonly namespace: string;
   readonly page_name: string;
-  readonly downloadable: boolean;
+  readonly delivery_profile: DeliveryProfile;
 }
 
 const initial_markdown = `# Your page
@@ -87,7 +89,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     id: 0,
     namespace: initial_primary_namespace,
     page_name: "",
-    downloadable: false,
+    delivery_profile: "inline",
   });
   const [aliases, set_aliases] = useState<readonly PublishReferenceState[]>([]);
   const [markdown, set_markdown] = useState(initial_markdown);
@@ -172,7 +174,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
         id,
         namespace: primary.namespace || creator_namespaces[0] || "",
         page_name: "",
-        downloadable: false,
+        delivery_profile: "inline",
       }])
     );
   }
@@ -196,8 +198,8 @@ export default function PagePublishForm(props: PagePublishFormProps) {
     return {
       namespace: reference.namespace,
       page_name: reference.page_name,
-      delivery_profile: content_type === "pdf" && reference.downloadable
-        ? "attachment"
+      delivery_profile: content_type === "pdf"
+        ? reference.delivery_profile
         : "inline",
     };
   }
@@ -582,15 +584,12 @@ function ReferenceFields(props: ReferenceFieldsProps) {
         </div>
       </div>
       {props.is_pdf && (
-        <label class="delivery-profile-field">
-          <input
-            type="checkbox"
-            checked={props.reference.downloadable}
-            onChange={(event) =>
-              props.on_change({ downloadable: event.currentTarget.checked })}
-          />
-          Downloadable
-        </label>
+        <DeliveryProfileField
+          name={`delivery-profile-${suffix}`}
+          value={props.reference.delivery_profile}
+          on_change={(delivery_profile) =>
+            props.on_change({ delivery_profile })}
+        />
       )}
     </fieldset>
   );

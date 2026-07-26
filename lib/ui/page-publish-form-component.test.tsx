@@ -21,7 +21,7 @@ Deno.test("guest publish form keeps free-text namespace and optional aliases", (
   assertEquals(html.includes('type="file"'), false);
 });
 
-Deno.test("PDF publish starts with one path and a downloadable checkbox", () => {
+Deno.test("PDF publish starts with one path and an explicit delivery choice", () => {
   const html = render_to_string(
     <PagePublishForm
       initial_namespace="quiet-river"
@@ -35,8 +35,11 @@ Deno.test("PDF publish starts with one path and a downloadable checkbox", () => 
   assertStringIncludes(html, 'type="file"');
   assertStringIncludes(html, 'accept="application/pdf,.pdf"');
   assertStringIncludes(html, "Choose a PDF up to 16 MiB.");
-  assertStringIncludes(html, 'type="checkbox"');
-  assertStringIncludes(html, "Downloadable");
+  assertStringIncludes(html, 'name="delivery-profile-primary"');
+  assertStringIncludes(html, 'value="inline" checked');
+  assertStringIncludes(html, "Open in browser");
+  assertStringIncludes(html, "Download");
+  assertEquals(html.includes("Downloadable"), false);
   assertStringIncludes(html, "Add an alias");
   assertEquals(html.includes("Alternate endpoint"), false);
   assertEquals(html.includes("Write. Style. Preview. Publish."), false);

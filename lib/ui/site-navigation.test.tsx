@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { render as render_to_string } from "preact-render-to-string";
-import { SiteSessionNavigation } from "../../components/SiteApp.tsx";
+import { SiteSessionNavigation } from "../../components/SiteNavigation.tsx";
 import type { Session } from "../session/model.ts";
 import {
   SessionSiteNavigationPresenter,
@@ -35,6 +35,7 @@ Deno.test("site navigation offers guests Google sign-in with a safe local return
     {
       destinations: [
         { href: "/site", label: "Home", current: false },
+        { href: "/site/publish", label: "Publish", current: false },
         { href: "/site/explore", label: "Explore", current: false },
       ],
       session_label: "Guest session",
@@ -66,8 +67,9 @@ Deno.test("site navigation exposes only the trusted logout form for authenticate
   assertEquals(navigation, {
     destinations: [
       { href: "/site", label: "Home", current: false },
-      { href: "/site/explore", label: "Explore", current: false },
+      { href: "/site/publish", label: "Publish", current: false },
       { href: "/site/manage", label: "Manage", current: false },
+      { href: "/site/explore", label: "Explore", current: false },
       { href: "/site/api-keys", label: "API keys", current: false },
     ],
     session_label: "Signed in",
@@ -90,6 +92,7 @@ Deno.test("site session navigation renders link and protected form models", () =
   const guest_navigation: SiteNavigation = {
     destinations: [
       { href: "/site", label: "Home", current: true },
+      { href: "/site/publish", label: "Publish", current: false },
       { href: "/site/explore", label: "Explore", current: false },
     ],
     session_label: "Guest session",
