@@ -447,8 +447,41 @@ h2 {
   gap: 0.5rem;
 }
 
-.page-management-broken-filter {
+.page-management-more-filters {
+  grid-column: 1 / -1;
   justify-self: start;
+  font-size: 0.8rem;
+  color: #59635c;
+}
+
+.page-management-more-filters > summary {
+  cursor: pointer;
+  width: fit-content;
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.35rem;
+  color: #4a5450;
+  list-style-position: inside;
+}
+
+.page-management-more-filters > summary:hover {
+  background: rgb(0 0 0 / 4%);
+}
+
+.page-management-more-filters > .field-hint {
+  margin: 0.35rem 0 0.15rem;
+}
+
+.page-management-broken-filter {
+  align-items: start;
+  justify-self: start;
+  max-width: 32rem;
+  padding: 0.15rem 0.35rem;
+}
+
+.page-management-broken-filter small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #6b746d;
 }
 
 .page-management-filter-actions button,

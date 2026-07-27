@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-27
+
+- Moved the "External content unavailable" list filter out of the primary
+  management filter row into a secondary "More" disclosure, relabelled it as an
+  explicit repair view with a description, and kept an applied maintenance
+  filter announced in the disclosure summary.
+- Added `managed_maintenance_filters` and `managed_maintenance_filter_state` to
+  `lib/ui/page-management.ts` so the maintenance-versus-everyday filter
+  distinction lives in code rather than in the web representation.
+
 ## 2026-07-25
 
 - Restricted the unprotected-page notice on `/site/publish` to guests; creators

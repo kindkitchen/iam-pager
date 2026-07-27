@@ -9,6 +9,8 @@ import {
   managed_bulk_delete_from_api,
   managed_external_content_source,
   managed_list_from_api,
+  managed_maintenance_filter_state,
+  managed_maintenance_filters,
   managed_md_page_draft,
   managed_pdf_delivery_links,
   managed_pdf_metadata,
@@ -177,6 +179,9 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
 
   const controls_busy = filtering || bulk_busy || busy_page !== null;
   const has_applied_filters = Object.keys(applied_filters).length > 0;
+  const maintenance_filter_state = managed_maintenance_filter_state(
+    applied_filters,
+  );
 
   function replace_row(page_id: string, next: PageManagementSummary) {
     set_pages((current) =>
@@ -1144,18 +1149,36 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
               })}
           />
         </label>
-        <label class="toggle-field page-management-broken-filter">
-          <input
-            type="checkbox"
-            checked={filter_draft.broken_only}
-            onChange={(event) =>
-              set_filter_draft({
-                ...filter_draft,
-                broken_only: event.currentTarget.checked,
-              })}
-          />
-          External content unavailable
-        </label>
+        <details
+          class="page-management-more-filters"
+          open={filter_draft.broken_only ||
+            maintenance_filter_state.active.length > 0}
+        >
+          <summary>{maintenance_filter_state.label}</summary>
+          <p class="field-hint">
+            Maintenance filters. Everyday browsing does not need them.
+          </p>
+          {managed_maintenance_filters.map((filter) => (
+            <label
+              key={filter.id}
+              class="toggle-field page-management-broken-filter"
+            >
+              <input
+                type="checkbox"
+                checked={filter_draft.broken_only}
+                onChange={(event) =>
+                  set_filter_draft({
+                    ...filter_draft,
+                    broken_only: event.currentTarget.checked,
+                  })}
+              />
+              <span>
+                {filter.label}
+                <small>{filter.description}</small>
+              </span>
+            </label>
+          ))}
+        </details>
         <div class="page-management-filter-actions">
           <button type="submit" disabled={controls_busy}>
             {filtering ? "Filtering…" : "Apply filters"}
