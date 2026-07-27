@@ -63,7 +63,8 @@ Managed summaries contain:
   "external_missing": {
     "cause": "external_content_missing",
     "detected_at": "2026-07-22T12:00:00.000Z"
-  }
+  },
+  "block_api_write": true
 }
 ```
 
@@ -76,6 +77,8 @@ application-relative values formatted by the locator boundary. Tags are
 lowercase sorted unique values; trial pages have none. `external_missing` is
 owner-only and omitted for healthy pages. Its causes are
 `external_content_missing`, `connection_revoked`, and `integrity_mismatch`.
+`block_api_write` is owner-only, appears only as `true`, and is omitted while
+the page accepts API-key writes — see [the API-write lock](#the-api-write-lock).
 
 List output omits editable content. Inspection adds handler-approved input:
 Markdown source/CSS or bounded PDF filename, media type, size, version, and
@@ -199,14 +202,32 @@ Requires the authenticated owner. Missing, trial, foreign, and no-longer-
 authorized IDs all return `404`. Success returns the complete inspection and a
 strong page/revision `ETag`.
 
+## The API-write lock
+
+Every managed page carries an optional owner control, `block_api_write`. It is
+stored lazily: absence means unlocked, so pages created before the control
+existed keep accepting automation, and only `true` is ever persisted.
+
+While a page is locked, every key-authenticated mutation that targets it fails
+with `403` `api_write_blocked` — update, PDF replacement, re-link, rename,
+duplicate, and delete, plus the matching per-item results inside bulk commands.
+Key-authenticated reads are unaffected, and a browser session keeps every
+operation. A duplicate made from a locked page inherits the lock.
+
+The control itself is browser-only. `block_api_write` in a PATCH body sent with
+a bearer is refused with `403` `protection_requires_session`, whatever the key's
+permissions are, so a key can neither grant itself write access nor lock a page
+on its owner's behalf. Creators set and clear it per page in `/site/manage`.
+
 ## Update — `PATCH /api/pages/:page_id`
 
 Requires owner session, CSRF, and exactly one strong `If-Match` from a previous
 managed representation. JSON PATCH accepts `access`, `tags`, `content`,
-`endpoint_set`, or a combination; omitted fields remain unchanged and an empty
-tag array clears tags. `endpoint_set` is always a complete replacement, while a
-content-only update preserves every locator reference and revalidates its
-profiles against the replacement format.
+`endpoint_set`, `block_api_write`, or a combination; omitted fields remain
+unchanged and an empty tag array clears tags. `block_api_write` is a boolean and
+is accepted from browser sessions only. `endpoint_set` is always a complete
+replacement, while a content-only update preserves every locator reference and
+revalidates its profiles against the replacement format.
 
 ```json
 { "access": "public", "tags": ["published"] }
@@ -230,7 +251,9 @@ once at the supplied revision.
 
 Success returns the complete inspection and next ETag. Missing preconditions
 return `428`, malformed validators `400`, a stale/different-page validator
-`412`, missing/foreign pages `404`, conflicts `409`, invalid input `422`, and a
+`412`, missing/foreign pages `404`, a locked page reached with a key `403`
+`api_write_blocked`, `block_api_write` sent with a key `403`
+`protection_requires_session`, conflicts `409`, invalid input `422`, and a
 selected-storage endpoint-capacity failure `507`. Replacing content inline
 creates a new immutable asset and clears any `external_missing` warning;
 selecting external storage uploads and commits a fresh external asset instead.
@@ -259,7 +282,8 @@ than re-linking arbitrary provider bytes.
 
 Requires owner session, CSRF, exact `If-Match`, and no body. Success returns
 `204` and removes every page endpoint. Stale intent returns `412`; repeated or
-foreign deletion returns `404`.
+foreign deletion returns `404`; a key-authenticated delete of a locked page
+returns `403` `api_write_blocked`.
 
 ## Rename — `POST /api/pages/:page_id/rename`
 

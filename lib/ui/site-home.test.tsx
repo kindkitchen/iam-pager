@@ -33,7 +33,14 @@ Deno.test("guest hub offers publishing, exploring, learning, and the invitation"
   const entries = home.sections.flatMap((section) =>
     section.entries.map((entry) => entry.id)
   );
-  assertEquals(entries, ["publish", "explore", "demo", "about", "invite"]);
+  assertEquals(entries, [
+    "publish",
+    "explore",
+    "demo",
+    "about",
+    "agent_skill",
+    "invite",
+  ]);
   assertEquals(entries.includes("manage"), false);
   assertEquals(entries.includes("api_keys"), false);
 });
@@ -47,6 +54,7 @@ Deno.test("creator hub replaces the invitation with management destinations", ()
     "explore",
     "demo",
     "about",
+    "agent_skill",
     "api_keys",
   ]);
 });

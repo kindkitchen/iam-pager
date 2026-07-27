@@ -11,6 +11,7 @@ export type SiteDestinationId =
   | "explore"
   | "manage"
   | "api_keys"
+  | "agent_skill"
   | "about"
   | "demo"
   | "invite";
@@ -111,6 +112,17 @@ export const site_map: readonly SiteDestinationDefinition[] = [
     audience: "creator",
     group: "account",
     in_navigation: true,
+    in_hub: true,
+  },
+  {
+    id: "agent_skill",
+    href: "/site/skill",
+    label: "Agent skill",
+    summary:
+      "The instructions an AI agent needs to manage your pages through the API.",
+    audience: "everyone",
+    group: "learn",
+    in_navigation: false,
     in_hub: true,
   },
   {

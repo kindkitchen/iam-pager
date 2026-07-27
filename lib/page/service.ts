@@ -28,6 +28,7 @@ import {
 } from "../random-name.ts";
 import {
   type ExternalContentMissingCause,
+  is_api_write_blocked,
   page_aggregate_violation,
   type PageAggregate,
 } from "./aggregate.ts";
@@ -507,8 +508,24 @@ export class PageService
     const has_tags = request.patch.tags !== undefined;
     const has_content = request.patch.content !== undefined;
     const has_endpoints = request.patch.endpoint_set !== undefined;
-    if (!has_access && !has_tags && !has_content && !has_endpoints) {
+    const has_protection = request.patch.block_api_write !== undefined;
+    if (
+      !has_access && !has_tags && !has_content && !has_endpoints &&
+      !has_protection
+    ) {
       return { ok: false, reason: "empty_patch" };
+    }
+    if (has_protection && typeof request.patch.block_api_write !== "boolean") {
+      return {
+        ok: false,
+        reason: "invalid_input",
+        detail: "block_api_write must be a boolean",
+      };
+    }
+    // The automation lock is a first-party control: a key can never grant
+    // itself write access by clearing it, nor set it on the owner's behalf.
+    if (has_protection && request.actor.via_api_key === true) {
+      return { ok: false, reason: "protection_requires_session" };
     }
     if (has_access && !is_valid_page_access(request.patch.access)) {
       return { ok: false, reason: "invalid_access" };
@@ -520,6 +537,9 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
+    if (this.#api_write_blocked(request.actor, page)) {
+      return { ok: false, reason: "api_write_blocked" };
+    }
     if (page.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -565,7 +585,7 @@ export class PageService
     }
     if (
       has_endpoints && endpoint_set === undefined && !has_access && !has_tags &&
-      !has_content
+      !has_content && !has_protection
     ) {
       return { ok: true, page: this.#inspection(page) };
     }
@@ -578,6 +598,9 @@ export class PageService
       tags,
       content,
       endpoint_set,
+      ...(request.patch.block_api_write === undefined
+        ? {}
+        : { block_api_write: request.patch.block_api_write }),
       now: this.#operation_time(),
     });
     if (!replaced.ok) {
@@ -601,6 +624,9 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
+    if (this.#api_write_blocked(request.actor, page)) {
+      return { ok: false, reason: "api_write_blocked" };
+    }
     if (page.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -714,6 +740,14 @@ export class PageService
         });
         continue;
       }
+      if (this.#api_write_blocked(request.actor, page)) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "api_write_blocked",
+        });
+        continue;
+      }
       if (page.revision !== selected.expected_revision) {
         results.push({
           page_id: selected.page_id,
@@ -775,6 +809,9 @@ export class PageService
       request.page_id,
     );
     if (existing === null) return { ok: false, reason: "not_found" };
+    if (this.#api_write_blocked(request.actor, existing)) {
+      return { ok: false, reason: "api_write_blocked" };
+    }
     if (existing.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -842,6 +879,10 @@ export class PageService
       request.page_id,
     );
     if (source === null) return { ok: false, reason: "not_found" };
+    // A copy inherits the lock, so a key must not duplicate a locked page.
+    if (this.#api_write_blocked(request.actor, source)) {
+      return { ok: false, reason: "api_write_blocked" };
+    }
     if (source.revision !== request.expected_revision) {
       return { ok: false, reason: "revision_conflict" };
     }
@@ -991,6 +1032,9 @@ export class PageService
       request.page_id,
     );
     if (page === null) return { ok: false, reason: "not_found" };
+    if (this.#api_write_blocked(request.actor, page)) {
+      return { ok: false, reason: "api_write_blocked" };
+    }
     return await this.#repository.delete_managed_page_aggregate({
       page_id: page.page_id,
       owner_user_id: request.actor.user_id,
@@ -1017,6 +1061,14 @@ export class PageService
           page_id: selected.page_id,
           ok: false,
           reason: "not_found",
+        });
+        continue;
+      }
+      if (this.#api_write_blocked(request.actor, page)) {
+        results.push({
+          page_id: selected.page_id,
+          ok: false,
+          reason: "api_write_blocked",
         });
         continue;
       }
@@ -1278,6 +1330,7 @@ export class PageService
     tags?: readonly string[];
     content?: PreparedPageContent;
     endpoint_set?: PageEndpointSet;
+    block_api_write?: boolean;
     now: Date;
   }): Promise<MaterializedPageUpdateResult> {
     const content_asset_id = request.content === undefined
@@ -1294,6 +1347,9 @@ export class PageService
         ...(request.endpoint_set === undefined
           ? {}
           : { endpoint_set: request.endpoint_set }),
+        ...(request.block_api_write === undefined
+          ? {}
+          : { block_api_write: request.block_api_write }),
       },
       now: request.now,
     });
@@ -1837,6 +1893,18 @@ export class PageService
       : null;
   }
 
+  /**
+   * The one automation rule: a key-authenticated actor may not mutate a page
+   * its owner locked. Session actors are unaffected, and an absent lock keeps
+   * every page published before the flag existed writable.
+   */
+  #api_write_blocked(
+    actor: UserPageActor,
+    page: Pick<PageAggregate, "block_api_write">,
+  ): boolean {
+    return actor.via_api_key === true && is_api_write_blocked(page);
+  }
+
   #inspection(page: MaterializedPage): ManagedPageInspection {
     const content = page.content;
     const handler = this.#require_handler(content.content_type);
@@ -1923,6 +1991,7 @@ export class PageService
           detected_at: new Date(page.external_missing.detected_at),
         },
       }),
+      ...(is_api_write_blocked(page) ? { block_api_write: true as const } : {}),
     };
   }
 

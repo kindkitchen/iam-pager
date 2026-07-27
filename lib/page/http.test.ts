@@ -1787,3 +1787,147 @@ Deno.test("an unusable explicit bearer never falls back to the session", async (
     assertEquals((await response.json()).error, "invalid_bearer");
   }
 });
+
+Deno.test("page HTTP exposes the api-write lock as a session-only control", async () => {
+  const { adapter } = await make_fixture();
+  const created = await create_managed_page(adapter, "locked");
+  const created_body = await created.json();
+  const page_id = created_body.page.page_id;
+  assertEquals(created_body.page.block_api_write, undefined);
+  const etag = created.headers.get("etag")!;
+
+  // A key may neither set nor clear the lock.
+  const key_attempt = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "PATCH",
+      headers: bearer_headers("owner-all", etag),
+      body: { block_api_write: true },
+    }),
+    context(guest_session),
+  );
+  assertEquals(key_attempt.status, 403);
+  assertEquals(
+    (await key_attempt.json()).error,
+    "protection_requires_session",
+  );
+
+  const locked = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "PATCH",
+      headers: creator_headers(etag),
+      body: { block_api_write: true },
+    }),
+    context(owner_session),
+  );
+  assertEquals(locked.status, 200);
+  const locked_body = await locked.json();
+  assertEquals(locked_body.page.block_api_write, true);
+  const locked_etag = locked.headers.get("etag")!;
+
+  // Reads stay available to a key; every key-authenticated write is refused.
+  const inspected = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      headers: { authorization: "Bearer owner-read" },
+    }),
+    context(guest_session),
+  );
+  assertEquals(inspected.status, 200);
+  assertEquals((await inspected.json()).page.block_api_write, true);
+
+  const blocked: [Promise<Response>, string][] = [
+    [
+      adapter.item(
+        request(`/api/pages/${page_id}`, {
+          method: "PATCH",
+          headers: bearer_headers("owner-all", locked_etag),
+          body: { access: "public" },
+        }),
+        context(guest_session),
+      ),
+      "update",
+    ],
+    [
+      adapter.item_action(
+        request(`/api/pages/${page_id}/rename`, {
+          method: "POST",
+          headers: bearer_headers("owner-all", locked_etag),
+          body: { page_name: "elsewhere" },
+        }),
+        context(guest_session),
+      ),
+      "rename",
+    ],
+    [
+      adapter.item_action(
+        request(`/api/pages/${page_id}/duplicate`, {
+          method: "POST",
+          headers: bearer_headers("owner-all", locked_etag),
+        }),
+        context(guest_session),
+      ),
+      "duplicate",
+    ],
+    [
+      adapter.item(
+        request(`/api/pages/${page_id}`, {
+          method: "DELETE",
+          headers: {
+            authorization: "Bearer owner-all",
+            "if-match": locked_etag,
+          },
+        }),
+        context(guest_session),
+      ),
+      "delete",
+    ],
+  ];
+  for (const [pending, label] of blocked) {
+    const response = await pending;
+    assertEquals(response.status, 403, label);
+    assertEquals((await response.json()).error, "api_write_blocked", label);
+  }
+
+  // Bulk commands report the lock per item instead of failing the batch.
+  const bulk = await adapter.bulk(
+    request("/api/pages/bulk/delete", {
+      method: "POST",
+      headers: bearer_headers("owner-all"),
+      body: {
+        selection: [{ page_id, expected_revision: locked_body.page.revision }],
+      },
+    }),
+    context(guest_session),
+  );
+  assertEquals(bulk.status, 200);
+  assertEquals((await bulk.json()).results, [
+    { page_id, ok: false, error: "api_write_blocked" },
+  ]);
+
+  // The owner keeps every action from a browser session.
+  const unlocked = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "PATCH",
+      headers: creator_headers(locked_etag),
+      body: { block_api_write: false },
+    }),
+    context(owner_session),
+  );
+  assertEquals(unlocked.status, 200);
+  assertEquals((await unlocked.json()).page.block_api_write, undefined);
+});
+
+Deno.test("page HTTP rejects a non-boolean api-write lock", async () => {
+  const { adapter } = await make_fixture();
+  const created = await create_managed_page(adapter, "typed");
+  const page_id = (await created.json()).page.page_id;
+  const response = await adapter.item(
+    request(`/api/pages/${page_id}`, {
+      method: "PATCH",
+      headers: creator_headers(created.headers.get("etag")!),
+      body: { block_api_write: "yes" },
+    }),
+    context(owner_session),
+  );
+  assertEquals(response.status, 400);
+  assertStringIncludes((await response.json()).detail, "block_api_write");
+});

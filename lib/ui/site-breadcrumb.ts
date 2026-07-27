@@ -9,6 +9,7 @@ export type SiteLocation =
   | { readonly kind: "explore" }
   | { readonly kind: "manage" }
   | { readonly kind: "api_keys" }
+  | { readonly kind: "agent_skill" }
   | { readonly kind: "about" }
   | { readonly kind: "demo" }
   | { readonly kind: "invite" }
@@ -48,6 +49,8 @@ export class SiteLocationBreadcrumbPresenter
         return branch("Manage pages");
       case "api_keys":
         return branch("API keys");
+      case "agent_skill":
+        return branch("Agent skill");
       case "about":
         return branch("About");
       case "demo":

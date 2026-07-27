@@ -178,6 +178,8 @@ export interface UpdateManagedPageAggregateRequest {
     readonly content_asset_id?: ContentAssetId;
     readonly access?: PageAccess;
     readonly tags?: readonly PageTag[];
+    /** `false` clears the lazily stored automation lock instead of storing it. */
+    readonly block_api_write?: boolean;
   };
   readonly now: Date;
 }

@@ -17,6 +17,12 @@ export interface GuestPageActor {
 export interface UserPageActor {
   kind: "user";
   user_id: string;
+  /**
+   * True only when the transport resolved this user from an API key. Absent
+   * means a first-party session, so callers written before automation keys
+   * existed keep browser authority.
+   */
+  via_api_key?: boolean;
 }
 
 /** Namespace relation to the supplied actor; owner ids never leave the resolver. */
@@ -78,6 +84,8 @@ export interface PageSummary {
   revision: number;
   /** Owner-only external delivery health; omitted from visitor projections. */
   external_missing?: ExternalContentMissingState;
+  /** Present only while the creator blocks key-authenticated mutations. */
+  block_api_write?: true;
 }
 
 export interface ManagedPageInspection extends PageSummary {
@@ -229,6 +237,8 @@ export interface UpdateManagedPageRequest {
     content?: PageContentCommand;
     /** Complete replacement intent; omission preserves every binding. */
     endpoint_set?: PageEndpointSetIntent;
+    /** Creator-only automation lock; never accepted from a key actor. */
+    block_api_write?: boolean;
   };
 }
 
@@ -238,6 +248,8 @@ export type UpdateManagedPageResult =
     ok: false;
     reason:
       | "not_found"
+      | "api_write_blocked"
+      | "protection_requires_session"
       | "revision_conflict"
       | "revision_exhausted"
       | "empty_patch"
@@ -261,7 +273,10 @@ export interface DeleteManagedPageRequest {
 
 export type DeleteManagedPageResult =
   | { ok: true }
-  | { ok: false; reason: "not_found" | "revision_conflict" };
+  | {
+    ok: false;
+    reason: "not_found" | "api_write_blocked" | "revision_conflict";
+  };
 
 export interface RelinkManagedExternalContentRequest {
   actor: UserPageActor;
@@ -277,6 +292,7 @@ export type RelinkManagedExternalContentResult =
     ok: false;
     reason:
       | "not_found"
+      | "api_write_blocked"
       | "revision_conflict"
       | "revision_exhausted"
       | "content_not_external"
@@ -308,7 +324,11 @@ export type BulkChangeManagedPageAccessItemResult =
   | {
     page_id: PageId;
     ok: false;
-    reason: "not_found" | "revision_conflict" | "revision_exhausted";
+    reason:
+      | "not_found"
+      | "api_write_blocked"
+      | "revision_conflict"
+      | "revision_exhausted";
   };
 
 /**
@@ -330,7 +350,7 @@ export type BulkDeleteManagedPageItemResult =
   | {
     page_id: PageId;
     ok: false;
-    reason: "not_found" | "revision_conflict";
+    reason: "not_found" | "api_write_blocked" | "revision_conflict";
   };
 
 /** Ordered, independently revision-bound deletion outcomes for one selection. */
@@ -356,6 +376,7 @@ export type RenameManagedPageResult =
     ok: false;
     reason:
       | "not_found"
+      | "api_write_blocked"
       | "revision_conflict"
       | "revision_exhausted"
       | "invalid_page_name"
@@ -380,6 +401,7 @@ export type DuplicateManagedPageResult =
     ok: false;
     reason:
       | "not_found"
+      | "api_write_blocked"
       | "revision_conflict"
       | "endpoint_set_required"
       | "page_exists"

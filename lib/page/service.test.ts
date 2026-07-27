@@ -27,6 +27,12 @@ import { PageService } from "./service.ts";
 const guest = { kind: "guest" } as const;
 const owner = { kind: "user", user_id: "owner-1" } as const;
 const other = { kind: "user", user_id: "other-1" } as const;
+/** Same creator, resolved from an API key instead of a browser session. */
+const key_owner = {
+  kind: "user",
+  user_id: "owner-1",
+  via_api_key: true,
+} as const;
 const t1 = new Date("2026-07-19T10:00:00.000Z");
 const t2 = new Date("2026-07-19T11:00:00.000Z");
 const t3 = new Date("2026-07-19T12:00:00.000Z");
@@ -1932,4 +1938,207 @@ Deno.test("PageService rejects invalid dependencies and generated values", async
     Error,
     "invalid page id",
   );
+});
+
+Deno.test("PageService treats an absent block_api_write flag as unlocked", async () => {
+  const { service } = await make_fixture({
+    ids: ["legacy-1"],
+    dates: [t1, t2],
+  });
+  const created = await service.create_managed(managed_request("legacy"));
+  assert(created.ok);
+  assertEquals(created.page.block_api_write, undefined);
+
+  const updated = await service.update_managed({
+    actor: key_owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { access: "public" },
+  });
+  assert(updated.ok);
+  assertEquals(updated.page.access, "public");
+  assertEquals(updated.page.block_api_write, undefined);
+});
+
+Deno.test("PageService locks a page against key writes only after the owner sets the flag", async () => {
+  const { service, repository } = await make_fixture({
+    ids: ["locked-1"],
+    dates: [t1, t2, t3],
+  });
+  const created = await service.create_managed(managed_request("locked"));
+  assert(created.ok);
+
+  const locked = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { block_api_write: true },
+  });
+  assert(locked.ok);
+  assertEquals(locked.page.block_api_write, true);
+  const stored = await repository.find_page_aggregate_by_id(
+    created.page.page_id,
+  );
+  assert(stored !== null);
+  assertEquals(stored.block_api_write, true);
+
+  const by_key = await service.update_managed({
+    actor: key_owner,
+    page_id: created.page.page_id,
+    expected_revision: locked.page.revision,
+    patch: { access: "public" },
+  });
+  assert(!by_key.ok);
+  assertEquals(by_key.reason, "api_write_blocked");
+
+  const by_session = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: locked.page.revision,
+    patch: { access: "public" },
+  });
+  assert(by_session.ok);
+  assertEquals(by_session.page.access, "public");
+  assertEquals(by_session.page.block_api_write, true);
+});
+
+Deno.test("PageService refuses every key mutation on a locked page", async () => {
+  const { service } = await make_fixture({
+    ids: ["locked-2", "copy-2"],
+    dates: [t1, t2, t3],
+  });
+  const created = await service.create_managed(managed_request("guarded"));
+  assert(created.ok);
+  const locked = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { block_api_write: true },
+  });
+  assert(locked.ok);
+  const page_id = created.page.page_id;
+  const expected_revision = locked.page.revision;
+
+  const renamed = await service.rename_managed({
+    actor: key_owner,
+    page_id,
+    expected_revision,
+    page_name: "renamed",
+  });
+  assert(!renamed.ok);
+  assertEquals(renamed.reason, "api_write_blocked");
+
+  const duplicated = await service.duplicate_managed({
+    actor: key_owner,
+    page_id,
+    expected_revision,
+  });
+  assert(!duplicated.ok);
+  assertEquals(duplicated.reason, "api_write_blocked");
+
+  const relinked = await service.relink_managed_external_content({
+    actor: key_owner,
+    page_id,
+    expected_revision,
+    external_ref: "file-1",
+  });
+  assert(!relinked.ok);
+  assertEquals(relinked.reason, "api_write_blocked");
+
+  const bulk_access = await service.bulk_change_managed_access({
+    actor: key_owner,
+    access: "public",
+    selection: [{ page_id, expected_revision }],
+  });
+  assert(bulk_access.ok);
+  assertEquals(bulk_access.results, [{
+    page_id,
+    ok: false,
+    reason: "api_write_blocked",
+  }]);
+
+  const bulk_deleted = await service.bulk_delete_managed({
+    actor: key_owner,
+    selection: [{ page_id, expected_revision }],
+  });
+  assert(bulk_deleted.ok);
+  assertEquals(bulk_deleted.results, [{
+    page_id,
+    ok: false,
+    reason: "api_write_blocked",
+  }]);
+
+  const deleted = await service.delete_managed({
+    actor: key_owner,
+    page_id,
+    expected_revision,
+  });
+  assert(!deleted.ok);
+  assertEquals(deleted.reason, "api_write_blocked");
+});
+
+Deno.test("PageService never lets a key change the lock itself", async () => {
+  const { service } = await make_fixture({ ids: ["lock-3"], dates: [t1, t2] });
+  const created = await service.create_managed(managed_request("owner-only"));
+  assert(created.ok);
+
+  const set_by_key = await service.update_managed({
+    actor: key_owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { block_api_write: true },
+  });
+  assert(!set_by_key.ok);
+  assertEquals(set_by_key.reason, "protection_requires_session");
+
+  const locked = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { block_api_write: true },
+  });
+  assert(locked.ok);
+
+  const cleared_by_key = await service.update_managed({
+    actor: key_owner,
+    page_id: created.page.page_id,
+    expected_revision: locked.page.revision,
+    patch: { block_api_write: false },
+  });
+  assert(!cleared_by_key.ok);
+  assertEquals(cleared_by_key.reason, "protection_requires_session");
+
+  const cleared = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: locked.page.revision,
+    patch: { block_api_write: false },
+  });
+  assert(cleared.ok);
+  assertEquals(cleared.page.block_api_write, undefined);
+});
+
+Deno.test("PageService copies the lock into a session duplicate", async () => {
+  const { service } = await make_fixture({
+    ids: ["source-4", "copy-4"],
+    names: ["copied-page"],
+    dates: [t1, t2, t3],
+  });
+  const created = await service.create_managed(managed_request("source"));
+  assert(created.ok);
+  const locked = await service.update_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: created.page.revision,
+    patch: { block_api_write: true },
+  });
+  assert(locked.ok);
+
+  const duplicated = await service.duplicate_managed({
+    actor: owner,
+    page_id: created.page.page_id,
+    expected_revision: locked.page.revision,
+  });
+  assert(duplicated.ok);
+  assertEquals(duplicated.page.block_api_write, true);
 });

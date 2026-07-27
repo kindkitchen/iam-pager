@@ -151,3 +151,50 @@ Deno.test("creator management component presents PDF preview and download action
   assertEquals(html.includes(">Duplicate<"), false);
   assertEquals(html.includes("application/pdf"), false);
 });
+
+Deno.test("management rows carry an explicit api-write lock control", () => {
+  const base_page = {
+    page_id: "page-1",
+    locator: { namespace: "Mine", page_name: "notes" },
+    path: "/Mine/notes",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes" },
+        path: "/Mine/notes",
+        delivery_profile: "inline" as const,
+      },
+      alternates: [],
+    },
+    access: "private" as const,
+    content_type: "md-page",
+    size_bytes: 42,
+    tags: [],
+    updated_at: "2026-07-20T01:00:00.000Z",
+    revision: 2,
+    etag: '"page-page-1-r2"',
+    management_url: "/api/pages/page-1",
+  };
+
+  const unlocked = render_to_string(
+    <PageManagementPanel
+      csrf_token={"c".repeat(43)}
+      owned_namespaces={["Mine"]}
+      initial_pages={[base_page]}
+      initial_next_cursor={null}
+    />,
+  );
+  assertStringIncludes(unlocked, "Block API writes");
+  assertStringIncludes(unlocked, "page-management-api-lock");
+  assertEquals(unlocked.includes("API writes blocked"), false);
+
+  const locked = render_to_string(
+    <PageManagementPanel
+      csrf_token={"c".repeat(43)}
+      owned_namespaces={["Mine"]}
+      initial_pages={[{ ...base_page, block_api_write: true }]}
+      initial_next_cursor={null}
+    />,
+  );
+  assertStringIncludes(locked, "API writes blocked");
+  assertStringIncludes(locked, 'type="checkbox" checked');
+});

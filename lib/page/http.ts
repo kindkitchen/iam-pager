@@ -120,6 +120,7 @@ type CreateBody =
 interface PatchBody {
   access?: PageAccess;
   tags?: string[];
+  block_api_write?: boolean;
   content?: {
     content_type: string;
     input: unknown;
@@ -519,7 +520,14 @@ export class PageHttpAdapter implements PageHttpHandler {
       presented_csrf_token: request.headers.get("x-csrf-token"),
     });
     if (authorized.ok) {
-      return { ok: true, actor: { kind: "user", user_id: authorized.user_id } };
+      return {
+        ok: true,
+        actor: {
+          kind: "user",
+          user_id: authorized.user_id,
+          ...(principal.kind === "api_key" ? { via_api_key: true } : {}),
+        },
+      };
     }
     switch (authorized.reason) {
       case "not_authenticated":
@@ -715,12 +723,22 @@ function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
     "tags?",
     "content?",
     "endpoint_set?",
+    "block_api_write?",
   ]);
   if (!body.ok) return body;
   if (
     body.value.access !== undefined && typeof body.value.access !== "string"
   ) {
     return { ok: false, detail: "access must be a string when present" };
+  }
+  if (
+    body.value.block_api_write !== undefined &&
+    typeof body.value.block_api_write !== "boolean"
+  ) {
+    return {
+      ok: false,
+      detail: "block_api_write must be a boolean when present",
+    };
   }
   const tags = decode_tags_field(body.value.tags);
   if (!tags.ok) return tags;
@@ -742,6 +760,9 @@ function decode_patch_body(input: unknown): DecodeResult<PatchBody> {
       ...(body.value.access === undefined
         ? {}
         : { access: body.value.access as PageAccess }),
+      ...(body.value.block_api_write === undefined
+        ? {}
+        : { block_api_write: body.value.block_api_write as boolean }),
       ...(tags.value === undefined ? {} : { tags: tags.value }),
       ...(content === undefined ? {} : { content }),
       ...(endpoint_set === undefined ? {} : { endpoint_set }),
@@ -1332,6 +1353,14 @@ function update_failure_response(
   switch (result.reason) {
     case "not_found":
       return error_response(404, result.reason, "page was not found");
+    case "api_write_blocked":
+      return api_write_blocked_response();
+    case "protection_requires_session":
+      return error_response(
+        403,
+        result.reason,
+        "block_api_write is a browser-session control and is never accepted from an API key",
+      );
     case "revision_conflict":
       return error_response(
         412,
@@ -1440,13 +1469,26 @@ function update_failure_response(
 function delete_failure_response(
   result: Exclude<DeleteManagedPageResult, { ok: true }>,
 ): Response {
-  return result.reason === "not_found"
-    ? error_response(404, result.reason, "page was not found")
-    : error_response(
-      412,
-      "precondition_failed",
-      "page representation has changed",
-    );
+  if (result.reason === "not_found") {
+    return error_response(404, result.reason, "page was not found");
+  }
+  if (result.reason === "api_write_blocked") {
+    return api_write_blocked_response();
+  }
+  return error_response(
+    412,
+    "precondition_failed",
+    "page representation has changed",
+  );
+}
+
+/** One shared answer for every key-authenticated write onto a locked page. */
+function api_write_blocked_response(): Response {
+  return error_response(
+    403,
+    "api_write_blocked",
+    "the owner blocked API writes on this page; it can only change from a signed-in session",
+  );
 }
 
 function rename_failure_response(
@@ -1455,6 +1497,8 @@ function rename_failure_response(
   switch (result.reason) {
     case "not_found":
       return error_response(404, result.reason, "page was not found");
+    case "api_write_blocked":
+      return api_write_blocked_response();
     case "revision_conflict":
       return error_response(
         412,
@@ -1488,6 +1532,8 @@ function relink_failure_response(
   switch (result.reason) {
     case "not_found":
       return error_response(404, result.reason, "page was not found");
+    case "api_write_blocked":
+      return api_write_blocked_response();
     case "revision_conflict":
       return error_response(
         412,
@@ -1542,6 +1588,8 @@ function duplicate_failure_response(
   switch (result.reason) {
     case "not_found":
       return error_response(404, result.reason, "page was not found");
+    case "api_write_blocked":
+      return api_write_blocked_response();
     case "revision_conflict":
       return error_response(
         412,
@@ -1661,6 +1709,9 @@ function present_summary(page: PageSummary, managed: boolean) {
           detected_at: page.external_missing.detected_at.toISOString(),
         },
       }
+      : {}),
+    ...(managed && page.block_api_write === true
+      ? { block_api_write: true }
       : {}),
     ...(managed
       ? {

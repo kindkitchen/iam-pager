@@ -85,15 +85,21 @@ Notes:
   Bearer revoke-all revokes the calling key too.
 - Keys never authenticate site routes, `/auth/**`, or direct-content delivery,
   including private direct content.
+- A page whose owner set `block_api_write` refuses every key-authenticated
+  mutation with `403` `api_write_blocked`, after the permission check and
+  regardless of the key's grants; reads are unaffected. The flag itself is never
+  writable from a key — see [the API-write lock](pages.md#the-api-write-lock).
 
 ## Errors
 
-| Status | Code                      | Meaning                                      |
-| ------ | ------------------------- | -------------------------------------------- |
-| `401`  | `invalid_bearer`          | Explicit bearer failed; no cookie fallback   |
-| `401`  | `not_authenticated`       | Cookie principal lacks the required session  |
-| `403`  | `invalid_csrf`            | Browser mutation without the exact token     |
-| `403`  | `insufficient_permission` | Valid key without the operation's permission |
+| Status | Code                          | Meaning                                      |
+| ------ | ----------------------------- | -------------------------------------------- |
+| `401`  | `invalid_bearer`              | Explicit bearer failed; no cookie fallback   |
+| `401`  | `not_authenticated`           | Cookie principal lacks the required session  |
+| `403`  | `invalid_csrf`                | Browser mutation without the exact token     |
+| `403`  | `insufficient_permission`     | Valid key without the operation's permission |
+| `403`  | `api_write_blocked`           | Key mutation on a page its owner locked      |
+| `403`  | `protection_requires_session` | Key tried to set or clear that lock          |
 
 All API responses use `Cache-Control: no-store` and the shared error shape
 `{ "ok": false, "error": "stable_code", "detail": "bounded safe detail" }`.

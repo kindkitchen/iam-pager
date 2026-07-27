@@ -457,6 +457,50 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
     }
   }
 
+  /**
+   * Owner-only automation lock. It is deliberately a separate mutation from
+   * every content edit so the decision is explicit and revision-bound.
+   */
+  async function toggle_api_write_block(page: PageManagementSummary) {
+    set_busy_page(page.page_id);
+    set_notice(null);
+    const block_api_write = page.block_api_write !== true;
+    try {
+      const request = prepare_managed_update_request(
+        page,
+        { block_api_write },
+        props.csrf_token,
+      );
+      const response = await send(request);
+      if (response.status === 412) {
+        fail(`${page.path} changed elsewhere; the row was refreshed.`);
+        await refresh_row(page);
+        return;
+      }
+      if (!response.ok) {
+        fail(await read_error(response));
+        return;
+      }
+      const body = await response.json();
+      const updated = management_summary_from_api(body?.page);
+      if (updated === null) {
+        fail("update response was not understood");
+        return;
+      }
+      update_filtered_row(page.page_id, updated);
+      set_notice({
+        kind: "success",
+        message: block_api_write
+          ? `${updated.path} no longer accepts API-key writes.`
+          : `${updated.path} accepts API-key writes again.`,
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    } finally {
+      set_busy_page(null);
+    }
+  }
+
   async function open_editor(page: PageManagementSummary) {
     set_busy_page(page.page_id);
     set_notice(null);
@@ -1299,6 +1343,11 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                   >
                     {page.access}
                   </span>
+                  {page.block_api_write === true && (
+                    <span class="page-management-api-lock-indicator">
+                      API writes blocked
+                    </span>
+                  )}
                   <span class="page-management-meta">
                     {page.content_type} · {format_size_bytes(page.size_bytes)}
                     {" "}
@@ -1408,6 +1457,23 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                       )}
                   </div>
                 </div>
+
+                <label class="page-management-api-lock">
+                  <input
+                    type="checkbox"
+                    checked={page.block_api_write === true}
+                    disabled={controls_busy}
+                    onChange={() => toggle_api_write_block(page)}
+                  />
+                  <span class="page-management-api-lock-label">
+                    Block API writes
+                  </span>
+                  <span class="page-management-api-lock-hint">
+                    While this is on, API keys — including keys you gave to an
+                    agent — cannot change, rename, duplicate, or delete this
+                    page. You keep every action here.
+                  </span>
+                </label>
 
                 {page.external_missing !== undefined && (
                   <section
