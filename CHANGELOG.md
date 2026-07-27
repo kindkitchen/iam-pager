@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-28
+
+- Compacted the completed task history: `tasks/` was distilled into
+  present-tense specs under `specs/` (`platform-architecture`,
+  `content-locators-delivery`, `api-keys`, `external-storage`,
+  `oauth-callback-configuration`, `storage-composition`, `site-web-surface`) and
+  removed.
+
 ## 2026-07-27
 
 - Moved the "External content unavailable" list filter out of the primary

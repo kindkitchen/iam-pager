@@ -20,7 +20,7 @@
     }
   },
   "lint": { "rules": { "tags": ["fresh", "recommended"] } },
-  "exclude": ["**/_fresh/*", "tasks/**"],
+  "exclude": ["**/_fresh/*", "tasks/**", "specs/**"],
   "imports": {
     "@/": "./",
     "@deno/gfm": "jsr:@deno/gfm@^0.12.0",
