@@ -33,7 +33,9 @@ export function PublishPage(
         breadcrumb={breadcrumb}
         eyebrow={is_creator ? "Creator publishing" : "Guest publishing"}
         title="Publish a page"
-        intro="Choose the paths first, then the content. Every path serves the same logical page; aliases never copy content."
+        intro={is_creator
+          ? "Choose the paths first, then the content. Every path serves the same logical page in a namespace you own; aliases never copy content."
+          : "Choose the paths first, then the content. Every path serves the same logical page; aliases never copy content."}
       />
 
       {namespace_panel.kind === "creator" && (
@@ -51,23 +53,19 @@ export function PublishPage(
           : []}
       />
 
-      <aside class="guest-notice">
-        <h2>
-          {is_creator
-            ? "Unreserved pages remain unprotected"
-            : "Guest pages are unprotected"}
-        </h2>
-        <p>
-          Publishing at an existing unreserved path replaces it, and those pages
-          do not appear in search or browsing. Reserve the namespace first to
-          protect it from guest and cross-creator writes.
-        </p>
-        {!is_creator && (
+      {!is_creator && (
+        <aside class="guest-notice">
+          <h2>Guest pages are unprotected</h2>
+          <p>
+            Publishing at an existing unreserved path replaces it, and those
+            pages do not appear in search or browsing. Reserve the namespace
+            first to protect it from guest and cross-creator writes.
+          </p>
           <p>
             <a href="/site/invite">What signing in adds</a>
           </p>
-        )}
-      </aside>
+        </aside>
+      )}
     </main>
   );
 }

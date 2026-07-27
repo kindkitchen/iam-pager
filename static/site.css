@@ -310,9 +310,8 @@ h2 {
 .publish-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2rem;
-  border-top: 1px solid #b7b9b2;
-  padding-top: 2rem;
+  gap: 1.5rem;
+  min-width: 0;
 }
 
 .namespace-panel {
@@ -877,7 +876,6 @@ h2 {
 }
 
 .page-editor-heading,
-.page-editor-toolbar,
 .css-heading,
 .preview-heading,
 .markdown-insertion-heading,
@@ -965,9 +963,19 @@ h2 {
 }
 
 .page-editor-heading {
+  flex-wrap: wrap;
   min-height: 2.5rem;
   border-bottom: 1px solid #c4c6bf;
   padding-bottom: 0.45rem;
+}
+
+.page-editor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .page-editor-heading > div:first-child {
@@ -992,20 +1000,9 @@ h2 {
   gap: 0.65rem;
 }
 
-.page-editor-toolbar {
-  align-items: flex-end;
-  flex-direction: column;
-}
-
-.layout-control {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 0.55rem;
-}
-
-.layout-control .layout-switcher {
-  flex: 1;
+.layout-switcher {
+  width: 21rem;
+  max-width: 100%;
 }
 
 .contextual-switcher {
@@ -1096,35 +1093,67 @@ h2 {
   display: grid;
   align-content: start;
   min-width: 0;
-  gap: 0.4rem;
+  gap: 0.5rem;
   margin: 0;
   border: 1px solid #c4c6bf;
   border-radius: 0.4rem;
-  padding: 0.75rem;
+  padding: 0.6rem;
   background: rgb(255 254 250 / 52%);
 }
 
 .editor-area textarea {
-  min-height: 19rem;
+  min-height: clamp(20rem, 54vh, 46rem);
+}
+
+/* One frame per editor area: the mode choice adds controls, never a box. */
+.markdown-area {
+  position: relative;
 }
 
 .markdown-mode-stack {
-  margin-bottom: 0.1rem;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .markdown-mode-switcher {
-  width: min(12rem, calc(100% - 1rem));
+  position: static;
+  z-index: auto;
+  width: 15rem;
+  max-width: 100%;
+  margin: 0;
+  justify-self: end;
+}
+
+.markdown-mode-switcher .exclusive-content-button {
+  min-height: 2rem;
+  border-color: #b6c0b8;
+  border-radius: 0;
+  background: #f8f7f1;
+}
+
+.markdown-mode-switcher .exclusive-content-button:first-child {
+  border-radius: 0.35rem 0 0 0.35rem;
+}
+
+.markdown-mode-switcher .exclusive-content-button:last-child {
+  border-radius: 0 0.35rem 0.35rem 0;
+}
+
+.markdown-mode-switcher .exclusive-content-button[aria-selected="true"] {
+  border-color: #8da393;
+  color: #173c27;
+  background: #dce8dd;
+  box-shadow: inset 0 0 0 1px rgb(28 83 51 / 12%);
 }
 
 .markdown-mode-panel {
   display: grid;
   min-width: 0;
   gap: 0.55rem;
-  border: 1px solid #c4c6bf;
-  border-radius: 0.35rem;
-  border-top-left-radius: 0.2rem;
-  padding: 0.65rem;
-  background: #fffefa;
+  border: 0;
+  padding: 0;
+  background: none;
 }
 
 .markdown-step-editor {
@@ -1527,7 +1556,7 @@ h2 {
 
 .preview-area iframe {
   width: 100%;
-  min-height: 24rem;
+  min-height: clamp(20rem, 54vh, 46rem);
   border: 1px solid #a9afa7;
   border-radius: 0.25rem;
   background: #fff;
@@ -1631,22 +1660,9 @@ h2 {
     font-size: 1.2rem;
   }
 
-  .page-editor-toolbar {
-    align-items: center;
-    flex-direction: row;
-    justify-content: flex-end;
-  }
-
-  .layout-control {
-    width: auto;
-  }
-
-  .layout-switcher {
-    width: 20rem;
-  }
-
   .editor-layout-split {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
   }
 
   .publish-form > button[type="submit"] {
@@ -1855,17 +1871,6 @@ h2 {
 .not-found-secondary {
   color: #1c5333;
   text-underline-offset: 0.25rem;
-}
-
-@media (min-width: 70rem) {
-  .publish-panel {
-    grid-template-columns: minmax(13rem, 0.32fr) minmax(0, 1fr);
-    gap: clamp(2rem, 5vw, 5rem);
-  }
-
-  .publish-result {
-    grid-column: 2;
-  }
 }
 
 .site-breadcrumb ol {
@@ -2152,10 +2157,60 @@ h2 {
   line-height: 1.45;
 }
 
-/* Publishing is its own destination and uses the full shell width. */
+/* Publishing is its own destination: wide, centred, and editor-first. */
+.publish-page-shell {
+  width: min(100% - 2rem, 108rem);
+}
+
 .publish-page-shell .publish-panel {
   border-top: 0;
   padding-top: 0;
+}
+
+/* Setup fields stay readable; only the editor consumes the extra width. */
+.publish-page-shell .content-type-chooser,
+.publish-page-shell .publish-endpoint,
+.publish-page-shell .publish-aliases,
+.publish-page-shell .storage-target-chooser,
+.publish-page-shell .pdf-file-selection,
+.publish-page-shell .namespace-panel,
+.publish-page-shell .publish-result {
+  width: 100%;
+  max-width: 64rem;
+}
+
+.publish-page-shell .publish-aliases .section-heading h3 {
+  margin-bottom: 0.2rem;
+}
+
+.publish-page-shell .namespace-panel {
+  border-top: 0;
+  padding-top: 0;
+  margin-bottom: 0;
+}
+
+@media (min-width: 64rem) {
+  .publish-page-shell {
+    width: min(100% - 3rem, 108rem);
+    padding-top: clamp(2rem, 4vw, 3rem);
+  }
+
+  .publish-page-shell .site-page-header {
+    margin-bottom: 1.75rem;
+  }
+
+  .publish-page-shell .site-page-header {
+    max-width: none;
+  }
+
+  .publish-page-shell .site-page-header h1 {
+    font-size: clamp(2.2rem, 4vw, 3rem);
+  }
+
+  .publish-page-shell .site-page-header .hero-copy {
+    max-width: 70rem;
+    font-size: 1.05rem;
+  }
 }
 
 /* Editorial destinations: about, demo, invite. */
@@ -2226,4 +2281,52 @@ h2 {
 
 .site-editorial-action-primary:hover {
   background: #123d24;
+}
+
+/* Wide screens: the Raw/Steps choice shares the tab row instead of adding one. */
+@media (min-width: 48rem) {
+  .markdown-mode-switcher {
+    position: absolute;
+    top: -2.35rem;
+    right: 0.35rem;
+    z-index: 3;
+    width: 15rem;
+  }
+
+  .markdown-mode-stack {
+    gap: 0;
+  }
+}
+
+/* Compact in-form actions instead of full-width buttons. */
+.publish-aliases > .context-button,
+.publish-alias > button {
+  justify-self: start;
+  width: auto;
+}
+
+/* Very wide screens: the setup band uses the width so the editor starts sooner. */
+@media (min-width: 90rem) {
+  .publish-page-shell .publish-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    column-gap: 2rem;
+  }
+
+  .publish-page-shell .publish-form > .content-type-chooser,
+  .publish-page-shell .publish-form > .publish-endpoint,
+  .publish-page-shell .publish-form > .publish-aliases {
+    max-width: none;
+  }
+
+  .publish-page-shell .publish-form > .content-type-chooser .content-type-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .publish-page-shell .publish-form > .page-editor,
+  .publish-page-shell .publish-form > .pdf-publish-fields,
+  .publish-page-shell .publish-form > .storage-target-chooser,
+  .publish-page-shell .publish-form > button[type="submit"] {
+    grid-column: 1 / -1;
+  }
 }
