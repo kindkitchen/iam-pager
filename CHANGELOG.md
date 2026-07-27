@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-30
+
+- Agent skill 1.1.0 (`lib/agent-skill/skill.ts`): added section 5, "Bulk
+  commands are per-item, not transactional", with the `selection` request shape,
+  the `200` + `results` response shape, the four per-item error codes, and the
+  explicit rule that a failing item neither stops the command nor rolls back
+  applied items.
+- Corrected the skill's lock section: `api_write_blocked` reaches a single-page
+  call as `403`, but a bulk command as one item result inside a `200`
+  `{ ok: true }` envelope, with the other selected pages already changed.
+- Corrected two false claims in the skill: the JSON body limit (96 KiB on page
+  routes, 4 KiB on API-key routes, not 4 KiB everywhere) and `x-csrf-token`,
+  which is ignored for key principals rather than an error.
+- Documented `422 invalid_selection`, the absence of `If-Match` and query
+  parameters on bulk routes, and the two-layer failure model (request status vs
+  per-item results) in the skill, `README.md`, `docs/api/pages.md`, and
+  `specs/agent-automation/SKILL.md`.
+- Added `lib/ui/agent-skill.test.ts` coverage pinning the bulk semantics and
+  rejecting the removed CSRF claim.
+- Made `/site/skill/raw` cache-validated instead of time-boxed
+  (`lib/agent-skill/fingerprint.ts`, `routes/site/skill/raw.ts`): a strong
+  `ETag` derived from the served bytes, `public, no-cache`, conditional `304`
+  answers, and an `x-skill-version` header. Replaces the previous `max-age=300`,
+  which could hand out a superseded skill for five minutes after a deploy, and
+  invalidates correctly even when a version bump is forgotten. The route reads
+  one `AgentSkillSnapshot`, so the served bytes and their tag can never come
+  from two independent reads, and a failed digest is retried instead of memoised
+  as a permanent rejection.
+- Told the agent to revalidate the document with `If-None-Match` at session
+  start rather than trusting a saved copy.
+
 ## 2026-07-29
 
 - Published an agent skill as code (`lib/agent-skill/skill.ts`): one Markdown

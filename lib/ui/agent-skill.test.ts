@@ -27,6 +27,22 @@ Deno.test("the skill teaches credential handling, capabilities, and the lock", (
   assertStringIncludes(markdown, `name: ${agent_skill_document.id}`);
 });
 
+Deno.test("the skill teaches non-transactional bulk semantics", () => {
+  const markdown = agent_skill_document.markdown;
+  assertStringIncludes(markdown, "POST /api/pages/bulk/delete");
+  assertStringIncludes(markdown, "expected_revision");
+  assertStringIncludes(markdown, "invalid_selection");
+  assertStringIncludes(markdown, "revision_conflict");
+  assertStringIncludes(markdown, "revision_exhausted");
+  // The locked-page answer differs by shape; both must be stated.
+  assertStringIncludes(markdown, "1\u2013100");
+  assertStringIncludes(
+    markdown,
+    "never rolls back the items that\n  already succeeded",
+  );
+  assert(!markdown.includes("presence with a bearer is an error"));
+});
+
 Deno.test("the skill presenter projects one document into preview and copy", () => {
   const model = agent_skill_presenter.present();
   assertEquals(model.markdown, agent_skill_document.markdown);
