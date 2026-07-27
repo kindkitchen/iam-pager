@@ -39,8 +39,18 @@ Deno.test("creator management component renders controls and safe rows", () => {
   assertStringIncludes(html, "Apply filters");
   assertStringIncludes(html, 'placeholder="contains…"');
   assertStringIncludes(html, "Exact tag");
-  assertStringIncludes(html, "External content unavailable");
+  assertStringIncludes(html, "page-management-more-filters");
+  assertStringIncludes(html, "<summary>More</summary>");
+  assertStringIncludes(html, "Maintenance filters.");
+  assertStringIncludes(
+    html,
+    "Only pages with unavailable external content",
+  );
   assertStringIncludes(html, "toggle-field page-management-broken-filter");
+  assertEquals(
+    html.includes('<details class="page-management-more-filters" open'),
+    false,
+  );
   assertStringIncludes(html, "0 selected");
   assertStringIncludes(html, "Apply access");
   assertStringIncludes(html, "Delete selected");

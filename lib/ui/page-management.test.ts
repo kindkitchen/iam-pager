@@ -17,6 +17,8 @@ import {
   managed_bulk_delete_from_api,
   managed_external_content_source,
   managed_list_from_api,
+  managed_maintenance_filter_state,
+  managed_maintenance_filters,
   managed_md_page_draft,
   managed_pdf_delivery_links,
   managed_pdf_metadata,
@@ -582,6 +584,26 @@ Deno.test("tag input and local filter matching mirror management semantics", () 
       { external_missing: true },
     ),
     true,
+  );
+});
+
+Deno.test("maintenance filters stay secondary and announce themselves", () => {
+  assertEquals(managed_maintenance_filters.map((filter) => filter.id), [
+    "external_missing",
+  ]);
+  const idle = managed_maintenance_filter_state({ name: "notes" });
+  assertEquals(idle.active, []);
+  assertEquals(idle.label, "More");
+  const repairing = managed_maintenance_filter_state({
+    external_missing: true,
+  });
+  assertEquals(repairing.active.map((filter) => filter.id), [
+    "external_missing",
+  ]);
+  assertEquals(repairing.label, "More · needs repair");
+  assertEquals(
+    managed_maintenance_filter_state({ external_missing: false }).active,
+    [],
   );
 });
 

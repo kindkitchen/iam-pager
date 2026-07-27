@@ -71,12 +71,13 @@ private, invalid, and unauthorized visitor lookups share a non-disclosing 404.
 Google authentication establishes an application user. A creator can reserve one
 or more namespaces and then create, inspect, update, rename, duplicate, make
 public or private, tag, filter, bulk-change, and delete pages in those
-namespaces. External delivery failures are visible and filterable in page
-management; creators can re-link a byte-identical external copy or replace the
-content inline to detach it. Publishing and reference editing select from the
-creator's owned namespaces, including cross-namespace aliases; a newly reserved
-namespace is available to the publishing selector immediately. Every managed
-mutation is owner-checked and revision-bound.
+namespaces. External delivery failures are visible in page management and
+filterable through its secondary "More" maintenance disclosure; creators can
+re-link a byte-identical external copy or replace the content inline to detach
+it. Publishing and reference editing select from the creator's owned namespaces,
+including cross-namespace aliases; a newly reserved namespace is available to
+the publishing selector immediately. Every managed mutation is owner-checked and
+revision-bound.
 
 Namespace reservation lives on `/site/publish` (before publishing) and on
 `/site/manage` (alongside existing pages); a newly reserved namespace becomes

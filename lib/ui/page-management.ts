@@ -252,6 +252,55 @@ export interface ManagedPageFilters {
   readonly external_missing?: boolean;
 }
 
+/**
+ * Declares one rarely used, repair-oriented list filter. These narrow the list
+ * for maintenance work, not for everyday browsing, so any presentation is
+ * expected to keep them behind a secondary disclosure instead of the primary
+ * filter row.
+ */
+export interface ManagedMaintenanceFilter {
+  readonly id: "external_missing";
+  readonly label: string;
+  readonly description: string;
+  /** Short wording shown while the hidden filter is narrowing the list. */
+  readonly active_summary: string;
+}
+
+export const managed_maintenance_filters: readonly ManagedMaintenanceFilter[] =
+  [
+    {
+      id: "external_missing",
+      label: "Only pages with unavailable external content",
+      description:
+        "Repair view. Lists pages whose external file is missing, revoked, " +
+        "or no longer matches the page, so visitors currently see a " +
+        "placeholder instead of the content.",
+      active_summary: "needs repair",
+    },
+  ];
+
+export interface ManagedMaintenanceFilterState {
+  /** Filters currently narrowing the list, in catalogue order. */
+  readonly active: readonly ManagedMaintenanceFilter[];
+  /** Disclosure label that never hides an applied maintenance filter. */
+  readonly label: string;
+}
+
+/** Derives the secondary-disclosure state for the maintenance filters. */
+export function managed_maintenance_filter_state(
+  filters: ManagedPageFilters,
+): ManagedMaintenanceFilterState {
+  const active = managed_maintenance_filters.filter((filter) =>
+    filter.id === "external_missing" && filters.external_missing === true
+  );
+  return {
+    active,
+    label: active.length === 0
+      ? "More"
+      : `More · ${active.map((filter) => filter.active_summary).join(", ")}`,
+  };
+}
+
 interface ManagedEndpointBindingBody {
   readonly locator: Locator;
   readonly delivery_profile: DeliveryProfile;

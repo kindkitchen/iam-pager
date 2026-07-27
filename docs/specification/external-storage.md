@@ -207,8 +207,11 @@ not served during an outage. Success clears a previous observational warning
 only after full integrity verification.
 
 Owners see a bounded warning and safe cause category in page lists and
-inspection, and can filter the managed list to affected pages. Repair creates or
-selects a valid replacement asset at an exact page revision by:
+inspection, and can filter the managed list to affected pages. That filter is a
+maintenance control, not an everyday one: presentations keep it behind a
+secondary disclosure and label it as a repair view, while an applied filter
+stays announced so a narrowed list is never mistaken for an empty one. Repair
+creates or selects a valid replacement asset at an exact page revision by:
 
 - reauthorizing the existing connection when the provider object still matches;
 - replacing content through the validated inline upload flow, which also serves
