@@ -1,7 +1,7 @@
 ---
 name: api-keys
 description: API-key lifecycle, bearer principals, and per-endpoint permissions. Load when touching /api authentication, authorization, or key management.
-updated: 2026-07-22
+updated: 2026-07-29
 sources: [api-keys]
 ---
 
@@ -50,5 +50,9 @@ OAuth attempt, idle renewal, cookie, or CSRF token. Nothing synthesizes a
 - Deno KV revoke-all is a single owner-generation bump: one linearizable commit
   invalidating unbounded key counts; dead entries purge lazily so identifiers
   stay reusable.
+- A page with `block_api_write` set refuses every key-authenticated mutation with
+  `403` `api_write_blocked` after the permission check, and the flag itself is
+  never settable from a key (`403` `protection_requires_session`). See
+  `specs/agent-automation/SKILL.md`.
 - Key authentication never enables guest behavior — a key-authenticated create is
   always a managed create, and keys do not reach private direct-content delivery.

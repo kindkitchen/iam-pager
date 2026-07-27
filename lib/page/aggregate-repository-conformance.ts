@@ -1070,4 +1070,70 @@ export function test_page_aggregate_repository_conformance(
       );
     },
   );
+
+  conformance_test(
+    "the api-write lock is stored lazily and copied into duplicates",
+    async (subject) => {
+      await create_asset(subject, "asset-1");
+      const created = await create_managed(
+        subject,
+        "page-1",
+        "asset-1",
+        endpoint_set("locked"),
+      );
+      assertEquals(created.block_api_write, undefined);
+
+      const locked = await subject.update_managed_page_aggregate({
+        page_id: "page-1",
+        owner_user_id: "owner-1",
+        expected_revision: created.revision,
+        patch: { block_api_write: true },
+        now: t2,
+      });
+      assert(locked.ok);
+      assertEquals(locked.page.block_api_write, true);
+      assertEquals(
+        (await subject.find_page_aggregate_by_id("page-1"))?.block_api_write,
+        true,
+      );
+
+      const unrelated = await subject.update_managed_page_aggregate({
+        page_id: "page-1",
+        owner_user_id: "owner-1",
+        expected_revision: locked.page.revision,
+        patch: { access: "private" },
+        now: t2,
+      });
+      assert(unrelated.ok);
+      assertEquals(unrelated.page.block_api_write, true);
+
+      const duplicated = await subject.duplicate_managed_page_aggregate({
+        source_page_id: "page-1",
+        owner_user_id: "owner-1",
+        expected_revision: unrelated.page.revision,
+        page_id: "page-2",
+        endpoint_set: endpoint_set("locked-copy"),
+        now: t2,
+      });
+      assert(duplicated.ok);
+      assertEquals(duplicated.page.block_api_write, true);
+
+      const cleared = await subject.update_managed_page_aggregate({
+        page_id: "page-1",
+        owner_user_id: "owner-1",
+        expected_revision: unrelated.page.revision,
+        patch: { block_api_write: false },
+        now: t2,
+      });
+      assert(cleared.ok);
+      assertEquals(cleared.page.block_api_write, undefined);
+      assertEquals(
+        Object.hasOwn(
+          (await subject.find_page_aggregate_by_id("page-1")) ?? {},
+          "block_api_write",
+        ),
+        false,
+      );
+    },
+  );
 }

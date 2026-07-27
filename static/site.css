@@ -572,6 +572,42 @@ h2 {
   color: #2f5b41;
 }
 
+.page-management-api-lock-indicator {
+  border: 1px solid #4a5b8c;
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  color: #33436f;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.page-management-api-lock {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.2rem 0.55rem;
+  border: 1px solid #c9cbc4;
+  border-radius: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  background: #f6f7f4;
+}
+
+.page-management-api-lock input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.page-management-api-lock-label {
+  font-weight: 700;
+}
+
+.page-management-api-lock-hint {
+  grid-column: 2;
+  color: #59635c;
+  font-size: 0.85rem;
+}
+
 .page-management-external-missing-indicator {
   border: 1px solid #a55d19;
   border-radius: 0.25rem;
@@ -2362,4 +2398,101 @@ h2 {
   .publish-page-shell .publish-form > button[type="submit"] {
     grid-column: 1 / -1;
   }
+}
+
+/* Agent skill: human preview plus the verbatim copy affordance. */
+.agent-skill-shell {
+  width: min(100% - 2rem, 72rem);
+}
+
+.manage-api-keys-skill {
+  margin: 0 0 1.5rem;
+  color: #59635c;
+}
+
+.agent-skill-usage {
+  border: 1px solid #c9cbc4;
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: #f6f7f4;
+}
+
+.agent-skill-usage h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.agent-skill-usage ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.agent-skill-usage-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.9rem 0 0;
+}
+
+.agent-skill-copy {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.25rem 0;
+}
+
+.agent-skill-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.agent-skill-copy-button {
+  font-weight: 700;
+}
+
+.agent-skill-copy-file {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: #59635c;
+}
+
+.agent-skill-copy-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #59635c;
+}
+
+.agent-skill-copy-raw {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.agent-skill-preview {
+  border-top: 1px solid #d8dad3;
+  padding-top: 1.5rem;
+}
+
+.agent-skill-preview pre {
+  overflow-x: auto;
+  padding: 0.85rem;
+  border-radius: 0.4rem;
+  background: #f2f3ef;
+}
+
+.agent-skill-preview table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.agent-skill-preview th,
+.agent-skill-preview td {
+  border: 1px solid #d8dad3;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
 }

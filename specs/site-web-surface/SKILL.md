@@ -1,7 +1,7 @@
 ---
 name: site-web-surface
 description: How the /site projection is structured - site map, hub, publish route, reference editing, delivery control. Load when touching site routes, navigation, publishing, or management UI.
-updated: 2026-07-25
+updated: 2026-07-29
 sources: [web-navigation-hub, web-multi-reference-ux]
 ---
 
@@ -23,6 +23,9 @@ thin route under `routes/site/`.
 - `/site/explore` is the canonical public exploration destination; old
   query-bearing home URLs redirect there.
 - `/site/manage` holds creator management plus namespace reservation.
+- `/site/skill` renders the code-owned agent skill through
+  `lib/ui/agent-skill.ts` and `components/MarkdownDocument.tsx`;
+  `/site/skill/raw` serves the same document verbatim as `text/markdown`.
 - `/site/about`, `/site/demo`, `/site/invite` share `lib/ui/site-editorial.ts`
   and `components/SiteEditorial.tsx`; invite is session-dependent.
 - `components/SiteNavigation.tsx` exports `SiteSessionNavigation` and the shared

@@ -86,9 +86,21 @@ const about_page: SiteEditorialPage = {
       ],
       links: [{ label: "API keys", href: "/site/api-keys" }],
     },
+    {
+      heading: "Agents work here too",
+      body: [
+        "A published agent skill describes the whole API surface, how a key must be stored, and how an agent should behave when it hits a limit. Copy it into your agent, hand it a scoped key, and it manages your pages on your behalf.",
+        "Any page can be locked with “Block API writes” in page management. Locked pages refuse every key-authenticated change, so an agent can never touch what you keep for yourself.",
+      ],
+      links: [
+        { label: "Read the agent skill", href: "/site/skill" },
+        { label: "Raw skill document", href: "/site/skill/raw" },
+      ],
+    },
   ],
   actions: [
     { label: "Publish a page", href: "/site/publish", primary: true },
+    { label: "Read the agent skill", href: "/site/skill" },
     { label: "See the walkthrough", href: "/site/demo" },
   ],
 };
@@ -158,8 +170,9 @@ const guest_invite_page: SiteEditorialPage = {
     {
       heading: "Automate with API keys",
       body: [
-        "Issue scoped keys and drive publishing and management from CI or scripts, with the same rules the site follows.",
+        "Issue scoped keys and drive publishing and management from CI, scripts, or an AI agent, with the same rules the site follows.",
       ],
+      links: [{ label: "Agent skill", href: "/site/skill" }],
     },
   ],
   actions: [

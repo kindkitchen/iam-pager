@@ -47,9 +47,15 @@ breadcrumbs are projections of that declaration.
 | Explore      | `/site/explore`  | everyone |
 | Demo         | `/site/demo`     | everyone |
 | About        | `/site/about`    | everyone |
+| Agent skill  | `/site/skill`    | everyone |
 | Invitation   | `/site/invite`   | guests   |
 | Manage pages | `/site/manage`   | creators |
 | API keys     | `/site/api-keys` | creators |
+
+The agent-skill destination renders the platform's published AI-agent skill for
+humans and hands the exact document to an agent: `/site/skill` shows the
+readable projection with an explicit copy control, and `/site/skill/raw` serves
+the verbatim Markdown as `text/markdown`.
 
 ### Visitors and guests
 
@@ -78,6 +84,13 @@ it. Publishing and reference editing select from the creator's owned namespaces,
 including cross-namespace aliases; a newly reserved namespace is available to
 the publishing selector immediately. Every managed mutation is owner-checked and
 revision-bound.
+
+Each managed page also carries an explicit **Block API writes** checkbox in page
+management. While it is on, API keys — including keys handed to an AI agent —
+cannot update, replace, re-link, rename, duplicate, or delete that page; the
+creator keeps every action from a signed-in session. The flag is stored lazily,
+so pages published before it existed stay writable, and no key can ever set or
+clear it.
 
 Namespace reservation lives on `/site/publish` (before publishing) and on
 `/site/manage` (alongside existing pages); a newly reserved namespace becomes
@@ -371,6 +384,20 @@ the `delete` grant, which also revokes the calling key). The full matrix is in
 bodies, cookies, or logs. Grant the narrowest permissions, set an expiry where
 practical, and revoke immediately on suspicion; an explicit invalid bearer is
 rejected without any cookie fallback.
+
+## Agents
+
+The platform publishes one agent skill — a Markdown document owned by code in
+`lib/agent-skill/skill.ts` — that teaches an AI agent how to obtain a key from
+its user, keep it out of transcripts and files, drive the page and namespace
+APIs, and stop cleanly at a refusal. `/site/skill` renders it with a copy
+control; `/site/skill/raw` returns it verbatim for an agent to fetch.
+
+Per-page protection complements it: a page with `block_api_write` set answers
+every key-authenticated mutation with `403` `api_write_blocked`, and
+`block_api_write` sent with a bearer is refused with `403`
+`protection_requires_session`. Only a signed-in session can change the flag, in
+`/site/manage`. See [the API-write lock](docs/api/pages.md#the-api-write-lock).
 
 ## Build and run
 

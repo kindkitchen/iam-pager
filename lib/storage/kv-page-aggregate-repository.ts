@@ -194,7 +194,7 @@ function deserialize_envelope(value: unknown): PageAggregate {
       "content_asset_id",
       "created_at",
       "updated_at",
-    ], ["external_missing"])
+    ], ["external_missing", "block_api_write"])
   ) {
     return invalid_stored_page_aggregate();
   }
@@ -743,8 +743,14 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     );
     const has_patch = request.patch.endpoint_set !== undefined ||
       request.patch.content_asset_id !== undefined ||
-      request.patch.access !== undefined || request.patch.tags !== undefined;
+      request.patch.access !== undefined || request.patch.tags !== undefined ||
+      request.patch.block_api_write !== undefined;
     require(has_patch, "patch must change at least one aggregate field");
+    require(
+      request.patch.block_api_write === undefined ||
+        typeof request.patch.block_api_write === "boolean",
+      "block_api_write must be a boolean when present",
+    );
     if (request.patch.endpoint_set !== undefined) {
       this.#require_endpoint_set(request.patch.endpoint_set);
     }
@@ -780,6 +786,7 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
     const tags_patch = request.patch.tags === undefined
       ? undefined
       : [...request.patch.tags];
+    const block_api_write_patch = request.patch.block_api_write;
     const now = clone(request.now);
 
     for (let attempt = 0; attempt < page_aggregate_max_attempts; attempt += 1) {
@@ -827,10 +834,13 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
         external_missing: _external_missing,
         ...healthy_existing
       } = existing.page;
+      const { block_api_write: _existing_block, ...unlocked_base } =
+        content_asset_patch === undefined ? existing.page : healthy_existing;
+      const block_api_write = block_api_write_patch ??
+        existing.page.block_api_write ?? false;
       const page: PageAggregate = {
-        ...(content_asset_patch === undefined
-          ? existing.page
-          : healthy_existing),
+        ...unlocked_base,
+        ...(block_api_write ? { block_api_write: true as const } : {}),
         endpoint_set: clone(endpoint_set),
         access: access_patch ?? existing.page.access,
         tags: tags_patch ?? clone(existing.page.tags),
@@ -926,6 +936,9 @@ export class KvPageAggregateRepository implements PageAggregateRepository {
         stewardship: clone(source.page.stewardship),
         access: source.page.access,
         tags: clone(source.page.tags),
+        ...(source.page.block_api_write === true
+          ? { block_api_write: true as const }
+          : {}),
         revision: 1,
         content_asset_id: source.page.content_asset_id,
         created_at: clone(now),

@@ -38,6 +38,14 @@ Keys authorize the page and namespace operations under `/api/**`
 its required permission). Key management itself stays browser-owned: the sole
 key-accessible management operation is bearer revoke-all below.
 
+Grants are owner-wide, so a creator narrows automation per page instead: a page
+with `block_api_write` set refuses every key-authenticated mutation with `403`
+`api_write_blocked`, and no key can set or clear that flag. See
+[the API-write lock](pages.md#the-api-write-lock). Keys handed to an AI agent
+should be paired with
+[the published agent skill](../../lib/agent-skill/skill.ts) rendered at
+`/site/skill`.
+
 ## Key metadata
 
 ```json

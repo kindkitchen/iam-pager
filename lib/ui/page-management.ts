@@ -59,6 +59,8 @@ export interface PageManagementSummary {
   readonly etag: string;
   readonly management_url: string;
   readonly external_missing?: PageManagementExternalMissing;
+  /** Present only while API-key writes are blocked; absence means allowed. */
+  readonly block_api_write?: true;
 }
 
 /** Complete server-owned model for the creator page-management panel. */
@@ -152,6 +154,9 @@ export function present_management_summary(
         detected_at: page.external_missing.detected_at.toISOString(),
       },
     }),
+    ...(page.block_api_write === true
+      ? { block_api_write: true as const }
+      : {}),
   };
 }
 
@@ -179,6 +184,7 @@ export function management_summary_from_api(
     etag,
     management_url,
     external_missing,
+    block_api_write,
   } = record;
   const parsed_endpoints = management_endpoint_links(endpoints);
   if (
@@ -197,7 +203,8 @@ export function management_summary_from_api(
     parse_page_etag(etag)?.page_id !== page_id ||
     parse_page_etag(etag)?.revision !== revision ||
     management_url !== `/api/pages/${page_id}` ||
-    !is_management_external_missing(external_missing)
+    !is_management_external_missing(external_missing) ||
+    (block_api_write !== undefined && typeof block_api_write !== "boolean")
   ) {
     return null;
   }
@@ -217,6 +224,7 @@ export function management_summary_from_api(
     ...(external_missing === undefined
       ? {}
       : { external_missing: { ...external_missing } }),
+    ...(block_api_write === true ? { block_api_write: true as const } : {}),
   };
 }
 
@@ -309,6 +317,7 @@ interface ManagedEndpointBindingBody {
 interface ManagedUpdateBody {
   readonly access?: PageAccess;
   readonly tags?: readonly string[];
+  readonly block_api_write?: boolean;
   readonly endpoint_set?: {
     readonly canonical: ManagedEndpointBindingBody;
     readonly alternates: readonly ManagedEndpointBindingBody[];
@@ -417,15 +426,18 @@ export function prepare_managed_update_request(
     readonly tags?: readonly string[];
     readonly content?: ManagedMdPageDraft;
     readonly endpoints?: ManagedEndpointSetDraft;
+    /** Browser-only automation lock; the API rejects it from a key. */
+    readonly block_api_write?: boolean;
   },
   csrf_token: string,
 ): PreparedManagedRequest {
   if (
     patch.access === undefined && patch.tags === undefined &&
-    patch.content === undefined && patch.endpoints === undefined
+    patch.content === undefined && patch.endpoints === undefined &&
+    patch.block_api_write === undefined
   ) {
     throw new Error(
-      "managed update requires access, tags, content, or endpoints",
+      "managed update requires access, tags, content, endpoints, or block_api_write",
     );
   }
   return {
@@ -434,6 +446,9 @@ export function prepare_managed_update_request(
     headers: json_mutation_headers(csrf_token, target.etag),
     body: {
       ...(patch.access === undefined ? {} : { access: patch.access }),
+      ...(patch.block_api_write === undefined
+        ? {}
+        : { block_api_write: patch.block_api_write }),
       ...(patch.tags === undefined ? {} : { tags: [...patch.tags] }),
       ...(patch.endpoints === undefined ? {} : {
         endpoint_set: {

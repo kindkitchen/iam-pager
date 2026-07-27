@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-07-29
+
+- Published an agent skill as code (`lib/agent-skill/skill.ts`): one Markdown
+  document that tells an AI agent how to have its user issue a scoped API key,
+  keep the bearer out of chats, files, and logs, drive the page and namespace
+  APIs revision-bound, and stop cleanly on a refusal.
+- Added the `/site/skill` destination: a human-readable rendering of that
+  document with an explicit "Copy raw skill" control, plus `/site/skill/raw`
+  serving the verbatim document as `text/markdown`. The About page, the site
+  hub, the site map, and the API-keys view link to it.
+- Added `lib/ui/markdown-blocks.ts` and `components/MarkdownDocument.tsx` so a
+  code-owned Markdown document renders as typed blocks and real elements instead
+  of injected HTML.
+- Added the lazy per-page `block_api_write` lock: absent means unlocked, only
+  `true` is stored, and existing pages keep their behavior. While it is set,
+  every key-authenticated mutation on that page (update, PDF replacement,
+  re-link, rename, duplicate, delete, and the matching bulk items) fails with
+  `403` `api_write_blocked`; key reads are unaffected and a duplicate inherits
+  the lock.
+- Made the lock a browser-session control only: `block_api_write` in a PATCH
+  body from an API key is refused with `403` `protection_requires_session`,
+  whatever the key's permissions are. `UserPageActor` now carries the optional
+  `via_api_key` marker so the service, not the HTTP adapter, decides.
+- Added an explicit "Block API writes" checkbox with its consequence spelled out
+  to every row in page management, plus a row indicator while the lock is on.
+- Documented both features in `README.md`, `docs/api/pages.md`,
+  `docs/api/authentication.md`, and `docs/api/api-keys.md`.
+
 ## 2026-07-28
 
 - Compacted the completed task history: `tasks/` was distilled into

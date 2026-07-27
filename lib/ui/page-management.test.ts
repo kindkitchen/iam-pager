@@ -397,7 +397,7 @@ Deno.test("update request binds CSRF, If-Match, and only supplied fields", () =>
   assertThrows(
     () => prepare_managed_update_request(target, {}, "token-1"),
     Error,
-    "access, tags, content, or endpoints",
+    "access, tags, content, endpoints, or block_api_write",
   );
 });
 
@@ -813,4 +813,57 @@ Deno.test("format_size_bytes scales to KiB and MiB", () => {
   assertEquals(format_size_bytes(1536), "1.5 KiB");
   assertEquals(format_size_bytes(5 * 1024 * 1024), "5 MiB");
   assertThrows(() => format_size_bytes(-1));
+});
+
+Deno.test("api-write lock travels through summaries and its own update request", () => {
+  const target = { management_url: "/api/pages/p1", etag: '"page-p1-r3"' };
+  const lock = prepare_managed_update_request(
+    target,
+    { block_api_write: true },
+    "token-1",
+  );
+  assertEquals(lock.body, { block_api_write: true });
+  assertEquals(
+    prepare_managed_update_request(target, { block_api_write: false }, "t")
+      .body,
+    { block_api_write: false },
+  );
+
+  const row = {
+    page_id: "p1",
+    locator: { namespace: "Mine", page_name: "notes" },
+    path: "/Mine/notes",
+    endpoints: {
+      canonical: {
+        locator: { namespace: "Mine", page_name: "notes" },
+        path: "/Mine/notes",
+        delivery_profile: "inline" as const,
+      },
+      alternates: [],
+    },
+    access: "private" as const,
+    content_type: "md-page",
+    size_bytes: 12,
+    tags: [],
+    updated_at: "2026-07-20T01:00:00.000Z",
+    revision: 3,
+    etag: '"page-p1-r3"',
+    management_url: "/api/pages/p1",
+  };
+  // Absence is the historical shape and must keep parsing as "unlocked".
+  assertEquals(management_summary_from_api(row)?.block_api_write, undefined);
+  assertEquals(
+    management_summary_from_api({ ...row, block_api_write: true })
+      ?.block_api_write,
+    true,
+  );
+  assertEquals(
+    management_summary_from_api({ ...row, block_api_write: false })
+      ?.block_api_write,
+    undefined,
+  );
+  assertEquals(
+    management_summary_from_api({ ...row, block_api_write: "yes" }),
+    null,
+  );
 });

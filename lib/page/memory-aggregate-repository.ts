@@ -419,8 +419,14 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     );
     const has_patch = request.patch.endpoint_set !== undefined ||
       request.patch.content_asset_id !== undefined ||
-      request.patch.access !== undefined || request.patch.tags !== undefined;
+      request.patch.access !== undefined || request.patch.tags !== undefined ||
+      request.patch.block_api_write !== undefined;
     require(has_patch, "patch must change at least one aggregate field");
+    require(
+      request.patch.block_api_write === undefined ||
+        typeof request.patch.block_api_write === "boolean",
+      "block_api_write must be a boolean when present",
+    );
     if (request.patch.endpoint_set !== undefined) {
       this.#require_endpoint_set(request.patch.endpoint_set);
     }
@@ -473,10 +479,15 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
     }
     const { external_missing: _external_missing, ...healthy_existing } =
       existing;
-    const page: PageAggregate = {
-      ...(request.patch.content_asset_id === undefined
+    const { block_api_write: _existing_block, ...unlocked_base } =
+      request.patch.content_asset_id === undefined
         ? existing
-        : healthy_existing),
+        : healthy_existing;
+    const block_api_write = request.patch.block_api_write ??
+      existing.block_api_write ?? false;
+    const page: PageAggregate = {
+      ...unlocked_base,
+      ...(block_api_write ? { block_api_write: true as const } : {}),
       endpoint_set: clone(endpoint_set),
       access: request.patch.access ?? existing.access,
       tags: request.patch.tags === undefined
@@ -539,6 +550,9 @@ export class MemoryPageAggregateRepository implements PageAggregateRepository {
       stewardship: clone(source.stewardship),
       access: source.access,
       tags: clone(source.tags),
+      ...(source.block_api_write === true
+        ? { block_api_write: true as const }
+        : {}),
       revision: 1,
       content_asset_id: source.content_asset_id,
       created_at: clone(request.now),

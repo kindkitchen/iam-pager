@@ -46,8 +46,21 @@ export interface PageAggregate {
   readonly content_asset_id: ContentAssetId;
   /** Present only after a definitive external delivery failure. */
   readonly external_missing?: ExternalContentMissingState;
+  /**
+   * Creator-owned automation lock. Absent means unlocked, so every page stored
+   * before this flag existed keeps its meaning. Only `true` is ever stored:
+   * clearing the lock removes the field instead of writing `false`.
+   */
+  readonly block_api_write?: true;
   readonly created_at: Date;
   readonly updated_at: Date;
+}
+
+/** Single reading of the lazily stored automation lock. */
+export function is_api_write_blocked(
+  page: Pick<PageAggregate, "block_api_write">,
+): boolean {
+  return page.block_api_write === true;
 }
 
 export function external_content_missing_state_violation(
@@ -123,6 +136,12 @@ export function page_aggregate_violation(page: PageAggregate): string | null {
       page.external_missing,
     );
     if (external_missing_violation !== null) return external_missing_violation;
+  }
+  if (page.block_api_write !== undefined && page.block_api_write !== true) {
+    return "block_api_write must be true when present";
+  }
+  if (page.stewardship.kind === "trial" && page.block_api_write !== undefined) {
+    return "trial pages must not block api writes";
   }
   if (
     !(page.created_at instanceof Date) ||

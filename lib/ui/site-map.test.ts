@@ -28,14 +28,23 @@ const creator_session: Session = {
 Deno.test("guests see public and guest-only destinations", () => {
   assertEquals(
     site_map_reader.visible(guest_session).map((entry) => entry.id),
-    ["home", "publish", "explore", "demo", "about", "invite"],
+    ["home", "publish", "explore", "demo", "about", "agent_skill", "invite"],
   );
 });
 
 Deno.test("creators see creator destinations instead of the invitation", () => {
   assertEquals(
     site_map_reader.visible(creator_session).map((entry) => entry.id),
-    ["home", "publish", "manage", "explore", "demo", "about", "api_keys"],
+    [
+      "home",
+      "publish",
+      "manage",
+      "explore",
+      "demo",
+      "about",
+      "api_keys",
+      "agent_skill",
+    ],
   );
 });
 

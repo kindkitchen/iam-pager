@@ -24,6 +24,14 @@ export function ManageApiKeysPage(
         intro="Issue and revoke keys that drive the same API this site uses."
       />
 
+      <p class="manage-api-keys-skill">
+        Handing a key to an AI agent? Give it the{" "}
+        <a href="/site/skill">agent skill</a>{" "}
+        as well, and lock the pages it must not touch with “Block API writes” in
+        {" "}
+        <a href="/site/manage">page management</a>.
+      </p>
+
       {api_key_panel.kind === "creator"
         ? (
           <ApiKeyPanel
