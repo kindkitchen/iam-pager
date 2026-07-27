@@ -71,9 +71,13 @@ several references in any supported combination. The web requires one primary
 path and permits removable aliases for every format. Creator namespace fields
 select from owned reservations; guest namespace entry remains free-form.
 Publishing is its own full-width destination (`/site/publish`) rather than a
-section of the home page. A PDF path's delivery control offers both supported
-profiles explicitly — open in browser or download — rather than deriving
-behavior from an alias, suffix, or an implied default.
+section of the home page: setup fields stay readable while the editor and its
+preview use the remaining width, and each editing area carries at most one frame
+— the Markdown/CSS and Raw/Steps choices remain available but never nest another
+box. The unprotected-page warning is guest-only, because a creator can publish
+only into namespaces they own. A PDF path's delivery control offers both
+supported profiles explicitly — open in browser or download — rather than
+deriving behavior from an alias, suffix, or an implied default.
 
 ## EX-MANAGE — Manage creator pages
 

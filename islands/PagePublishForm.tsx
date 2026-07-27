@@ -306,20 +306,7 @@ export default function PagePublishForm(props: PagePublishFormProps) {
       ? { ...props.authorization, owned_namespaces: creator_namespaces }
       : props.authorization;
   return (
-    <section class="publish-panel" aria-labelledby="publish-heading">
-      <div class="section-heading">
-        <p class="eyebrow">
-          {props.authorization.kind === "creator"
-            ? "Creator publishing"
-            : "Guest publishing"}
-        </p>
-        <h2 id="publish-heading">Create a page</h2>
-        <p>
-          Choose one primary path and, optionally, additional aliases. Every
-          path serves the same logical page and content.
-        </p>
-      </div>
-
+    <section class="publish-panel" aria-label="Create a page">
       {creator_without_namespace && (
         <p class="error-message" role="status">
           Reserve a namespace before publishing a managed page.

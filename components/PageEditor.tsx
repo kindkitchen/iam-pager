@@ -42,8 +42,8 @@ const source_options: readonly ExclusiveContentOption<EditorSource>[] = [
 ];
 
 const layout_options: readonly { id: EditorLayout; label: string }[] = [
-  { id: "split", label: "Split with preview" },
-  { id: "full-width", label: "Full width" },
+  { id: "split", label: "Editor and preview" },
+  { id: "full-width", label: "Editor only" },
 ];
 
 export function PageEditor(props: PageEditorProps) {
@@ -146,21 +146,42 @@ export function PageEditor(props: PageEditorProps) {
           <span class="field-title" id="page-editor-heading">Page content</span>
           <small>Markdown is sanitized before publishing.</small>
         </div>
-        <button
-          type="button"
-          class="context-button page-editor-toggle"
-          aria-expanded={workspace.expanded}
-          aria-controls="page-editor-workspace"
-          onClick={() =>
-            set_workspace((current) =>
-              workspace_controller.set_expanded(
-                current,
-                !current.expanded,
-              )
-            )}
-        >
-          {workspace.expanded ? "Hide editor" : "Show editor"}
-        </button>
+        <div class="page-editor-controls">
+          <div
+            class="layout-switcher contextual-switcher"
+            role="group"
+            aria-label="Editor layout"
+          >
+            {layout_options.map((option) => (
+              <button
+                type="button"
+                class="context-button"
+                aria-pressed={workspace.layout === option.id}
+                onClick={() =>
+                  set_workspace((current) =>
+                    workspace_controller.select_layout(current, option.id)
+                  )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            class="context-button page-editor-toggle"
+            aria-expanded={workspace.expanded}
+            aria-controls="page-editor-workspace"
+            onClick={() =>
+              set_workspace((current) =>
+                workspace_controller.set_expanded(
+                  current,
+                  !current.expanded,
+                )
+              )}
+          >
+            {workspace.expanded ? "Hide editor" : "Show editor"}
+          </button>
+        </div>
       </div>
 
       <div
@@ -168,31 +189,6 @@ export function PageEditor(props: PageEditorProps) {
         class="page-editor-workspace"
         hidden={!workspace.expanded}
       >
-        <div class="page-editor-toolbar">
-          <div class="layout-control">
-            <span class="field-title">Layout</span>
-            <div
-              class="layout-switcher contextual-switcher"
-              role="group"
-              aria-label="Editor layout"
-            >
-              {layout_options.map((option) => (
-                <button
-                  type="button"
-                  class="context-button"
-                  aria-pressed={workspace.layout === option.id}
-                  onClick={() =>
-                    set_workspace((current) =>
-                      workspace_controller.select_layout(current, option.id)
-                    )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         <div class={`page-editor-areas editor-layout-${workspace.layout}`}>
           <div class="editor-source exclusive-content-stack">
             <ExclusiveContentSwitcher

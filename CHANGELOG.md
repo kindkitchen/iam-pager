@@ -2,6 +2,16 @@
 
 ## 2026-07-25
 
+- Restricted the unprotected-page notice on `/site/publish` to guests; creators
+  publish only into namespaces they own and no longer see it.
+- Reworked the publish surface for editing: one frame per editor area instead of
+  nested tab boxes (the Markdown/CSS and Raw/Steps choices remain), the
+  Raw/Steps control shares the tab row on wide screens, layout and visibility
+  controls moved into the editor heading, and the duplicated in-form publishing
+  heading was dropped.
+- Widened the publish route to a centred `108rem` shell: setup fields form a
+  three-column band on very wide screens while the editor and preview span the
+  full width with viewport-relative heights.
 - Rearranged web navigation around one server-owned site map
   (`lib/ui/site-map.ts`): the home page (`/` and `/site`) is now a pure
   navigation hub of grouped destination cards, and top navigation, hub cards,
