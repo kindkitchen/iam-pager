@@ -16,6 +16,11 @@ key. Both live in `lib/`; the web renders them.
   of truth; nothing else authors skill text.
 - `lib/ui/agent-skill.ts` — `AgentSkillPresenter` projecting one document into
   `{ markdown, blocks, usage, raw_href, file_name }`.
+- `lib/agent-skill/fingerprint.ts` —
+  `AgentSkillSnapshot`, `AgentSkillSnapshotSource`,
+  `DigestAgentSkillSnapshotSource`,
+  `agent_skill_etag_matches`, `agent_skill_cache_control`. One snapshot pairs
+  the served bytes with their tag; the route never reads them separately.
 - `lib/ui/markdown-blocks.ts` — trusted-document block parser (front matter,
   headings, paragraphs, lists, tables, fenced code; inline code, bold, links).
 - `components/MarkdownDocument.tsx` — renders blocks as real elements;
@@ -34,6 +39,13 @@ key. Both live in `lib/`; the web renders them.
   serves it verbatim as `text/markdown`, and the copy control copies the exact
   text. A second front-end (CLI, MCP server, packaged skill file) consumes the
   same `AgentSkillSource` without the site.
+- The raw route is validated, never time-boxed. Its strong `ETag` is a SHA-256
+  prefix of the served markdown, so a byte change invalidates it even without a
+  version bump; `public, no-cache` forces a conditional request per reuse and
+  `x-skill-version` exposes the declared version. Never reintroduce `max-age`
+  there: it would serve superseded instructions for the length of the window.
+  The digest is memoised per process, which is safe because one process only
+  ever holds one document.
 - The skill instructs, it does not enforce: the platform issues no per-agent
   credential and no client-side secret storage. It tells the agent to have the
   user create a scoped, expiring key, keep it in the environment or a secret
@@ -45,8 +57,12 @@ key. Both live in `lib/`; the web renders them.
 - Enforcement lives in `PageService`, not the HTTP adapter. The adapter marks
   the actor with `via_api_key` when the principal is a key; the service refuses
   update, re-link, rename, duplicate, delete, and the per-item bulk operations
-  with `api_write_blocked` (`403`). Reads are never blocked. A duplicate of a
-  locked page inherits the lock.
+  with `api_write_blocked`. Reads are never blocked. A duplicate of a locked
+  page inherits the lock.
+- The lock surfaces in two shapes and the skill must state both: a single-page
+  call answers `403 api_write_blocked`, while a bulk command answers `200`
+  `{ ok: true }` and reports `api_write_blocked` for that one item only,
+  without rolling back the items already applied.
 - Only a browser session may change the flag. `block_api_write` in a PATCH body
   from a key returns `protection_requires_session` (`403`) before any
   persistence, so a key can neither unlock a page nor lock one for its owner.
@@ -55,6 +71,8 @@ key. Both live in `lib/`; the web renders them.
 
 ## Optional follow-ups
 
-Per-namespace or per-page key scoping (grants are still owner-wide); a
+An atomic or dry-run mode for bulk commands (today every accepted item commits
+independently, so a locked page yields a partially applied batch);
+per-namespace or per-page key scoping (grants are still owner-wide); a
 `last_used_at` signal for keys handed to agents; an MCP transport over the same
 `AgentSkillSource` and `PageService`.

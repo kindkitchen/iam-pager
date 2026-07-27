@@ -340,11 +340,20 @@ selected-storage capacity, and bounded name/ID exhaustion are typed failures.
 
 `POST /api/pages/bulk/delete` uses the same `selection` without `access`.
 
-Both require authentication and CSRF. The complete 1–100-item selection must
-contain distinct valid page IDs and positive revisions before any mutation.
-Accepted items execute independently in order and return one success,
-`revision_conflict`, `revision_exhausted` (access only), or non-disclosing
-`not_found` result. One item failure does not roll back another.
+Both require authentication; a browser session also requires CSRF. Neither
+accepts `If-Match` or any query parameter — the per-item `expected_revision`
+carries the precondition. The complete 1–100-item selection must contain
+distinct valid page IDs and positive revisions before any mutation; otherwise
+the request fails with `422` `invalid_selection` and nothing changes.
+
+Accepted items execute independently in order. Success is always `200` with
+`{ "ok": true, "results": [...] }` holding one ordered result per selected page,
+each either `{ page_id, ok: true, ... }` or `{ page_id, ok: false, error }`
+where `error` is `api_write_blocked`, `revision_conflict`, `revision_exhausted`
+(access only), or non-disclosing `not_found`. One item failure does not stop the
+command and does not roll back another, so a partially applied bulk delete is a
+normal outcome. There is no atomic mode and no dry run: a client that inspects
+only the HTTP status will miss item failures.
 
 ## Public exploration
 

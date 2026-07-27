@@ -390,11 +390,21 @@ rejected without any cookie fallback.
 The platform publishes one agent skill — a Markdown document owned by code in
 `lib/agent-skill/skill.ts` — that teaches an AI agent how to obtain a key from
 its user, keep it out of transcripts and files, drive the page and namespace
-APIs, and stop cleanly at a refusal. `/site/skill` renders it with a copy
-control; `/site/skill/raw` returns it verbatim for an agent to fetch.
+APIs, distinguish request-level failures from per-item bulk failures, and stop
+cleanly at a refusal. `/site/skill` renders it with a copy control;
+`/site/skill/raw` returns it verbatim for an agent to fetch.
+
+That raw route is cache-validated rather than time-boxed. Its strong `ETag` is
+derived from the served bytes, so any deploy that changes the document changes
+the tag even when the declared version was not bumped, and `public, no-cache`
+makes every reuse a conditional request: a saved copy revalidates to `304` until
+the text actually changes, then to the new `200`. An `x-skill-version` header
+carries the declared version for a cheap freshness comparison. No purge step and
+no build artifact exist to go stale.
 
 Per-page protection complements it: a page with `block_api_write` set answers
-every key-authenticated mutation with `403` `api_write_blocked`, and
+every single-page key-authenticated mutation with `403` `api_write_blocked`, and
+the same code as one non-rolling-back item result inside a `200` bulk response.
 `block_api_write` sent with a bearer is refused with `403`
 `protection_requires_session`. Only a signed-in session can change the flag, in
 `/site/manage`. See [the API-write lock](docs/api/pages.md#the-api-write-lock).
