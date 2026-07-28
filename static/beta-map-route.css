@@ -1,0 +1,406 @@
+/* Feature-preview styles for /beta/**. Scoped to beta classes so the shipped
+   site stylesheet stays untouched. */
+
+.beta-preview {
+  max-width: 54rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.beta-badge {
+  display: inline-block;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.beta-preview-head h1 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.beta-path code {
+  background: #f1f3f4;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+}
+
+.beta-hints {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  color: #3c4043;
+  font-size: 0.95rem;
+}
+
+.beta-map-steps {
+  display: grid;
+  gap: 1rem;
+}
+
+.beta-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* One step. Map steps carry the frame; plain steps stay a single row. */
+.beta-step {
+  position: relative;
+  border: 1px solid #dadce0;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.beta-map-step {
+  border-color: #c6dafc;
+  box-shadow: inset 3px 0 0 #1a73e8;
+}
+
+.beta-step[data-dragging="true"] {
+  opacity: 0.55;
+}
+
+/* Drop indication: a line for reordering, a frame ring for stop framing. */
+.beta-step[data-drop-before="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.3rem;
+  height: 0.2rem;
+  border-radius: 999px;
+  background: #1a73e8;
+}
+
+.beta-step[data-drop-into="true"] {
+  outline: 2px dashed #1a73e8;
+  outline-offset: 4px;
+  background: #f8fbff;
+}
+
+.beta-step[data-drop-into="true"]::after {
+  content: "Frame as stops";
+  position: absolute;
+  top: -0.75rem;
+  right: 0.75rem;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.beta-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.beta-step-raw {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: #5f6368;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.beta-step-label {
+  flex: 1;
+  min-width: 6rem;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #f8f9fa;
+}
+
+.beta-step-label:focus {
+  border-color: #1a73e8;
+  background: #fff;
+  outline: none;
+}
+
+.beta-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: #80868b;
+  cursor: grab;
+  touch-action: none;
+}
+
+.beta-grip:focus-visible {
+  outline: 2px solid #1a73e8;
+}
+
+.beta-grip svg {
+  width: 0.85rem;
+  height: 1.25rem;
+  fill: currentColor;
+}
+
+.beta-step-remove,
+.beta-stop-action {
+  border: 1px solid #dadce0;
+  background: #fff;
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.8rem;
+  color: #3c4043;
+  cursor: pointer;
+}
+
+.beta-step-remove:hover,
+.beta-stop-action:hover {
+  background: #f1f3f4;
+}
+
+.beta-stop-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The stop list inside a frame. */
+.beta-stops {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0.35rem 0.35rem 0.5rem;
+  border: 1px dashed #c6dafc;
+  border-radius: 0.6rem;
+  background: #f8fbff;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.beta-stop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.45rem;
+  background: #fff;
+  border: 1px solid #e3e9f2;
+}
+
+.beta-stop[data-dragging="true"] {
+  opacity: 0.55;
+}
+
+.beta-stop[data-drop-before="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.22rem;
+  height: 0.16rem;
+  border-radius: 999px;
+  background: #1a73e8;
+}
+
+.beta-stop-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.beta-stop[data-kind="current_location"] .beta-stop-order {
+  background: #34a853;
+}
+
+.beta-stop-label {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.beta-stop-role {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #80868b;
+}
+
+.beta-frame-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.beta-frame-footer label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.beta-frame-footer input,
+.beta-add-step input {
+  border: 1px solid #dadce0;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  min-width: 14rem;
+}
+
+.beta-frame-footer button,
+.beta-add-step button {
+  border: 1px solid #1a73e8;
+  background: #1a73e8;
+  color: #fff;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.beta-frame-footer button:disabled,
+.beta-add-step button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.beta-open-route {
+  margin-left: auto;
+  color: #1a73e8;
+}
+
+.beta-warning {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #b06000;
+}
+
+.beta-drop-end {
+  list-style: none;
+  border: 1px dashed #dadce0;
+  border-radius: 0.6rem;
+  padding: 0.5rem;
+  text-align: center;
+  color: #80868b;
+  font-size: 0.85rem;
+}
+
+.beta-drop-end[data-active="true"] {
+  border-color: #1a73e8;
+  color: #1a73e8;
+}
+
+.beta-add-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.beta-add-step label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.beta-message {
+  margin: 0;
+  min-height: 1.2rem;
+  font-size: 0.85rem;
+  color: #1a73e8;
+}
+
+.beta-markdown {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.beta-markdown textarea {
+  width: 100%;
+  border: 1px solid #dadce0;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+/* Google Maps pin marking a map step. */
+.google-maps-pin {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+}
+
+.google-maps-pin-body {
+  fill: #ea4335;
+}
+
+.google-maps-pin-road {
+  fill: #34a853;
+  opacity: 0.9;
+}
+
+.google-maps-pin-dot {
+  fill: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .beta-step,
+  .beta-stop {
+    background: #202124;
+    border-color: #3c4043;
+    color: #e8eaed;
+  }
+
+  .beta-stops {
+    background: #1b1c1d;
+    border-color: #3c4043;
+  }
+
+  .beta-step-label,
+  .beta-markdown textarea,
+  .beta-frame-footer input,
+  .beta-add-step input {
+    background: #202124;
+    color: #e8eaed;
+    border-color: #3c4043;
+  }
+
+  .beta-step-remove,
+  .beta-stop-action {
+    background: #202124;
+    color: #e8eaed;
+    border-color: #3c4043;
+  }
+
+  .beta-path code,
+  .beta-hints {
+    color: #bdc1c6;
+  }
+
+  .beta-path code {
+    background: #303134;
+  }
+}
