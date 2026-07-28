@@ -52,10 +52,6 @@ breadcrumbs are projections of that declaration.
 | Manage pages | `/site/manage`   | creators |
 | API keys     | `/site/api-keys` | creators |
 
-`/beta/**` is a feature-preview surface outside the site map: it previews the
-Markdown step editor extended with Google Maps route steps and publishes
-nothing. See [map route steps](docs/beta-map-route-steps.md).
-
 The agent-skill destination renders the platform's published AI-agent skill for
 humans and hands the exact document to an agent: `/site/skill` shows the
 readable projection with an explicit copy control, and `/site/skill/raw` serves
@@ -95,6 +91,14 @@ cannot update, replace, re-link, rename, duplicate, or delete that page; the
 creator keeps every action from a signed-in session. The flag is stored lazily,
 so pages published before it existed stay writable, and no key can ever set or
 clear it.
+
+The Markdown editor on `/site/publish` offers a guided **Steps** mode next to
+the raw source. Its heading line switches individual step inputs on or off, and
+an input with several behaviours puts that checkbox in front of a select: a Link
+is either simple, or simple plus a Google Maps stop frame. A map step stays one
+`[label](url)` line while it is edited as ordered stops — reorder, split, add,
+or start from the visitor's location in one click — and the route link is
+regenerated from that order. See [map route steps](docs/map-route-steps.md).
 
 Namespace reservation lives on `/site/publish` (before publishing) and on
 `/site/manage` (alongside existing pages); a newly reserved namespace becomes
@@ -192,9 +196,12 @@ Important boundaries:
   so the app resolves the current location, and many arguments chain in order.
   Parsing, building, and short-link expansion are separate interfaces.
 - `lib/ui/map-route-steps.ts` reads a Markdown link whose URL is a Maps link as
-  an ordered frame of stops (`MapRouteStepEditor`), so the beta step editor can
-  join, reorder, and split stops while the document keeps storing one plain
-  `[label](url)` line. It is used only by the `/beta/**` preview.
+  an ordered frame of stops (`MapRouteStepEditor`), so the step editor can join,
+  reorder, and split stops while the document keeps storing one plain
+  `[label](url)` line. `lib/ui/step-editor-config.ts` declares which step inputs
+  the editor offers and which variant each uses; the whole configuration is one
+  JSON value, normalized from any stored shape and usable as initial UI state,
+  with `StepEditorConfigStore` as the persistence seam.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,
@@ -216,7 +223,7 @@ See [the project specification](docs/specification/README.md),
 [the storage-connections contract](docs/api/storage-connections.md),
 [the API-key contract](docs/api/api-keys.md),
 [the Google Maps link utility](docs/maps-links.md), and
-[the map route steps preview](docs/beta-map-route-steps.md).
+[the map route steps](docs/map-route-steps.md).
 
 ## Local development
 

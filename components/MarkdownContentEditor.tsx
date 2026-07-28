@@ -14,9 +14,22 @@ import {
   type MarkdownSectionType,
 } from "../lib/ui/markdown-section-editor.ts";
 import {
+  map_route_step_editor,
+  type MapRouteStep,
+} from "../lib/ui/map-route-steps.ts";
+import {
+  default_step_editor_config,
+  is_step_input_enabled,
+  map_route_enabled,
+  type StepEditorConfig,
+} from "../lib/ui/step-editor-config.ts";
+import { step_editor_config_store } from "../lib/ui/step-editor-config-store.ts";
+import {
   type ExclusiveContentOption,
   ExclusiveContentSwitcher,
 } from "./ExclusiveContentSwitcher.tsx";
+import { MapRouteFields } from "./MapRouteFields.tsx";
+import { MarkdownStepExtensions } from "./MarkdownStepExtensions.tsx";
 
 export interface MarkdownContentEditorProps {
   panel_id: string;
@@ -26,6 +39,10 @@ export interface MarkdownContentEditorProps {
   active: boolean;
   on_markdown_input: (value: string) => void;
   previewer: PagePreviewer;
+  /** JSON-serializable starting state of the step inputs. */
+  initial_step_config?: StepEditorConfig;
+  /** Notified whenever the visitor changes the step inputs. */
+  on_step_config_change?: (config: StepEditorConfig) => void;
 }
 
 type MarkdownEditorMode = "raw" | "steps";
@@ -50,6 +67,8 @@ interface EditingState {
   index: number;
   draft: MarkdownSectionDraft;
   dirty: boolean;
+  /** A link edited as a Google Maps stop frame instead of a bare URL. */
+  map_mode: boolean;
 }
 
 interface InsertionState {
@@ -69,6 +88,8 @@ interface DraggingState {
 
 const section_editor = new DeterministicMarkdownSectionEditor();
 const density_controller = new DeterministicMarkdownSectionDensity();
+const map_editor = map_route_step_editor;
+const config_store = step_editor_config_store();
 const structured_physical_line_limit = 500;
 
 const section_type_labels: Readonly<Record<MarkdownSectionType, string>> = {
@@ -96,6 +117,14 @@ const editable_type_options: readonly {
   ...insertion_options,
   { type: "raw", label: "Raw Markdown" },
 ];
+
+/** Inputs kept switched on in the step-input heading line. */
+function offered<T extends { type: MarkdownSectionType }>(
+  options: readonly T[],
+  config: StepEditorConfig,
+): readonly T[] {
+  return options.filter((option) => is_step_input_enabled(config, option.type));
+}
 
 function new_draft(type: InsertableSectionType): MarkdownSectionDraft {
   switch (type) {
@@ -412,10 +441,24 @@ function can_save(draft: MarkdownSectionDraft): boolean {
   return draft.type !== "code-block" || !draft.language.includes("`");
 }
 
+/** Map controls handed to a Link draft when the map variant is offered. */
+interface MapLinkControls {
+  readonly available: boolean;
+  /** A saved section can switch between simple and map editing. */
+  readonly toggleable: boolean;
+  readonly active: boolean;
+  readonly step: MapRouteStep | null;
+  readonly on_toggle?: (next: boolean) => void;
+  readonly on_step_change: (step: MapRouteStep) => void;
+  readonly on_split_stop?: (index: number) => void;
+  readonly on_message?: (message: string) => void;
+}
+
 interface MarkdownDraftFieldsProps {
   draft: MarkdownSectionDraft;
   id_prefix: string;
   on_change: (draft: MarkdownSectionDraft) => void;
+  map?: MapLinkControls;
 }
 
 function MarkdownDraftFields(props: MarkdownDraftFieldsProps) {
@@ -450,7 +493,8 @@ function MarkdownDraftFields(props: MarkdownDraftFieldsProps) {
           />
         </div>
       );
-    case "link":
+    case "link": {
+      const map = props.map;
       return (
         <div class="markdown-link-fields">
           <MarkdownValueField
@@ -467,8 +511,35 @@ function MarkdownDraftFields(props: MarkdownDraftFieldsProps) {
             placeholder="https://example.com"
             on_change={(url) => props.on_change({ ...draft, url })}
           />
+          {map?.available && map.toggleable && (
+            <label
+              class="markdown-link-map-toggle"
+              for={`${props.id_prefix}-map-mode`}
+            >
+              <input
+                id={`${props.id_prefix}-map-mode`}
+                type="checkbox"
+                checked={map.active}
+                onChange={(event) =>
+                  map.on_toggle?.(event.currentTarget.checked)}
+              />
+              <span>Google Maps route</span>
+            </label>
+          )}
+          {map?.available && map.active && map.step && (
+            <MapRouteFields
+              step={map.step}
+              id_prefix={props.id_prefix}
+              on_change={map.on_step_change}
+              {...(map.on_split_stop
+                ? { on_split_stop: map.on_split_stop }
+                : {})}
+              {...(map.on_message ? { on_message: map.on_message } : {})}
+            />
+          )}
         </div>
       );
+    }
     case "code-block":
       return (
         <div class="markdown-code-block-fields">
@@ -508,6 +579,7 @@ function MarkdownDraftFields(props: MarkdownDraftFieldsProps) {
 interface MarkdownTypeFieldProps {
   draft: MarkdownSectionDraft;
   id_prefix: string;
+  config: StepEditorConfig;
   on_change: (draft: MarkdownSectionDraft) => void;
 }
 
@@ -526,7 +598,7 @@ function MarkdownTypeField(props: MarkdownTypeFieldProps) {
             ),
           )}
       >
-        {editable_type_options.map((option) => (
+        {offered(editable_type_options, props.config).map((option) => (
           <option
             value={option.type}
             disabled={!section_editor.can_change_type(
@@ -601,6 +673,8 @@ function MarkdownListField(props: MarkdownListFieldProps) {
 interface MarkdownInsertionProps {
   section_number: number;
   insertion: InsertionState;
+  config: StepEditorConfig;
+  map?: MapLinkControls;
   on_choose: (type: InsertableSectionType) => void;
   on_change: (draft: MarkdownSectionDraft) => void;
   on_save: () => void;
@@ -621,7 +695,7 @@ function MarkdownInsertion(props: MarkdownInsertionProps) {
         </button>
       </div>
       <div class="markdown-type-picker" role="group" aria-label="Section type">
-        {insertion_options.map((option) => (
+        {offered(insertion_options, props.config).map((option) => (
           <button
             type="button"
             class="compact-button"
@@ -648,6 +722,7 @@ function MarkdownInsertion(props: MarkdownInsertionProps) {
             draft={props.insertion.draft}
             id_prefix={`insert-${props.section_number}`}
             on_change={props.on_change}
+            {...(props.map ? { map: props.map } : {})}
           />
           <button
             type="button"
@@ -686,6 +761,9 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
   );
   const [dragging, set_dragging] = useState<DraggingState | null>(null);
   const [drag_message, set_drag_message] = useState("");
+  const [config, set_config] = useState<StepEditorConfig>(
+    props.initial_step_config ?? default_step_editor_config(),
+  );
   const dragging_ref = useRef<DraggingState | null>(null);
   const drag_element_ref = useRef<HTMLButtonElement | null>(null);
   const sections = useMemo(
@@ -710,6 +788,26 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
         : reconciled;
     });
   }, [sections.length]);
+
+  // The stored step-input choice is read after hydration, so the server and
+  // the first client render agree.
+  useEffect(() => {
+    if (props.initial_step_config) return;
+    set_config(config_store.load());
+  }, []);
+
+  function change_config(next: StepEditorConfig) {
+    set_config(next);
+    config_store.save(next);
+    props.on_step_config_change?.(next);
+  }
+
+  /** A link draft read as map stops, when the map variant is offered. */
+  function map_step_of(draft: MarkdownSectionDraft): MapRouteStep | null {
+    return draft.type === "link" && map_route_enabled(config)
+      ? map_editor.read_link(draft.label, draft.url)
+      : null;
+  }
 
   function has_unsaved_changes(): boolean {
     return editing?.dirty === true || insertion?.dirty === true;
@@ -745,11 +843,83 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     if (!allow_discard()) return;
     set_insertion(null);
     set_delete_armed_index(null);
+    const draft = section_editor.draft(sections[index]);
     set_editing({
       index,
-      draft: section_editor.draft(sections[index]),
+      draft,
       dirty: false,
+      // A link that already addresses Maps opens as a stop frame.
+      map_mode: map_step_of(draft) !== null,
     });
+  }
+
+  /**
+   * Simple is always available; the map frame only after the URL validates as
+   * a Google Maps place or route, otherwise the request is refused untouched.
+   */
+  function toggle_map_mode(next: boolean) {
+    if (!editing) return;
+    if (!next) {
+      set_editing({ ...editing, map_mode: false });
+      set_drag_message("This link is edited as a simple label and URL.");
+      return;
+    }
+    if (map_step_of(editing.draft) === null) {
+      set_drag_message(
+        "This URL is not a Google Maps place or route link, so it stays a simple link.",
+      );
+      return;
+    }
+    set_editing({ ...editing, map_mode: true });
+    set_drag_message("This link is edited as Google Maps stops.");
+  }
+
+  /** Writes a changed frame back into the draft as label and URL. */
+  function change_map_step(step: MapRouteStep) {
+    if (!editing || editing.draft.type !== "link") return;
+    set_editing({
+      ...editing,
+      draft: {
+        ...editing.draft,
+        label: map_editor.label(step),
+        url: map_editor.can_generate(step)
+          ? map_editor.url(step)
+          : editing.draft.url,
+      },
+      dirty: true,
+    });
+  }
+
+  /** Moves one stop out of the frame into its own section below this one. */
+  function split_map_stop(stop_index: number) {
+    if (!editing || editing.draft.type !== "link") return;
+    const step = map_step_of(editing.draft);
+    if (!step || step.stops.length < 2) return;
+    const { remaining, extracted } = map_editor.extract_stop(step, stop_index);
+    if (!remaining || !map_editor.can_generate(remaining)) {
+      set_drag_message("A route keeps at least one place; this stop stays.");
+      return;
+    }
+    const target_index = editing.index;
+    const updated = section_editor.update(sections[target_index], {
+      ...editing.draft,
+      label: map_editor.label(remaining),
+      url: map_editor.url(remaining),
+    });
+    const created = map_editor.section(extracted);
+    emit([
+      ...sections.slice(0, target_index),
+      updated,
+      created,
+      ...sections.slice(target_index + 1),
+    ]);
+    set_section_densities((current) =>
+      density_controller.reconcile(current, sections.length + 1)
+    );
+    set_editing(null);
+    set_drag_message(
+      `Stop ${stop_index + 1} became section ${target_index + 2}.`,
+    );
   }
 
   function begin_insert() {
@@ -757,6 +927,22 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     set_editing(null);
     set_delete_armed_index(null);
     set_insertion({ draft: null, dirty: false });
+  }
+
+  function change_insertion_map_step(step: MapRouteStep) {
+    set_insertion((current) => {
+      if (!current?.draft || current.draft.type !== "link") return current;
+      return {
+        draft: {
+          ...current.draft,
+          label: map_editor.label(step),
+          url: map_editor.can_generate(step)
+            ? map_editor.url(step)
+            : current.draft.url,
+        },
+        dirty: true,
+      };
+    });
   }
 
   function choose_insertion_type(type: InsertableSectionType) {
@@ -850,7 +1036,35 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       return;
     }
 
-    emit(section_editor.merge(sections, from_index, into_index));
+    // Two map links keep every point instead of concatenating their text:
+    // dropping one on the other frames them into a single ordered route.
+    const source_step = map_route_enabled(config)
+      ? map_editor.read(sections[from_index])
+      : null;
+    const target_step = source_step && map_route_enabled(config)
+      ? map_editor.read(sections[into_index])
+      : null;
+
+    if (source_step && target_step) {
+      const merged = map_editor.merge(target_step, source_step);
+      const next_sections = [...sections];
+      next_sections[into_index] = map_editor.section(
+        merged,
+        sections[into_index],
+      );
+      next_sections.splice(from_index, 1);
+      emit(next_sections);
+      set_drag_message(
+        `Framed section ${from_index + 1} into section ${
+          into_index + 1
+        } as route stops.`,
+      );
+    } else {
+      emit(section_editor.merge(sections, from_index, into_index));
+      set_drag_message(
+        `Merged section ${from_index + 1} into section ${into_index + 1}.`,
+      );
+    }
     set_section_densities((current) =>
       density_controller.remove(current, from_index)
     );
@@ -867,9 +1081,6 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       };
     });
     set_delete_armed_index(null);
-    set_drag_message(
-      `Merged section ${from_index + 1} into section ${into_index + 1}.`,
-    );
   }
 
   function update_dragging(next: DraggingState | null) {
@@ -1050,6 +1261,10 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
 
           {mode === "steps" && !section_limit_exceeded && (
             <div class="markdown-step-editor">
+              <MarkdownStepExtensions
+                config={config}
+                on_change={change_config}
+              />
               <ol class="markdown-sections" aria-label="Markdown sections">
                 {sections.map((section, index) => {
                   const is_editing = editing?.index === index;
@@ -1124,11 +1339,14 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                               <MarkdownTypeField
                                 draft={editing.draft}
                                 id_prefix={`edit-${index}`}
+                                config={config}
                                 on_change={(draft) =>
                                   set_editing({
                                     ...editing,
                                     draft,
                                     dirty: true,
+                                    map_mode: editing.map_mode &&
+                                      draft.type === "link",
                                   })}
                               />
                               <MarkdownListField
@@ -1147,6 +1365,18 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                               id_prefix={`edit-${index}`}
                               on_change={(draft) =>
                                 set_editing({ ...editing, draft, dirty: true })}
+                              map={{
+                                available: map_route_enabled(config),
+                                toggleable: true,
+                                active: editing.map_mode,
+                                step: editing.map_mode
+                                  ? map_step_of(editing.draft)
+                                  : null,
+                                on_toggle: toggle_map_mode,
+                                on_step_change: change_map_step,
+                                on_split_stop: split_map_stop,
+                                on_message: set_drag_message,
+                              }}
                             />
                             <div class="markdown-save-actions">
                               <button
@@ -1200,6 +1430,19 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                   <MarkdownInsertion
                     section_number={sections.length + 1}
                     insertion={insertion}
+                    config={config}
+                    map={{
+                      available: map_route_enabled(config),
+                      toggleable: false,
+                      // A pasted Maps URL turns the new link into a frame on
+                      // its own; nothing else changes.
+                      active: true,
+                      step: insertion.draft === null
+                        ? null
+                        : map_step_of(insertion.draft),
+                      on_step_change: change_insertion_map_step,
+                      on_message: set_drag_message,
+                    }}
                     on_choose={choose_insertion_type}
                     on_change={(draft) =>
                       set_insertion({ ...insertion, draft, dirty: true })}
@@ -1225,7 +1468,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       <small>
         {mode === "raw"
           ? "Up to 64 KiB. Switch to Steps for guided section editing."
-          : "Tap a preview to edit it. Whole previews follow their rendered content; Compact keeps an individual card short. Drag the grip between sections to reorder, or over a section to append its value there. Focused grips also use arrow keys. The plus button adds at the end."}
+          : "Tap a preview to edit it. Whole previews follow their rendered content; Compact keeps an individual card short. Drag the grip between sections to reorder, or over a section to append its value there — two Google Maps links frame into one ordered route instead. Focused grips also use arrow keys. The plus button adds at the end. The heading line switches step inputs on or off."}
       </small>
       <span class="visually-hidden" role="status" aria-live="polite">
         {drag_message}

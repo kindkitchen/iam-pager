@@ -1,11 +1,11 @@
 import {
   map_link_expansion_service,
   map_link_expansion_status,
-} from "../../lib/ui/map-link-expansion.ts";
-import { define } from "../../utils.ts";
+} from "../../../lib/ui/map-link-expansion.ts";
+import { define } from "../../../utils.ts";
 
 /**
- * Beta-only helper: expands an official Google short link server-side, since a
+ * Expands an official Google short link server-side, since a
  * browser cannot follow that cross-origin redirect. Only URLs the parser
  * classifies as Google short links are ever fetched.
  */
