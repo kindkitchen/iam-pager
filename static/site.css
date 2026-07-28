@@ -2496,3 +2496,196 @@ h2 {
   text-align: left;
   vertical-align: top;
 }
+
+/* Step-input heading line: a checkbox per input, with a select in front of
+   which the checkbox sits when an input has several behaviours. */
+.markdown-step-extensions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  border: 1px solid #d4d8d3;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: rgb(28 83 51 / 4%);
+}
+
+.markdown-step-extensions-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.markdown-step-extension-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+}
+
+.markdown-step-extension {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.markdown-step-extension-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.markdown-step-extension-variant {
+  font-size: 0.85rem;
+  padding: 0.15rem 0.3rem;
+}
+
+.markdown-step-extension-variant:disabled {
+  opacity: 0.5;
+}
+
+/* Google Maps stop frame inside a Link step. */
+.markdown-link-map-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.map-route-fields {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px dashed #1c5333;
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  background: rgb(28 83 51 / 5%);
+}
+
+.map-route-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.map-route-current-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  font-size: 0.9rem;
+}
+
+.map-route-stops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.map-route-stop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #d4d8d3;
+  border-radius: 0.4rem;
+  background: #fff;
+}
+
+.map-route-stop[data-dragging="true"] {
+  opacity: 0.55;
+}
+
+.map-route-stop[data-drop-target="true"]::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: -0.25rem;
+  height: 0.16rem;
+  border-radius: 999px;
+  background: #1c5333;
+}
+
+.map-route-stop-grip {
+  padding: 0.1rem 0.25rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.map-route-stop-grip svg {
+  width: 0.7rem;
+  height: 1rem;
+  fill: currentcolor;
+}
+
+.map-route-stop-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #1c5333;
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.map-route-stop[data-kind="current_location"] .map-route-stop-order {
+  background: #2f7d4f;
+}
+
+.map-route-stop-label {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.map-route-stop-role {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5b6159;
+}
+
+.map-route-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.map-route-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-route-open {
+  margin-left: auto;
+}
+
+.map-route-warning {
+  color: #8a4b00;
+}
+
+.google-maps-pin {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+}
+
+.google-maps-pin-body {
+  fill: #ea4335;
+}
+
+.google-maps-pin-road {
+  fill: #34a853;
+  opacity: 0.9;
+}
+
+.google-maps-pin-dot {
+  fill: #fff;
+}

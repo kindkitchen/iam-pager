@@ -204,3 +204,59 @@ Deno.test("pasted values become stops, unusable ones become none", () => {
   assertEquals(editor.stops_from_value("50.45,30.52")[0].label, "50.45, 30.52");
   assertEquals(editor.stops_from_value("https://maps.app.goo.gl/x").length, 0);
 });
+
+Deno.test("read_link validates a bare label/URL pair", () => {
+  assertEquals(
+    editor.read_link("Zoo", "https://maps.google.com/?q=Kyiv+Zoo")?.stops
+      .length,
+    1,
+  );
+  assertEquals(editor.read_link("Docs", "https://example.com"), null);
+  assertEquals(editor.read_link("Empty", ""), null);
+});
+
+Deno.test("the current location toggles in and out of the lead position", () => {
+  const step = editor.read_link("A", "https://maps.google.com/?q=A")!;
+  assertEquals(editor.has_current_location(step), false);
+
+  const added = editor.toggle_current_location(step);
+  assertEquals(added.stops.map((stop) => stop.label), [
+    current_location_label,
+    "A",
+  ]);
+  assertEquals(
+    editor.url(added),
+    "https://www.google.com/maps/dir/?api=1&destination=A",
+  );
+
+  const removed = editor.toggle_current_location(added);
+  assertEquals(removed.stops.map((stop) => stop.label), ["A"]);
+  assertEquals(editor.has_current_location(removed), false);
+});
+
+Deno.test("toggling off removes a misplaced current location too", () => {
+  const step = editor.read_link(
+    "t",
+    "https://www.google.com/maps/dir/?api=1&destination=B",
+  )!;
+  const moved = editor.move_stop(step, 0, 1);
+  assertEquals(editor.warnings(moved).length, 1);
+  const cleaned = editor.toggle_current_location(moved);
+  assertEquals(cleaned.stops.map((stop) => stop.label), ["B"]);
+  assertEquals(editor.warnings(cleaned), []);
+});
+
+Deno.test("adding the current location twice keeps a single lead stop", () => {
+  const step = editor.read_link(
+    "t",
+    "https://www.google.com/maps/dir/?api=1&destination=B",
+  )!;
+  assertEquals(editor.has_current_location(step), true);
+  const toggled = editor.toggle_current_location(
+    editor.toggle_current_location(step),
+  );
+  assertEquals(toggled.stops.map((stop) => stop.label), [
+    current_location_label,
+    "B",
+  ]);
+});

@@ -87,6 +87,6 @@ Tests: `lib/maps/parse.test.ts`, `lib/maps/route.test.ts`,
 
 ## Consumers
 
-- [Map route steps (beta preview)](beta-map-route-steps.md) — the `/beta/**`
-  Markdown step editor that shows a Maps link as a frame of draggable stops and
-  regenerates the route from their order.
+- [Map route steps](map-route-steps.md) — the Markdown step editor on
+  `/site/publish` shows a Link step whose URL is a Maps link as a frame of
+  draggable stops and regenerates the route from their order.

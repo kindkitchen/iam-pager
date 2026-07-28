@@ -8,6 +8,9 @@ import { parse_google_maps_url } from "../maps/parse.ts";
 import type { ShortLinkResolver } from "../maps/model.ts";
 import { fetch_short_link_resolver } from "../maps/short-link.ts";
 
+/** Site path serving {@link MapLinkExpansionService}. */
+export const map_link_expansion_path = "/site/maps/expand-link";
+
 export type MapLinkExpansion =
   | { readonly ok: true; readonly url: string }
   | { readonly ok: false; readonly reason: "not_a_short_link" | "unreachable" };

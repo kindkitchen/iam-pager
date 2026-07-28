@@ -51,6 +51,18 @@ export interface MapRouteSplit {
 export interface MapRouteStepEditor {
   /** Reads a Markdown section as a map step, or `null` when it is not one. */
   read(section: MarkdownSection): MapRouteStep | null;
+  /**
+   * Reads a bare link pair the same way, so a Link step can be validated
+   * before it is offered as a map frame.
+   */
+  read_link(label: string, url: string): MapRouteStep | null;
+  /** True while the frame starts from the device position. */
+  has_current_location(step: MapRouteStep): boolean;
+  /**
+   * Adds or removes the `Your location` stop in one move. It is only ever
+   * added in the lead position, the only place Maps can express it.
+   */
+  toggle_current_location(step: MapRouteStep): MapRouteStep;
   /** Stops behind any pasted place link, route link, or plain place text. */
   stops_from_value(value: string): readonly MapRouteStop[];
   /** Label shown on the frame. */
@@ -137,8 +149,13 @@ function dedupe(stops: readonly MapRouteStop[]): MapRouteStop[] {
 
 export class DeterministicMapRouteStepEditor implements MapRouteStepEditor {
   read(section: MarkdownSection): MapRouteStep | null {
-    if (section.type !== "link") return null;
-    const link = parse_google_maps_url(section.url);
+    return section.type === "link"
+      ? this.read_link(section.label, section.url)
+      : null;
+  }
+
+  read_link(label: string, url: string): MapRouteStep | null {
+    const link = parse_google_maps_url(url);
     if (link.kind !== "point" && link.kind !== "route") return null;
 
     const stops = link.kind === "point" ? [stop_of(link.point)] : [
@@ -151,9 +168,28 @@ export class DeterministicMapRouteStepEditor implements MapRouteStepEditor {
       stops,
       travel_mode: link.kind === "route" ? link.travel_mode ?? null : null,
     };
-    return section.label === this.label(step)
-      ? step
-      : { ...step, label: section.label };
+    return label === this.label(step) ? step : { ...step, label };
+  }
+
+  has_current_location(step: MapRouteStep): boolean {
+    return step.stops.some((stop) => stop.point.kind === "current_location");
+  }
+
+  toggle_current_location(step: MapRouteStep): MapRouteStep {
+    if (this.has_current_location(step)) {
+      return {
+        ...step,
+        stops: step.stops.filter((stop) =>
+          stop.point.kind !== "current_location"
+        ),
+      };
+    }
+    // Lead position only: Maps expresses the device position by an absent
+    // origin, so it cannot sit anywhere else.
+    return {
+      ...step,
+      stops: dedupe([stop_of(CURRENT_LOCATION), ...step.stops]),
+    };
   }
 
   stops_from_value(value: string): readonly MapRouteStop[] {

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-02
+
+- Map route steps graduated from `/beta/**` into the shipped Markdown step
+  editor on `/site/publish`. The preview route, island, and stylesheet are gone;
+  the short-link expander moved to `POST /site/maps/expand-link`.
+- Steps mode opens with a step-input heading line
+  (`components/MarkdownStepExtensions.tsx`): one checkbox per input, filtering
+  both the insertion picker and the per-section Type select. Text can never be
+  switched off. An input with several behaviours places its checkbox in front of
+  a select — a Link is `simple`, or `map` (simple plus the Google Maps stop
+  frame).
+- A Link section can be switched between simple and map editing. Simple is
+  always available; map is offered only after the URL validates as a Google Maps
+  place or route, otherwise the editor explains it and nothing changes. Toggling
+  alone never rewrites the document — only an actual stop edit does.
+- The stop frame (`components/MapRouteFields.tsx`) adds a one-click
+  `Start from your location` toggle, which honours the lead-only rule of the URL
+  API and also clears a current-location stop left in the wrong place. Stops
+  reorder by drag or arrow keys, split out into their own step, take pasted
+  links (short links expanded server-side), and carry a travel mode.
+- Dropping one map step onto another frames their points into one ordered route
+  instead of appending text; every other drop keeps the shipped merge.
+- Added `lib/ui/step-editor-config.ts` and `lib/ui/step-editor-config-store.ts`:
+  the editor configuration is one JSON value (`{version, inputs}`), normalized
+  from any stored shape, accepted as `initial_step_config`, reported through
+  `on_step_config_change`, and persisted through the `StepEditorConfigStore`
+  seam (web storage today, a per-user profile later).
+- Documented in `docs/map-route-steps.md`; README and `docs/maps-links.md`
+  updated. New tests: `lib/ui/step-editor-config.test.ts`,
+  `lib/ui/map-route-fields-component.test.tsx`,
+  `lib/ui/markdown-step-inputs-component.test.tsx`, plus current-location and
+  `read_link` cases in `lib/ui/map-route-steps.test.ts`.
+
 ## 2026-08-01
 
 - Added the `/beta/**` feature-preview surface (`routes/beta/[...path].tsx`,
