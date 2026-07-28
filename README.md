@@ -52,6 +52,10 @@ breadcrumbs are projections of that declaration.
 | Manage pages | `/site/manage`   | creators |
 | API keys     | `/site/api-keys` | creators |
 
+`/beta/**` is a feature-preview surface outside the site map: it previews the
+Markdown step editor extended with Google Maps route steps and publishes
+nothing. See [map route steps](docs/beta-map-route-steps.md).
+
 The agent-skill destination renders the platform's published AI-agent skill for
 humans and hands the exact document to an agent: `/site/skill` shows the
 readable projection with an explicit copy control, and `/site/skill/raw` serves
@@ -182,6 +186,15 @@ Important boundaries:
   cookie issued for bearer requests); key requests skip CSRF and instead need
   the mapped `read`/`write`/`delete` permission, with domain ownership rules
   unchanged.
+- `lib/maps/` parses Google Maps links (documented `api=1`, interactive, legacy,
+  `geo:`, official short links) into stops and formats one directions URL.
+  Routes pass through untouched, a place becomes a route with an omitted origin
+  so the app resolves the current location, and many arguments chain in order.
+  Parsing, building, and short-link expansion are separate interfaces.
+- `lib/ui/map-route-steps.ts` reads a Markdown link whose URL is a Maps link as
+  an ordered frame of stops (`MapRouteStepEditor`), so the beta step editor can
+  join, reorder, and split stops while the document keeps storing one plain
+  `[label](url)` line. It is used only by the `/beta/**` preview.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,
@@ -200,8 +213,10 @@ See [the project specification](docs/specification/README.md),
 [the external-storage contract](docs/specification/external-storage.md),
 [the page API contract](docs/api/pages.md),
 [the API authentication reference](docs/api/authentication.md),
-[the storage-connections contract](docs/api/storage-connections.md), and
-[the API-key contract](docs/api/api-keys.md).
+[the storage-connections contract](docs/api/storage-connections.md),
+[the API-key contract](docs/api/api-keys.md),
+[the Google Maps link utility](docs/maps-links.md), and
+[the map route steps preview](docs/beta-map-route-steps.md).
 
 ## Local development
 
