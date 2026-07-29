@@ -29,9 +29,15 @@ Deno.test("prefers the place coordinates embedded in an interactive link", () =>
   const link = parse_google_maps_url(
     "https://www.google.com/maps/place/Maidan+Nezalezhnosti/@50.4503596,30.5234,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d50.4501!4d30.5234",
   );
+  // The name Maps showed rides along as a label; it addresses nothing.
   assertEquals(link, {
     kind: "point",
-    point: { kind: "coords", lat: 50.4501, lng: 30.5234 },
+    point: {
+      kind: "coords",
+      lat: 50.4501,
+      lng: 30.5234,
+      label: "Maidan Nezalezhnosti",
+    },
   });
 });
 

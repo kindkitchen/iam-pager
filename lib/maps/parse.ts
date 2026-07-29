@@ -5,6 +5,7 @@
  * links, and bare coordinates or place text.
  */
 import {
+  format_point,
   type MapLink,
   type MapLinkParser,
   type MapPoint,
@@ -135,6 +136,15 @@ function embedded_coords(url: URL): MapPoint | undefined {
   return undefined;
 }
 
+/** Attaches the display name of a place, when it adds anything. */
+function labelled(
+  point: MapPoint | undefined,
+  name: string,
+): MapPoint | undefined {
+  if (!point || point.kind === "current_location" || name === "") return point;
+  return name === format_point(point) ? point : { ...point, label: name };
+}
+
 function param_point(url: URL, ...names: string[]): MapPoint | undefined {
   for (const name of names) {
     const value = url.searchParams.get(name);
@@ -217,12 +227,15 @@ function parse_google(url: URL): MapLink {
   }
 
   if (head === "place" || head === "search" || head === "preview") {
-    const named = tail[1] && !is_meta_segment(tail[1])
-      ? point_from_text(decode_segment(tail[1]))
-      : undefined;
+    const name = tail[1] && !is_meta_segment(tail[1])
+      ? decode_segment(tail[1]).trim()
+      : "";
+    const named = name === "" ? undefined : point_from_text(name);
     const coords = embedded_coords(url);
     const point = coords ?? param_point(url, "query", "q") ?? named;
-    const link = point_of(point);
+    // A shared place carries its name in the path and its precision in the
+    // `!3d!4d` payload; keep both instead of showing raw coordinates.
+    const link = point_of(labelled(point, name));
     if (link) return link;
   }
 

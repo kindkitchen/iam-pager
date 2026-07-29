@@ -1295,6 +1295,43 @@ h2 {
   pointer-events: none;
 }
 
+/* A section whose link addresses Google Maps is marked on its own row. */
+.markdown-section-summary > .google-maps-pin {
+  position: absolute;
+  z-index: 3;
+  bottom: 0.4rem;
+  left: 0.78rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  filter: drop-shadow(0 1px 2px rgb(23 33 27 / 35%));
+  pointer-events: none;
+}
+
+.markdown-section[data-map-pending="true"] .google-maps-pin {
+  animation: map-pin-pulse 1.3s ease-in-out infinite;
+  opacity: 0.5;
+}
+
+@keyframes map-pin-pulse {
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Dropping a map step on a map step joins their stops instead of their text. */
+.markdown-section[data-map-step="true"][data-drop-into="true"] {
+  outline: 2px dashed #1c5333;
+  outline-offset: 2px;
+}
+
+.markdown-section[data-map-step="true"][data-drop-into="true"] .markdown-section-summary::after {
+  content: "Frame as route stops";
+}
+
+.markdown-link-map-pending {
+  color: #4a5b4f;
+}
+
 .markdown-section-summary {
   position: relative;
   display: grid;

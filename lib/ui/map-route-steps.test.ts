@@ -3,7 +3,9 @@ import {
   current_location_label,
   DeterministicMapRouteStepEditor,
   is_map_step_section,
+  map_step_of_section,
 } from "./map-route-steps.ts";
+import { StaticMapLinkResolver } from "./map-link-resolver.ts";
 import { DeterministicMarkdownSectionEditor } from "./markdown-section-editor.ts";
 
 const editor = new DeterministicMapRouteStepEditor();
@@ -19,9 +21,15 @@ Deno.test("a place link reads as a one-stop frame", () => {
   );
   assertEquals(step?.stops.map((stop) => stop.label), ["Kyiv Zoo"]);
   assertEquals(step?.label, "Zoo");
+  // A single place stays a place: a directions URL without an origin would
+  // read back as "start from your location".
   assertEquals(
     editor.url(step!),
-    "https://www.google.com/maps/dir/?api=1&destination=Kyiv+Zoo",
+    "https://www.google.com/maps/search/?api=1&query=Kyiv+Zoo",
+  );
+  assertEquals(
+    editor.has_current_location(editor.read_link("Zoo", editor.url(step!))!),
+    false,
   );
 });
 
@@ -69,6 +77,59 @@ Deno.test("short links stay plain links until they are expanded", () => {
   assertEquals(
     editor.read(section("[Spot](https://maps.app.goo.gl/abc123)")),
     null,
+  );
+});
+
+Deno.test("an expanded alias reads as a frame through the resolver", () => {
+  const alias = "https://maps.app.goo.gl/abc123";
+  const spot = section(`[Spot](${alias})`);
+  const resolver = new StaticMapLinkResolver({
+    [alias]: "https://www.google.com/maps/search/?api=1&query=Kyiv+Zoo",
+  });
+  const resolve = (url: string) => resolver.resolved(url);
+
+  assertEquals(is_map_step_section(spot), false);
+  assertEquals(is_map_step_section(spot, resolve), true);
+  assertEquals(
+    map_step_of_section(spot, resolve)?.stops.map((stop) => stop.label),
+    ["Kyiv Zoo"],
+  );
+  assertEquals(
+    map_step_of_section(section("[Docs](https://example.com)"), resolve),
+    null,
+  );
+  assertEquals(map_step_of_section(section("plain text"), resolve), null);
+});
+
+Deno.test("clearing the current location survives the URL round trip", () => {
+  const step = editor.read_link(
+    "Trip",
+    "https://www.google.com/maps/dir/?api=1&destination=Bukovel",
+  )!;
+  assertEquals(editor.has_current_location(step), true);
+
+  const cleared = editor.toggle_current_location(step);
+  const stored = editor.url(cleared);
+  assertEquals(
+    stored,
+    "https://www.google.com/maps/search/?api=1&query=Bukovel",
+  );
+  assertEquals(
+    editor.has_current_location(editor.read_link("Trip", stored)!),
+    false,
+  );
+});
+
+Deno.test("a place keeps its Maps name as the stop label", () => {
+  const step = editor.read_link(
+    "Spot",
+    "https://www.google.com/maps/place/City+of+Whittlesea,+VIC/data=!3d-37.6187516!4d144.963937",
+  )!;
+  assertEquals(step.stops[0].label, "City of Whittlesea, VIC");
+  assertEquals(step.stops[0].point.kind, "coords");
+  assertEquals(
+    editor.url(step),
+    "https://www.google.com/maps/search/?api=1&query=-37.6187516%2C144.963937",
   );
 });
 

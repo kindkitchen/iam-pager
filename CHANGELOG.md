@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-03
+
+- Fixed the map step regressions left by the move from `/beta` to
+  `/site/publish`: a pasted `maps.app.goo.gl` link was never recognised, the
+  `Start from your location` toggle could not be cleared, framing two map steps
+  only worked for already-canonical links, and no pin marked a map section.
+- Added `lib/ui/map-link-resolver.ts` (`MapLinkResolver`): the seam between a
+  stored link and the URL a parser can read. An official short link is an alias
+  that encodes no place at all, so `RemoteMapLinkResolver` expands it once per
+  distinct URL through `POST /site/maps/expand-link`, shares the in-flight
+  request, and answers every later reader from memory; `StaticMapLinkResolver`
+  satisfies the same contract from a fixed table.
+- The step editor now expands aliases stored in the document in the background
+  (so their sections show the pin and can be framed), replaces an alias pasted
+  into a Link section with the place or route it stands for, and refuses to
+  merge a step whose link is still being expanded instead of joining it as text.
+- The open stop frame is editor state instead of a re-reading of the URL, and a
+  one-stop frame serializes as a place link (`/maps/search/?api=1&query=…`)
+  rather than a directions link. A cleared `Your location` therefore survives
+  both the next keystroke and a save/reopen; an explicit travel mode still emits
+  the directions form.
+- A section whose link addresses Maps is marked with the Google Maps pin and
+  `data-map-step`; an alias being expanded pulses with `data-map-pending`, and
+  dropping onto a map section reads `Frame as route stops`.
+- `MapPoint` carries an optional presentation-only `label`, so a place shared as
+  coordinates keeps the name Maps showed for it (`City of Whittlesea, VIC`
+  instead of `-37.6187516, 144.963937`). Added `build_place_url` in
+  `lib/maps/place.ts`; `MarkdownContentEditor` accepts `initial_mode` and a
+  replaceable `link_resolver`.
+- Tests: `lib/ui/map-link-resolver.test.ts`,
+  `lib/ui/markdown-map-steps-component.test.tsx`, plus new cases in
+  `lib/ui/map-route-steps.test.ts` and `lib/maps/parse.test.ts`.
+
 ## 2026-08-02
 
 - Map route steps graduated from `/beta/**` into the shipped Markdown step

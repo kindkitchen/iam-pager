@@ -98,7 +98,10 @@ an input with several behaviours puts that checkbox in front of a select: a Link
 is either simple, or simple plus a Google Maps stop frame. A map step stays one
 `[label](url)` line while it is edited as ordered stops — reorder, split, add,
 or start from the visitor's location in one click — and the route link is
-regenerated from that order. See [map route steps](docs/map-route-steps.md).
+regenerated from that order. Map sections are marked with a pin, and a pasted
+`maps.app.goo.gl` alias — which encodes no place at all — is expanded by the
+site once and then behaves like any other Maps link. See
+[map route steps](docs/map-route-steps.md).
 
 Namespace reservation lives on `/site/publish` (before publishing) and on
 `/site/manage` (alongside existing pages); a newly reserved namespace becomes
@@ -202,6 +205,11 @@ Important boundaries:
   the editor offers and which variant each uses; the whole configuration is one
   JSON value, normalized from any stored shape and usable as initial UI state,
   with `StepEditorConfigStore` as the persistence seam.
+- `lib/ui/map-link-resolver.ts` is the seam between a _stored_ link and the URL
+  that can actually be parsed: an official short link is an alias carrying no
+  place, so `MapLinkResolver` expands it once per distinct URL through
+  `POST /site/maps/expand-link` and answers every later reader from memory.
+  `StaticMapLinkResolver` satisfies the same contract without a network.
 - presenters under `lib/ui/` derive complete view models; components do not make
   authorization decisions.
 - HTTP adapters under `lib/` own request bounds, strict schemas, CSRF, ETags,
