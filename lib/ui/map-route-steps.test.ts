@@ -3,6 +3,7 @@ import {
   current_location_label,
   DeterministicMapRouteStepEditor,
   is_map_step_section,
+  listed_map_draft,
   map_step_of_section,
 } from "./map-route-steps.ts";
 import { StaticMapLinkResolver } from "./map-link-resolver.ts";
@@ -131,6 +132,50 @@ Deno.test("a place keeps its Maps name as the stop label", () => {
     editor.url(step),
     "https://www.google.com/maps/search/?api=1&query=-37.6187516%2C144.963937",
   );
+});
+
+Deno.test("a saved pin is named by its link text, never by its coordinates", () => {
+  const saved = section(
+    "[City of Whittlesea, VIC](https://www.google.com/maps/search/?api=1&query=-37.6187516%2C144.963937)",
+  );
+  const step = editor.read(saved)!;
+  assertEquals(step.stops[0].label, "City of Whittlesea, VIC");
+  // The name is derived, so it is not stored a second time.
+  assertEquals(step.label, null);
+
+  // Every later derivation keeps the name instead of the numbers.
+  const zoo = editor.read_link("", "https://maps.google.com/?q=Kyiv+Zoo")!;
+  const merged = editor.merge(step, { ...zoo, label: null });
+  assertEquals(editor.label(merged), "City of Whittlesea, VIC → Kyiv Zoo");
+  assertEquals(
+    editor.label(editor.extract_stop(merged, 0).extracted),
+    "City of Whittlesea, VIC",
+  );
+
+  // A label that only repeats the coordinates names nothing.
+  const numeric = editor.read_link(
+    "-37.6187516, 144.963937",
+    "https://www.google.com/maps/search/?api=1&query=-37.6187516%2C144.963937",
+  )!;
+  assertEquals(numeric.stops[0].point.kind, "coords");
+  assertEquals(
+    (numeric.stops[0].point as { label?: string }).label,
+    undefined,
+  );
+});
+
+Deno.test("a link that just became a map step starts as a list item", () => {
+  const link = sections.draft(
+    section("[Zoo](https://maps.google.com/?q=Kyiv+Zoo)"),
+  );
+  assertEquals(link.list_type, null);
+  assertEquals(listed_map_draft(link, true).list_type, "bulleted");
+  // Not a new map step, or already a list item: left untouched.
+  assertEquals(listed_map_draft(link, false), link);
+  const numbered = sections.change_list_type(link, "numbered");
+  assertEquals(listed_map_draft(numbered, true), numbered);
+  const text = sections.draft(section("plain text"));
+  assertEquals(listed_map_draft(text, true), text);
 });
 
 Deno.test("dropping one frame on another keeps points, never merges text", () => {

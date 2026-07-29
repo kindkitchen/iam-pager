@@ -136,13 +136,19 @@ function embedded_coords(url: URL): MapPoint | undefined {
   return undefined;
 }
 
-/** Attaches the display name of a place, when it adds anything. */
+/**
+ * Attaches the display name of a place, when it adds anything: a "name" that is
+ * itself the coordinates repeats the address instead of naming it.
+ */
 function labelled(
   point: MapPoint | undefined,
   name: string,
 ): MapPoint | undefined {
   if (!point || point.kind === "current_location" || name === "") return point;
-  return name === format_point(point) ? point : { ...point, label: name };
+  if (name === format_point(point)) return point;
+  return point_from_text(name)?.kind === "coords"
+    ? point
+    : { ...point, label: name };
 }
 
 function param_point(url: URL, ...names: string[]): MapPoint | undefined {

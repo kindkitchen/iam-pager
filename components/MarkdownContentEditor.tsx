@@ -14,6 +14,7 @@ import {
   type MarkdownSectionType,
 } from "../lib/ui/markdown-section-editor.ts";
 import {
+  listed_map_draft,
   map_route_step_editor,
   map_step_of_section,
   type MapRouteStep,
@@ -936,16 +937,21 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
 
   /** Replaces an open alias draft with the place or route it stands for. */
   function adopt_expansion(alias: string, expanded: string): void {
-    const framed = (draft: MarkdownSectionDraft) => {
+    const framed = (draft: MarkdownSectionDraft, typed: boolean) => {
       if (draft.type !== "link" || draft.url !== alias) return null;
       const step = map_editor.read_link(draft.label, expanded);
       if (!step) return null;
       const named = draft.label.trim() === "" ? { ...step, label: null } : step;
-      return { draft: framed_draft(draft, named), step: named };
+      return {
+        draft: listed_map_draft(framed_draft(draft, named), typed),
+        step: named,
+      };
     };
 
     set_editing((current) => {
-      const next = current && framed(current.draft);
+      // Only a URL the reader just typed starts a list; an alias that was
+      // already in the document keeps its own shape.
+      const next = current && framed(current.draft, current.dirty);
       return next && current
         ? {
           ...current,
@@ -957,7 +963,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
         : current;
     });
     set_insertion((current) => {
-      const next = current?.draft && framed(current.draft);
+      const next = current?.draft && framed(current.draft, true);
       return next && current
         ? { draft: next.draft, dirty: true, map_step: next.step }
         : current;
@@ -1019,7 +1025,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     const became_map = step !== null && editing.map_step === null;
     set_editing({
       ...editing,
-      draft,
+      draft: listed_map_draft(draft, became_map),
       dirty: true,
       // A URL that just became a Maps link opens its frame by itself.
       map_mode: (editing.map_mode || became_map) && draft.type === "link" &&
@@ -1032,10 +1038,14 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
   function change_insertion_draft(draft: MarkdownSectionDraft) {
     set_insertion((current) => {
       if (current === null) return current;
+      const step = synced_step(current.draft, current.map_step, draft);
       return {
-        draft,
+        draft: listed_map_draft(
+          draft,
+          step !== null && current.map_step === null,
+        ),
         dirty: true,
-        map_step: synced_step(current.draft, current.map_step, draft),
+        map_step: step,
       };
     });
     if (draft.type === "link") request_expansion(draft.url);
@@ -1093,7 +1103,8 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       label: map_editor.label(remaining),
       url: map_editor.url(remaining),
     });
-    const created = map_editor.section(extracted);
+    // The split stop is a sibling step: it keeps the list marker of its frame.
+    const created = map_editor.section(extracted, sections[target_index]);
     emit([
       ...sections.slice(0, target_index),
       updated,

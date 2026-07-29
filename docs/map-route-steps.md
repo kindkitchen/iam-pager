@@ -89,6 +89,18 @@ place link** (`/maps/search/?api=1&query=…`), not as a directions link, so
 clearing `Your location` survives saving and reopening. A chosen travel mode
 makes it a trip again, and only the directions form can carry it.
 
+A place link addresses a pin by coordinates and has nowhere to carry the name
+Maps showed, so **the only stop of a link is named by the link text**. Nothing
+derived from the frame — the label of a merge, of a split-out stop, or of a
+cleared label — ever degrades into bare numbers. A label that only repeats the
+coordinates names nothing and is ignored.
+
+A link that _just became_ a map step also becomes a **list item**
+(`listed_map_draft`, `default_map_list_type`): a route is read as a sequence. A
+link that was already written as a plain line keeps its own shape, and a list
+choice made afterwards is never undone. Splitting a stop out keeps the list
+marker of the frame it left.
+
 ## The frame
 
 - **Stops** in order, each with its position, role (Origin / Stop /
