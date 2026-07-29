@@ -15,7 +15,7 @@ import {
   point_key,
   type TravelMode,
 } from "../maps/model.ts";
-import { parse_google_maps_url } from "../maps/parse.ts";
+import { parse_google_maps_url, point_from_text } from "../maps/parse.ts";
 import { build_place_url } from "../maps/place.ts";
 import { route_url_of } from "../maps/route.ts";
 import {
@@ -110,6 +110,9 @@ export const travel_modes: readonly TravelMode[] = [
 /** Label of the implicit device position, mirroring the Maps app wording. */
 export const current_location_label = "Your location";
 
+/** A route is a sequence, so a map step is a list item unless told otherwise. */
+export const default_map_list_type: MarkdownListType = "bulleted";
+
 const section_editor = new DeterministicMarkdownSectionEditor();
 const label_separator = " → ";
 
@@ -126,6 +129,27 @@ function stop_label(point: MapPoint): string {
 
 function stop_of(point: MapPoint): MapRouteStop {
   return { label: stop_label(point), point };
+}
+
+function is_coordinate_text(value: string): boolean {
+  return point_from_text(value)?.kind === "coords";
+}
+
+/**
+ * The only stop of a link is named by the link text.
+ *
+ * A place URL addresses a pin by coordinates and has nowhere to carry the name
+ * Maps showed for it, so the document's own label is what keeps the place
+ * readable: without this, saving and reopening turns every derived label into
+ * bare numbers.
+ */
+function named_stop(point: MapPoint, label: string): MapRouteStop {
+  const name = label.trim();
+  const nameable = point.kind === "coords" && point.label === undefined &&
+    name !== "" && !is_coordinate_text(name);
+  return nameable
+    ? { label: name, point: { ...point, label: name } }
+    : stop_of(point);
 }
 
 function assert_index(index: number, length: number, allow_end = false): void {
@@ -159,7 +183,7 @@ export class DeterministicMapRouteStepEditor implements MapRouteStepEditor {
     const link = parse_google_maps_url(url);
     if (link.kind !== "point" && link.kind !== "route") return null;
 
-    const stops = link.kind === "point" ? [stop_of(link.point)] : [
+    const stops = link.kind === "point" ? [named_stop(link.point, label)] : [
       stop_of(link.origin ?? CURRENT_LOCATION),
       ...link.waypoints.map(stop_of),
       stop_of(link.destination),
@@ -371,6 +395,21 @@ export function is_map_step_section(
   resolve: (url: string) => string | null = (url) => url,
 ): boolean {
   return map_step_of_section(section, resolve) !== null;
+}
+
+/**
+ * A link that just became a map step starts as a list item.
+ *
+ * Only `became_map` triggers it: a link the reader already wrote as a plain
+ * line keeps its own shape, and a list choice made afterwards is never undone.
+ */
+export function listed_map_draft(
+  draft: MarkdownSectionDraft,
+  became_map: boolean,
+): MarkdownSectionDraft {
+  return became_map && draft.type === "link" && draft.list_type === null
+    ? section_editor.change_list_type(draft, default_map_list_type)
+    : draft;
 }
 
 /** The frame behind a section, or `null` when it is not a map link. */

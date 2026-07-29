@@ -100,7 +100,10 @@ is either simple, or simple plus a Google Maps stop frame. A map step stays one
 or start from the visitor's location in one click — and the route link is
 regenerated from that order. Map sections are marked with a pin, and a pasted
 `maps.app.goo.gl` alias — which encodes no place at all — is expanded by the
-site once and then behaves like any other Maps link. See
+site once and then behaves like any other Maps link. Steps re-renders every
+section on each change, so it is capped by physical lines: 500 for a guest
+draft, 1000 for a signed-in creator (`lib/ui/step-editor-limits.ts`); a longer
+draft stays fully editable in Raw. See
 [map route steps](docs/map-route-steps.md).
 
 Namespace reservation lives on `/site/publish` (before publishing) and on

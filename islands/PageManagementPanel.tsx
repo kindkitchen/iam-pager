@@ -1662,6 +1662,7 @@ export default function PageManagementPanel(props: PageManagementPanelProps) {
                     <PageEditor
                       markdown={editor.markdown}
                       css={editor.css}
+                      access="member"
                       on_markdown_input={(value) =>
                         set_editor((current) =>
                           current?.kind !== "md-page"

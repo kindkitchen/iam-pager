@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-04
+
+- Steps mode now carries a line budget per editing seat
+  (`lib/ui/step-editor-limits.ts`, `StepEditorLimits`): 500 physical lines for a
+  guest draft, **1000 for a signed-in creator**. A longer draft is never blocked
+  — Raw keeps editing the same document — and a guest who runs into the cap is
+  told that signing in raises it.
+- `MarkdownContentEditor` and `PageEditor` take an `access` prop; the publish
+  form derives it from the publish authorization and the management panel is
+  always a creator seat. Tests: `lib/ui/step-editor-limits.test.ts`,
+  `lib/ui/markdown-step-limits-component.test.tsx`.
+
 ## 2026-08-03
 
 - Fixed the map step regressions left by the move from `/beta` to
@@ -29,6 +41,13 @@
   instead of `-37.6187516, 144.963937`). Added `build_place_url` in
   `lib/maps/place.ts`; `MarkdownContentEditor` accepts `initial_mode` and a
   replaceable `link_resolver`.
+- The only stop of a link is named by the link text, since a place URL has
+  nowhere to carry the name: an auto-derived label — after a merge, a split, or
+  a cleared label — no longer degrades into raw coordinates. A "name" that only
+  repeats the coordinates is ignored.
+- A link that just became a map step now starts as a list item
+  (`listed_map_draft`, `default_map_list_type`); an existing plain line keeps
+  its shape, and a stop split out of a frame inherits the frame's list marker.
 - Tests: `lib/ui/map-link-resolver.test.ts`,
   `lib/ui/markdown-map-steps-component.test.tsx`, plus new cases in
   `lib/ui/map-route-steps.test.ts` and `lib/maps/parse.test.ts`.

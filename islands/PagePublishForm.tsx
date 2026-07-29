@@ -413,6 +413,9 @@ export default function PagePublishForm(props: PagePublishFormProps) {
             <PageEditor
               markdown={markdown}
               css={css}
+              access={props.authorization.kind === "creator"
+                ? "member"
+                : "guest"}
               on_markdown_input={(value) =>
                 update_draft(() => set_markdown(value))}
               on_css_input={(value) => update_draft(() => set_css(value))}
