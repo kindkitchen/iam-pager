@@ -15,8 +15,13 @@ import {
 } from "../lib/ui/markdown-section-editor.ts";
 import {
   map_route_step_editor,
+  map_step_of_section,
   type MapRouteStep,
 } from "../lib/ui/map-route-steps.ts";
+import {
+  type MapLinkResolver,
+  RemoteMapLinkResolver,
+} from "../lib/ui/map-link-resolver.ts";
 import {
   default_step_editor_config,
   is_step_input_enabled,
@@ -28,6 +33,7 @@ import {
   type ExclusiveContentOption,
   ExclusiveContentSwitcher,
 } from "./ExclusiveContentSwitcher.tsx";
+import { GoogleMapsPin } from "./GoogleMapsPin.tsx";
 import { MapRouteFields } from "./MapRouteFields.tsx";
 import { MarkdownStepExtensions } from "./MarkdownStepExtensions.tsx";
 
@@ -39,13 +45,17 @@ export interface MarkdownContentEditorProps {
   active: boolean;
   on_markdown_input: (value: string) => void;
   previewer: PagePreviewer;
+  /** Editing mode the surface opens in; Raw when nothing is stored. */
+  initial_mode?: MarkdownEditorMode;
   /** JSON-serializable starting state of the step inputs. */
   initial_step_config?: StepEditorConfig;
+  /** Expansion of official Google short links; replaceable by any source. */
+  link_resolver?: MapLinkResolver;
   /** Notified whenever the visitor changes the step inputs. */
   on_step_config_change?: (config: StepEditorConfig) => void;
 }
 
-type MarkdownEditorMode = "raw" | "steps";
+export type MarkdownEditorMode = "raw" | "steps";
 type InsertableSectionType = Exclude<MarkdownSectionType, "raw">;
 
 const mode_options: readonly ExclusiveContentOption<MarkdownEditorMode>[] = [
@@ -69,11 +79,19 @@ interface EditingState {
   dirty: boolean;
   /** A link edited as a Google Maps stop frame instead of a bare URL. */
   map_mode: boolean;
+  /**
+   * The frame itself, kept as state instead of re-read from the URL on every
+   * render: a URL cannot express every frame (a cleared "your location" is an
+   * absent origin, which reads back as present), so deriving it would undo
+   * edits the reader just made.
+   */
+  map_step: MapRouteStep | null;
 }
 
 interface InsertionState {
   draft: MarkdownSectionDraft | null;
   dirty: boolean;
+  map_step: MapRouteStep | null;
 }
 
 type SectionDropTarget =
@@ -448,6 +466,10 @@ interface MapLinkControls {
   readonly toggleable: boolean;
   readonly active: boolean;
   readonly step: MapRouteStep | null;
+  /** Shared expansion of official short links. */
+  readonly resolver: MapLinkResolver;
+  /** True while the pasted URL is an alias still being expanded. */
+  readonly expanding: boolean;
   readonly on_toggle?: (next: boolean) => void;
   readonly on_step_change: (step: MapRouteStep) => void;
   readonly on_split_stop?: (index: number) => void;
@@ -526,10 +548,16 @@ function MarkdownDraftFields(props: MarkdownDraftFieldsProps) {
               <span>Google Maps route</span>
             </label>
           )}
+          {map?.available && map.expanding && (
+            <small class="markdown-link-map-pending" role="status">
+              Expanding the Google Maps short link…
+            </small>
+          )}
           {map?.available && map.active && map.step && (
             <MapRouteFields
               step={map.step}
               id_prefix={props.id_prefix}
+              resolver={map.resolver}
               on_change={map.on_step_change}
               {...(map.on_split_stop
                 ? { on_split_stop: map.on_split_stop }
@@ -753,7 +781,9 @@ function remap_index_after_move(
 }
 
 export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
-  const [mode, set_mode] = useState<MarkdownEditorMode>("raw");
+  const [mode, set_mode] = useState<MarkdownEditorMode>(
+    props.initial_mode ?? "raw",
+  );
   const [editing, set_editing] = useState<EditingState | null>(null);
   const [insertion, set_insertion] = useState<InsertionState | null>(null);
   const [delete_armed_index, set_delete_armed_index] = useState<number | null>(
@@ -763,6 +793,17 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
   const [drag_message, set_drag_message] = useState("");
   const [config, set_config] = useState<StepEditorConfig>(
     props.initial_step_config ?? default_step_editor_config(),
+  );
+  // Bumped whenever a background expansion lands, so section rows that only
+  // became map steps just now are re-rendered.
+  const [resolutions, set_resolutions] = useState(0);
+  const link_resolver = useMemo<MapLinkResolver>(
+    () =>
+      props.link_resolver ??
+        new RemoteMapLinkResolver({
+          on_settled: () => set_resolutions((count) => count + 1),
+        }),
+    [props.link_resolver],
   );
   const dragging_ref = useRef<DraggingState | null>(null);
   const drag_element_ref = useRef<HTMLButtonElement | null>(null);
@@ -796,17 +837,132 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     set_config(config_store.load());
   }, []);
 
+  // Short links stored in the document are expanded in the background, so a
+  // pasted alias still shows its pin and can be framed with another step.
+  // `resolutions` re-runs this after each answer lands.
+  useEffect(() => {
+    if (mode !== "steps" || !map_route_enabled(config)) return;
+    for (const section of sections) {
+      const url = link_url_of(section);
+      if (url !== null && link_resolver.state(url) === "unresolved") {
+        link_resolver.resolve(url);
+      }
+    }
+  }, [sections, mode, config, resolutions]);
+
   function change_config(next: StepEditorConfig) {
     set_config(next);
     config_store.save(next);
     props.on_step_config_change?.(next);
   }
 
+  /** Canonical URL of a stored link: an alias only once it was expanded. */
+  function canonical(url: string): string | null {
+    return link_resolver.resolved(url);
+  }
+
   /** A link draft read as map stops, when the map variant is offered. */
   function map_step_of(draft: MarkdownSectionDraft): MapRouteStep | null {
-    return draft.type === "link" && map_route_enabled(config)
-      ? map_editor.read_link(draft.label, draft.url)
+    if (draft.type !== "link" || !map_route_enabled(config)) return null;
+    const url = canonical(draft.url);
+    if (url === null) return null;
+    const step = map_editor.read_link(draft.label, url);
+    // A frame that carries no label of its own derives one from its stops.
+    return step && draft.label.trim() === "" ? { ...step, label: null } : step;
+  }
+
+  /** The frame of a stored section, aliases included once expanded. */
+  function section_step(section: MarkdownSection): MapRouteStep | null {
+    return map_route_enabled(config)
+      ? map_step_of_section(section, canonical)
       : null;
+  }
+
+  function link_url_of(section: MarkdownSection): string | null {
+    return section.type === "link" ? section.url : null;
+  }
+
+  function is_expanding(url: string | null | undefined): boolean {
+    if (!url || !map_route_enabled(config)) return false;
+    const state = link_resolver.state(url);
+    return state === "unresolved" || state === "pending";
+  }
+
+  /**
+   * The frame after a draft edit. It is only re-read from the URL when the URL
+   * itself changed; otherwise the existing frame is kept and merely relabelled,
+   * so stop order and the "your location" choice survive every other edit.
+   */
+  function synced_step(
+    previous_draft: MarkdownSectionDraft | null,
+    previous_step: MapRouteStep | null,
+    draft: MarkdownSectionDraft,
+  ): MapRouteStep | null {
+    if (draft.type !== "link" || !map_route_enabled(config)) return null;
+    const url_changed = previous_draft?.type !== "link" ||
+      previous_draft.url !== draft.url;
+    if (url_changed || previous_step === null) return map_step_of(draft);
+    return map_editor.set_label(previous_step, draft.label);
+  }
+
+  /** Label and URL a frame serializes to. */
+  function framed_draft(
+    draft: MarkdownSectionDraft,
+    step: MapRouteStep,
+  ): MarkdownSectionDraft {
+    if (draft.type !== "link") return draft;
+    return {
+      ...draft,
+      label: map_editor.label(step),
+      url: map_editor.can_generate(step) ? map_editor.url(step) : draft.url,
+    };
+  }
+
+  /**
+   * Asks the site to dereference an official short link. The alias carries no
+   * place of its own, so nothing can be shown until this returns.
+   */
+  function request_expansion(url: string): void {
+    if (!map_route_enabled(config)) return;
+    if (link_resolver.state(url) !== "unresolved") return;
+    link_resolver.resolve(url).then((expanded) => {
+      if (expanded === null) {
+        set_drag_message("That Google Maps short link could not be expanded.");
+        return;
+      }
+      adopt_expansion(url, expanded);
+    });
+  }
+
+  /** Replaces an open alias draft with the place or route it stands for. */
+  function adopt_expansion(alias: string, expanded: string): void {
+    const framed = (draft: MarkdownSectionDraft) => {
+      if (draft.type !== "link" || draft.url !== alias) return null;
+      const step = map_editor.read_link(draft.label, expanded);
+      if (!step) return null;
+      const named = draft.label.trim() === "" ? { ...step, label: null } : step;
+      return { draft: framed_draft(draft, named), step: named };
+    };
+
+    set_editing((current) => {
+      const next = current && framed(current.draft);
+      return next && current
+        ? {
+          ...current,
+          draft: next.draft,
+          dirty: true,
+          map_mode: true,
+          map_step: next.step,
+        }
+        : current;
+    });
+    set_insertion((current) => {
+      const next = current?.draft && framed(current.draft);
+      return next && current
+        ? { draft: next.draft, dirty: true, map_step: next.step }
+        : current;
+    });
+    set_drag_message("Expanded the Google Maps short link into its stops.");
   }
 
   function has_unsaved_changes(): boolean {
@@ -844,13 +1000,45 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     set_insertion(null);
     set_delete_armed_index(null);
     const draft = section_editor.draft(sections[index]);
+    const step = map_step_of(draft);
     set_editing({
       index,
       draft,
       dirty: false,
       // A link that already addresses Maps opens as a stop frame.
-      map_mode: map_step_of(draft) !== null,
+      map_mode: step !== null,
+      map_step: step,
     });
+    if (draft.type === "link") request_expansion(draft.url);
+  }
+
+  /** Every draft edit goes through here, so the frame follows the URL. */
+  function change_editing_draft(draft: MarkdownSectionDraft) {
+    if (!editing) return;
+    const step = synced_step(editing.draft, editing.map_step, draft);
+    const became_map = step !== null && editing.map_step === null;
+    set_editing({
+      ...editing,
+      draft,
+      dirty: true,
+      // A URL that just became a Maps link opens its frame by itself.
+      map_mode: (editing.map_mode || became_map) && draft.type === "link" &&
+        step !== null,
+      map_step: step,
+    });
+    if (draft.type === "link") request_expansion(draft.url);
+  }
+
+  function change_insertion_draft(draft: MarkdownSectionDraft) {
+    set_insertion((current) => {
+      if (current === null) return current;
+      return {
+        draft,
+        dirty: true,
+        map_step: synced_step(current.draft, current.map_step, draft),
+      };
+    });
+    if (draft.type === "link") request_expansion(draft.url);
   }
 
   /**
@@ -864,13 +1052,17 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       set_drag_message("This link is edited as a simple label and URL.");
       return;
     }
-    if (map_step_of(editing.draft) === null) {
+    const step = editing.map_step ?? map_step_of(editing.draft);
+    if (step === null) {
+      const url = editing.draft.type === "link" ? editing.draft.url : "";
       set_drag_message(
-        "This URL is not a Google Maps place or route link, so it stays a simple link.",
+        is_expanding(url)
+          ? "This short link is still being expanded; the stops open on their own."
+          : "This URL is not a Google Maps place or route link, so it stays a simple link.",
       );
       return;
     }
-    set_editing({ ...editing, map_mode: true });
+    set_editing({ ...editing, map_mode: true, map_step: step });
     set_drag_message("This link is edited as Google Maps stops.");
   }
 
@@ -879,21 +1071,16 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     if (!editing || editing.draft.type !== "link") return;
     set_editing({
       ...editing,
-      draft: {
-        ...editing.draft,
-        label: map_editor.label(step),
-        url: map_editor.can_generate(step)
-          ? map_editor.url(step)
-          : editing.draft.url,
-      },
+      draft: framed_draft(editing.draft, step),
       dirty: true,
+      map_step: step,
     });
   }
 
   /** Moves one stop out of the frame into its own section below this one. */
   function split_map_stop(stop_index: number) {
     if (!editing || editing.draft.type !== "link") return;
-    const step = map_step_of(editing.draft);
+    const step = editing.map_step;
     if (!step || step.stops.length < 2) return;
     const { remaining, extracted } = map_editor.extract_stop(step, stop_index);
     if (!remaining || !map_editor.can_generate(remaining)) {
@@ -926,34 +1113,32 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
     if (!allow_discard()) return;
     set_editing(null);
     set_delete_armed_index(null);
-    set_insertion({ draft: null, dirty: false });
+    set_insertion({ draft: null, dirty: false, map_step: null });
   }
 
   function change_insertion_map_step(step: MapRouteStep) {
     set_insertion((current) => {
       if (!current?.draft || current.draft.type !== "link") return current;
       return {
-        draft: {
-          ...current.draft,
-          label: map_editor.label(step),
-          url: map_editor.can_generate(step)
-            ? map_editor.url(step)
-            : current.draft.url,
-        },
+        draft: framed_draft(current.draft, step),
         dirty: true,
+        map_step: step,
       };
     });
   }
 
   function choose_insertion_type(type: InsertableSectionType) {
-    set_insertion((current) =>
-      current === null ? null : {
-        draft: current.draft === null
-          ? new_draft(type)
-          : section_editor.change_type(current.draft, type),
+    set_insertion((current) => {
+      if (current === null) return null;
+      const draft = current.draft === null
+        ? new_draft(type)
+        : section_editor.change_type(current.draft, type);
+      return {
+        draft,
         dirty: current.draft !== null || current.dirty,
-      }
-    );
+        map_step: synced_step(current.draft, current.map_step, draft),
+      };
+    });
   }
 
   function save_edit() {
@@ -1036,14 +1221,23 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       return;
     }
 
+    // An alias says nothing until it is expanded; merging it as text would
+    // destroy a route the reader is about to get.
+    const aliases = [from_index, into_index]
+      .map((index) => link_url_of(sections[index]))
+      .filter((url): url is string => is_expanding(url));
+    if (aliases.length > 0) {
+      for (const url of aliases) request_expansion(url);
+      set_drag_message(
+        "Expanding a Google Maps short link — drop again in a moment.",
+      );
+      return;
+    }
+
     // Two map links keep every point instead of concatenating their text:
     // dropping one on the other frames them into a single ordered route.
-    const source_step = map_route_enabled(config)
-      ? map_editor.read(sections[from_index])
-      : null;
-    const target_step = source_step && map_route_enabled(config)
-      ? map_editor.read(sections[into_index])
-      : null;
+    const source_step = section_step(sections[from_index]);
+    const target_step = source_step && section_step(sections[into_index]);
 
     if (source_step && target_step) {
       const merged = map_editor.merge(target_step, source_step);
@@ -1269,11 +1463,15 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                 {sections.map((section, index) => {
                   const is_editing = editing?.index === index;
                   const density = section_densities[index] ?? "whole";
+                  const map_step = section_step(section);
+                  const expanding = is_expanding(link_url_of(section));
                   return (
                     <li
                       key={`${index}:${section.raw}`}
                       class="markdown-section"
                       data-markdown-section-index={index}
+                      data-map-step={map_step !== null}
+                      data-map-pending={expanding}
                       data-drop-before={dragging?.drop_target.type === "move" &&
                         dragging.drop_target.target_index === index}
                       data-drop-into={dragging?.drop_target.type === "merge" &&
@@ -1298,6 +1496,15 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                         >
                           <DragGripIcon />
                         </button>
+                        {(map_step !== null || expanding) && (
+                          <GoogleMapsPin
+                            title={expanding
+                              ? `Expanding the Google Maps short link of section ${
+                                index + 1
+                              }`
+                              : `Section ${index + 1} is a Google Maps route`}
+                          />
+                        )}
                         <MarkdownSectionPreview
                           section={section}
                           section_number={index + 1}
@@ -1340,38 +1547,31 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                                 draft={editing.draft}
                                 id_prefix={`edit-${index}`}
                                 config={config}
-                                on_change={(draft) =>
-                                  set_editing({
-                                    ...editing,
-                                    draft,
-                                    dirty: true,
-                                    map_mode: editing.map_mode &&
-                                      draft.type === "link",
-                                  })}
+                                on_change={change_editing_draft}
                               />
                               <MarkdownListField
                                 draft={editing.draft}
                                 id_prefix={`edit-${index}`}
-                                on_change={(draft) =>
-                                  set_editing({
-                                    ...editing,
-                                    draft,
-                                    dirty: true,
-                                  })}
+                                on_change={change_editing_draft}
                               />
                             </div>
                             <MarkdownDraftFields
                               draft={editing.draft}
                               id_prefix={`edit-${index}`}
-                              on_change={(draft) =>
-                                set_editing({ ...editing, draft, dirty: true })}
+                              on_change={change_editing_draft}
                               map={{
                                 available: map_route_enabled(config),
                                 toggleable: true,
                                 active: editing.map_mode,
                                 step: editing.map_mode
-                                  ? map_step_of(editing.draft)
+                                  ? editing.map_step
                                   : null,
+                                resolver: link_resolver,
+                                expanding: is_expanding(
+                                  editing.draft.type === "link"
+                                    ? editing.draft.url
+                                    : null,
+                                ),
                                 on_toggle: toggle_map_mode,
                                 on_step_change: change_map_step,
                                 on_split_stop: split_map_stop,
@@ -1437,15 +1637,18 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                       // A pasted Maps URL turns the new link into a frame on
                       // its own; nothing else changes.
                       active: true,
-                      step: insertion.draft === null
-                        ? null
-                        : map_step_of(insertion.draft),
+                      step: insertion.map_step,
+                      resolver: link_resolver,
+                      expanding: is_expanding(
+                        insertion.draft?.type === "link"
+                          ? insertion.draft.url
+                          : null,
+                      ),
                       on_step_change: change_insertion_map_step,
                       on_message: set_drag_message,
                     }}
                     on_choose={choose_insertion_type}
-                    on_change={(draft) =>
-                      set_insertion({ ...insertion, draft, dirty: true })}
+                    on_change={change_insertion_draft}
                     on_save={save_insertion}
                     on_cancel={() => set_insertion(null)}
                   />
@@ -1468,7 +1671,7 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
       <small>
         {mode === "raw"
           ? "Up to 64 KiB. Switch to Steps for guided section editing."
-          : "Tap a preview to edit it. Whole previews follow their rendered content; Compact keeps an individual card short. Drag the grip between sections to reorder, or over a section to append its value there — two Google Maps links frame into one ordered route instead. Focused grips also use arrow keys. The plus button adds at the end. The heading line switches step inputs on or off."}
+          : "Tap a preview to edit it. Whole previews follow their rendered content; Compact keeps an individual card short. Drag the grip between sections to reorder, or over a section to append its value there — two Google Maps links frame into one ordered route instead. A pasted maps.app.goo.gl link is expanded by the site and marked with a pin. Focused grips also use arrow keys. The plus button adds at the end. The heading line switches step inputs on or off."}
       </small>
       <span class="visually-hidden" role="status" aria-live="polite">
         {drag_message}

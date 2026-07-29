@@ -13,6 +13,7 @@ and the web surface is only one possible consumer.
 | `parse_google_maps_url(url)` | Recognises a link as point, route, short link, or unknown. |
 | `is_route_url(url)`          | True when the link already is a directions link.           |
 | `build_route_url(points)`    | Formats an explicit stop list.                             |
+| `build_place_url(point)`     | Formats one stop as an `api=1` place link.                 |
 | `expand_short_links(inputs)` | Resolves `maps.app.goo.gl` / `goo.gl/maps` targets.        |
 
 Interfaces (`MapLinkParser`, `RouteUrlBuilder`, `ShortLinkResolver`) are the
@@ -52,7 +53,16 @@ swapped (cache, proxy, non-Google provider, test double).
 - `geo:lat,lng?q=…`, bare `lat,lng`, bare place text
 
 Coordinates found in `data=!3d!4d` win over the viewport `@lat,lng` and over the
-place name, because they address the place unambiguously.
+place name, because they address the place unambiguously. The name is kept
+alongside them as `MapPoint.label`: it is presentation only, ignored by
+`format_point` and by `point_key`, so a shared place reads as
+`City of Whittlesea, VIC` instead of `-37.6187516, 144.963937`.
+
+A **short link is an alias**: `maps.app.goo.gl/<key>` encodes nothing about the
+place, so it can only be dereferenced over the network — synchronously it stays
+`short_link`, and `to_route_url` refuses it with `unresolved_short_link`. The
+browser cannot follow that redirect itself; `lib/ui/map-link-resolver.ts` asks
+the site instead (see [map route steps](map-route-steps.md)).
 
 Anything else (non-Google host, `cid`-only links that need Google's own
 resolution) raises `MapsLinkError` with `unsupported_input` or

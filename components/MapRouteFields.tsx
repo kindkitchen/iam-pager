@@ -1,8 +1,11 @@
 import type { JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import type { TravelMode } from "../lib/maps/model.ts";
-import { parse_google_maps_url } from "../lib/maps/parse.ts";
-import { map_link_expansion_path } from "../lib/ui/map-link-expansion.ts";
+import {
+  is_short_map_link,
+  type MapLinkResolver,
+  RemoteMapLinkResolver,
+} from "../lib/ui/map-link-resolver.ts";
 import {
   map_route_step_editor,
   type MapRouteStep,
@@ -17,10 +20,12 @@ export interface MapRouteFieldsProps {
   /** Offered when the surface can host the stop as its own step. */
   readonly on_split_stop?: (index: number) => void;
   readonly on_message?: (message: string) => void;
-  readonly expand_endpoint?: string;
+  /** Expansion of official short links; shared with the surrounding editor. */
+  readonly resolver?: MapLinkResolver;
 }
 
 const steps_editor = map_route_step_editor;
+const default_resolver = new RemoteMapLinkResolver();
 
 interface StopDrag {
   readonly from_index: number;
@@ -166,34 +171,27 @@ export function MapRouteFields(props: MapRouteFieldsProps) {
       return;
     }
 
-    const link = parse_google_maps_url(trimmed);
-    if (link.kind !== "short_link") {
+    // An alias carries no place of its own: the site follows the redirect,
+    // and the shared resolver answers a repeated paste from memory.
+    if (!is_short_map_link(trimmed)) {
       announce("That is not a Google Maps place or route link.");
       return;
     }
     set_pending(true);
     try {
-      const response = await fetch(
-        props.expand_endpoint ?? map_link_expansion_path,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: link.url }),
-        },
+      const expanded = await (props.resolver ?? default_resolver).resolve(
+        trimmed,
       );
-      const data = await response.json().catch(() => ({}));
-      const stops = typeof data.url === "string"
-        ? steps_editor.stops_from_value(data.url)
-        : [];
-      if (!response.ok || stops.length === 0) {
+      const stops = expanded === null
+        ? []
+        : steps_editor.stops_from_value(expanded);
+      if (stops.length === 0) {
         announce("The short link could not be expanded.");
         return;
       }
       props.on_change(steps_editor.add_stops(step, stops));
       set_value("");
       announce("Expanded the short link and added its stops.");
-    } catch {
-      announce("The short link could not be expanded.");
     } finally {
       set_pending(false);
     }

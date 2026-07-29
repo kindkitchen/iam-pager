@@ -16,6 +16,7 @@ import {
   type TravelMode,
 } from "../maps/model.ts";
 import { parse_google_maps_url } from "../maps/parse.ts";
+import { build_place_url } from "../maps/place.ts";
 import { route_url_of } from "../maps/route.ts";
 import {
   DeterministicMarkdownSectionEditor,
@@ -117,9 +118,9 @@ function stop_label(point: MapPoint): string {
     case "current_location":
       return current_location_label;
     case "coords":
-      return `${point.lat}, ${point.lng}`;
+      return point.label ?? `${point.lat}, ${point.lng}`;
     case "query":
-      return point.query;
+      return point.label ?? point.query;
   }
 }
 
@@ -208,7 +209,20 @@ export class DeterministicMapRouteStepEditor implements MapRouteStepEditor {
     return step.stops.map((stop) => stop.label).join(label_separator);
   }
 
+  /**
+   * One addressable stop is a place, not a trip: a directions URL without an
+   * origin reads back as "start from your location", which would re-check the
+   * toggle the reader just cleared. A chosen travel mode is a trip again, and
+   * only the directions form can carry it.
+   */
   url(step: MapRouteStep): string {
+    const [only] = step.stops;
+    if (
+      step.stops.length === 1 && only.point.kind !== "current_location" &&
+      step.travel_mode === null
+    ) {
+      return build_place_url(only.point);
+    }
     return route_url_of([
       ...step.stops.map((stop) => stop.point),
       step.travel_mode === null ? {} : { travel_mode: step.travel_mode },
@@ -345,7 +359,29 @@ export class DeterministicMapRouteStepEditor implements MapRouteStepEditor {
 export const map_route_step_editor: MapRouteStepEditor =
   new DeterministicMapRouteStepEditor();
 
-/** True when a section is shown as a map frame instead of a plain link. */
-export function is_map_step_section(section: MarkdownSection): boolean {
-  return map_route_step_editor.read(section) !== null;
+/**
+ * True when a section is shown as a map frame instead of a plain link.
+ *
+ * `resolve` maps a stored URL to the canonical one a parser can read, which
+ * is how an official short link becomes a frame once it has been expanded.
+ * Without it only links that already address Maps are recognised.
+ */
+export function is_map_step_section(
+  section: MarkdownSection,
+  resolve: (url: string) => string | null = (url) => url,
+): boolean {
+  return map_step_of_section(section, resolve) !== null;
+}
+
+/** The frame behind a section, or `null` when it is not a map link. */
+export function map_step_of_section(
+  section: MarkdownSection,
+  resolve: (url: string) => string | null = (url) => url,
+): MapRouteStep | null {
+  if (section.type !== "link") return null;
+  const url = resolve(section.url);
+  return url === null ? null : map_route_step_editor.read_link(
+    section.label,
+    url,
+  );
 }

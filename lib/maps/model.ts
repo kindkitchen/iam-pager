@@ -15,11 +15,14 @@ export type TravelMode = "driving" | "walking" | "bicycling" | "transit";
  * `current_location` is not an address: the Google Maps URL API expresses it
  * by *omitting* `origin`, so the app resolves the device position when the
  * user is redirected. It is therefore only meaningful as the first stop.
+ *
+ * `label` is presentation only — the name Maps showed for the place. It never
+ * addresses anything, so it is ignored by formatting and by identity.
  */
 export type MapPoint =
   | { kind: "current_location" }
-  | { kind: "coords"; lat: number; lng: number }
-  | { kind: "query"; query: string; place_id?: string };
+  | { kind: "coords"; lat: number; lng: number; label?: string }
+  | { kind: "query"; query: string; place_id?: string; label?: string };
 
 /** Singleton for the implicit "wherever the user is" stop. */
 export const CURRENT_LOCATION: MapPoint = { kind: "current_location" };
