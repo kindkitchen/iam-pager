@@ -5,6 +5,7 @@ import {
   type EditorSource,
 } from "../lib/ui/editor-workspace.ts";
 import type { PagePreviewer } from "../lib/ui/page-preview.ts";
+import type { StepEditorAccess } from "../lib/ui/step-editor-limits.ts";
 import {
   default_page_style_preset,
   page_style_presets,
@@ -22,6 +23,8 @@ export interface PageEditorProps {
   on_markdown_input: (value: string) => void;
   on_css_input: (value: string) => void;
   previewer: PagePreviewer;
+  /** Steps line budget of the editing seat; guests get the smaller one. */
+  access?: StepEditorAccess;
 }
 
 const workspace_controller = new DeterministicEditorWorkspace();
@@ -209,6 +212,7 @@ export function PageEditor(props: PageEditorProps) {
               active={workspace.expanded && workspace.source === "markdown"}
               on_markdown_input={props.on_markdown_input}
               previewer={props.previewer}
+              {...(props.access ? { access: props.access } : {})}
             />
 
             <fieldset

@@ -31,6 +31,11 @@ import {
 } from "../lib/ui/step-editor-config.ts";
 import { step_editor_config_store } from "../lib/ui/step-editor-config-store.ts";
 import {
+  raisable_step_limit,
+  step_editor_limits,
+  type StepEditorAccess,
+} from "../lib/ui/step-editor-limits.ts";
+import {
   type ExclusiveContentOption,
   ExclusiveContentSwitcher,
 } from "./ExclusiveContentSwitcher.tsx";
@@ -48,6 +53,8 @@ export interface MarkdownContentEditorProps {
   previewer: PagePreviewer;
   /** Editing mode the surface opens in; Raw when nothing is stored. */
   initial_mode?: MarkdownEditorMode;
+  /** Decides the Steps line budget; guests get the smaller one. */
+  access?: StepEditorAccess;
   /** JSON-serializable starting state of the step inputs. */
   initial_step_config?: StepEditorConfig;
   /** Expansion of official Google short links; replaceable by any source. */
@@ -109,7 +116,6 @@ const section_editor = new DeterministicMarkdownSectionEditor();
 const density_controller = new DeterministicMarkdownSectionDensity();
 const map_editor = map_route_step_editor;
 const config_store = step_editor_config_store();
-const structured_physical_line_limit = 500;
 
 const section_type_labels: Readonly<Record<MarkdownSectionType, string>> = {
   text: "Text",
@@ -815,9 +821,13 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
   const [section_densities, set_section_densities] = useState(() =>
     density_controller.reconcile([], sections.length)
   );
-  const physical_line_count = props.markdown.split("\n").length;
-  const section_limit_exceeded =
-    physical_line_count > structured_physical_line_limit;
+  const access: StepEditorAccess = props.access ?? "guest";
+  const physical_line_count = step_editor_limits.physical_lines(props.markdown);
+  const section_line_limit = step_editor_limits.limit(access);
+  const section_limit_exceeded = step_editor_limits.exceeded(
+    props.markdown,
+    access,
+  );
 
   useEffect(() => {
     set_section_densities((current) => {
@@ -1457,9 +1467,10 @@ export function MarkdownContentEditor(props: MarkdownContentEditorProps) {
                 This draft has {physical_line_count} physical lines.
               </strong>
               <span>
-                Steps is limited to {structured_physical_line_limit}{" "}
+                Steps is limited to {section_line_limit}{" "}
                 physical lines to keep section editing responsive. Switch to Raw
-                to continue.
+                to continue.{raisable_step_limit(access) &&
+                  " Signed-in creators can use Steps on longer drafts."}
               </span>
             </div>
           )}

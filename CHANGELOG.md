@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-04
+
+- Steps mode now carries a line budget per editing seat
+  (`lib/ui/step-editor-limits.ts`, `StepEditorLimits`): 500 physical lines for a
+  guest draft, **1000 for a signed-in creator**. A longer draft is never blocked
+  — Raw keeps editing the same document — and a guest who runs into the cap is
+  told that signing in raises it.
+- `MarkdownContentEditor` and `PageEditor` take an `access` prop; the publish
+  form derives it from the publish authorization and the management panel is
+  always a creator seat. Tests: `lib/ui/step-editor-limits.test.ts`,
+  `lib/ui/markdown-step-limits-component.test.tsx`.
+
 ## 2026-08-03
 
 - Fixed the map step regressions left by the move from `/beta` to

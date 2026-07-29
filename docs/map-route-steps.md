@@ -12,6 +12,7 @@ still one `[label](url)` line — and every edit regenerates the route through
 | Offered inputs and variants  | `lib/ui/step-editor-config.ts` (`StepEditorPreferences`) |
 | Remembering the choice       | `lib/ui/step-editor-config-store.ts`                     |
 | Reading a stored link        | `lib/ui/map-link-resolver.ts` (`MapLinkResolver`)        |
+| Steps line budget            | `lib/ui/step-editor-limits.ts` (`StepEditorLimits`)      |
 | Short-link expansion         | `lib/ui/map-link-expansion.ts`, `/site/maps/expand-link` |
 | Frame UI                     | `components/MapRouteFields.tsx`                          |
 | Step-input heading line      | `components/MarkdownStepExtensions.tsx`                  |
@@ -45,6 +46,23 @@ outcome. In the step editor this means:
 
 `StaticMapLinkResolver` satisfies the same contract from a fixed table, which is
 how the surface is tested without a network.
+
+## Line budget
+
+Steps re-parses the draft and renders one preview per section on every change,
+so the mode is bounded by **physical lines**, not bytes. The bound is a seat
+question rather than a Markdown one:
+
+| Access   | Lines  | Surface                                                   |
+| -------- | ------ | --------------------------------------------------------- |
+| `guest`  | `500`  | `/site/publish` before signing in (the default).          |
+| `member` | `1000` | A signed-in creator on `/site/publish` or `/site/manage`. |
+
+A longer draft is never blocked — only Steps steps aside, and Raw keeps editing
+the same document. `StepEditorLimits` owns the rule; the surface passes the
+access it has already resolved (`PageEditor` → `MarkdownContentEditor`, prop
+`access`), so a per-plan or per-page policy can replace it without touching the
+editor.
 
 ## Step inputs heading line
 
@@ -169,4 +187,6 @@ Tests: `lib/ui/map-route-steps.test.ts`, `lib/ui/step-editor-config.test.ts`,
 `lib/ui/map-route-fields-component.test.tsx`,
 `lib/ui/markdown-step-inputs-component.test.tsx`,
 `lib/ui/markdown-map-steps-component.test.tsx`,
-`lib/ui/map-link-resolver.test.ts`, `lib/ui/map-link-expansion.test.ts`.
+`lib/ui/map-link-resolver.test.ts`, `lib/ui/map-link-expansion.test.ts`,
+`lib/ui/step-editor-limits.test.ts`,
+`lib/ui/markdown-step-limits-component.test.tsx`.
